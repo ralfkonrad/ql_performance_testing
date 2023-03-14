@@ -1,0 +1,198 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 22,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "default",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "RKE_COMPILE_WARNING_AS_ERROR": "ON"
+      }
+    },
+    {
+      "name": "msvc-default",
+      "inherits": "default",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "cl",
+        "CMAKE_CXX_COMPILER": "cl"
+      },
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "vendor": {
+        "microsoft.com/VisualStudioSettings/CMake/1.0": {
+          "hostOS": [
+            "Windows"
+          ]
+        }
+      }
+    },
+    {
+      "name": "linux-clang-debug-ninja",
+      "inherits": "default",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++"
+      }
+    },
+    {
+      "name": "linux-clang-release-ninja",
+      "inherits": "default",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++"
+      }
+    },
+    {
+      "name": "linux-gcc-debug-ninja",
+      "inherits": "default",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "gcc",
+        "CMAKE_CXX_COMPILER": "g++"
+      }
+    },
+    {
+      "name": "linux-gcc-release-ninja",
+      "inherits": "default",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "gcc",
+        "CMAKE_CXX_COMPILER": "g++"
+      }
+    },
+    {
+      "name": "macos-clang-debug-ninja",
+      "inherits": "linux-clang-debug-ninja",
+      "cacheVariables": {
+        "CMAKE_CXXFLAGS": "-stdlib=libc++ -mmacosx-version-min=10.9"
+      }
+    },
+    {
+      "name": "macos-clang-release-ninja",
+      "inherits": "linux-clang-release-ninja",
+      "environment": {
+        "CXXFLAGS": "-stdlib=libc++ -mmacosx-version-min=10.9"
+      }
+    },
+    {
+      "name": "windows-mscv-debug-ninja",
+      "inherits": "msvc-default",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "windows-mscv-release-ninja",
+      "inherits": "msvc-default",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "default",
+      "configurePreset": "default",
+      "verbose": false
+    },
+    {
+      "name": "linux-clang-debug-ninja",
+      "configurePreset": "linux-clang-debug-ninja",
+      "inherits": "default"
+    },
+    {
+      "name": "linux-clang-release-ninja",
+      "configurePreset": "linux-clang-release-ninja",
+      "inherits": "default"
+    },
+    {
+      "name": "linux-gcc-debug-ninja",
+      "configurePreset": "linux-gcc-debug-ninja",
+      "inherits": "default"
+    },
+    {
+      "name": "linux-gcc-release-ninja",
+      "configurePreset": "linux-gcc-release-ninja",
+      "inherits": "default"
+    },
+    {
+      "name": "macos-clang-debug-ninja",
+      "configurePreset": "macos-clang-debug-ninja",
+      "inherits": "default"
+    },
+    {
+      "name": "macos-clang-release-ninja",
+      "configurePreset": "macos-clang-release-ninja",
+      "inherits": "default"
+    },
+    {
+      "name": "windows-mscv-debug-ninja",
+      "configurePreset": "windows-mscv-debug-ninja",
+      "inherits": "default"
+    },
+    {
+      "name": "windows-mscv-release-ninja",
+      "configurePreset": "windows-mscv-release-ninja",
+      "inherits": "default"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "default",
+      "configurePreset": "default",
+      "output": {
+        "verbosity": "extra",
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "linux-clang-debug-ninja",
+      "configurePreset": "linux-clang-debug-ninja",
+      "inherits": "default"
+    },
+    {
+      "name": "linux-clang-release-ninja",
+      "configurePreset": "linux-clang-release-ninja",
+      "inherits": "default"
+    },
+    {
+      "name": "linux-gcc-debug-ninja",
+      "configurePreset": "linux-gcc-debug-ninja",
+      "inherits": "default"
+    },
+    {
+      "name": "linux-gcc-release-ninja",
+      "configurePreset": "linux-gcc-release-ninja",
+      "inherits": "default"
+    },
+    {
+      "name": "macos-clang-debug-ninja",
+      "configurePreset": "macos-clang-debug-ninja",
+      "inherits": "default"
+    },
+    {
+      "name": "macos-clang-release-ninja",
+      "configurePreset": "macos-clang-release-ninja",
+      "inherits": "default"
+    },
+    {
+      "name": "windows-mscv-debug-ninja",
+      "configurePreset": "windows-mscv-debug-ninja",
+      "inherits": "default"
+    },
+    {
+      "name": "windows-mscv-release-ninja",
+      "configurePreset": "windows-mscv-release-ninja",
+      "inherits": "default"
+    }
+  ]
+}

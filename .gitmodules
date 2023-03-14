@@ -1,0 +1,6 @@
+[submodule "external/benchmark"]
+	path = external/benchmark
+	url = https://github.com/google/benchmark
+[submodule "external/QuantLib"]
+	path = external/QuantLib
+	url = https://github.com/ralfkonrad/QuantLib

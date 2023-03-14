@@ -1,3 +1,12 @@
+### User defined ###
+# my favorite editors
+.idea/
+.vs/
+.vscode/
+
+# my favorite build directory
+build/
+
 # Created by https://www.toptal.com/developers/gitignore/api/c,c++,clion+iml,cmake,ninja,visualstudio,visualstudiocode
 # Edit at https://www.toptal.com/developers/gitignore?templates=c,c++,clion+iml,cmake,ninja,visualstudio,visualstudiocode
 
@@ -593,12 +602,3 @@ FodyWeavers.xsd
 # Additional files built by Visual Studio
 
 # End of https://www.toptal.com/developers/gitignore/api/c,c++,clion+iml,cmake,ninja,visualstudio,visualstudiocode
-
-### User defined ###
-# my favorite editors
-.idea/
-.vs/
-.vscode/
-
-# my favorite build directory
-build/
