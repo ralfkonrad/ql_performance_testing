@@ -1,0 +1,8 @@
+---
+Language: Cpp
+Standard: c++17
+
+BasedOnStyle: Chromium
+
+ColumnLimit: 100
+NamespaceIndentation: All
