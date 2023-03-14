@@ -30,7 +30,9 @@ include_directories(SYSTEM
         external/QuantLib
         ${Boost_INCLUDE_DIRS})
 
-link_libraries(ql_library)
+link_libraries(
+        ql_library
+        benchmark::benchmark)
 
 include(WarningLevels)
 
