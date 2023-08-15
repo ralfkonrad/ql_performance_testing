@@ -5,23 +5,24 @@
 #include "ql_xoshiro256starstarrng_benchmarking.hpp"
 #include <ql/math/randomnumbers/boxmullergaussianrng.hpp>
 #include <ql/math/randomnumbers/mt19937uniformrng.hpp>
-#include <ql/math/randomnumbers/xoshiro256starstarrng.hpp>
+#include <ql/math/randomnumbers/xoshiro256starstaruniformrng.hpp>
 
-auto xoshiro256StarStarRng = QuantLib::Xoshiro256StarStarRng(1);
-auto boxMullerGaussianXoshiro256StarStarRng = QuantLib::BoxMullerGaussianRng(xoshiro256StarStarRng);
+auto xoshiro256StarStarUniformRng = QuantLib::Xoshiro256StarStarUniformRng(1);
+auto boxMullerGaussianXoshiro256StarStarRng =
+    QuantLib::BoxMullerGaussianRng(xoshiro256StarStarUniformRng);
 auto mersenneTwisterUniformRng = QuantLib::MersenneTwisterUniformRng(1);
 auto boxMullerGaussianMersenneTwisterRng =
     QuantLib::BoxMullerGaussianRng(mersenneTwisterUniformRng);
 
 void BM_TestXoshiro256StarStarRngNextInt64(benchmark::State& state) {
   for (auto _ : state) {
-    xoshiro256StarStarRng.nextInt64();
+    xoshiro256StarStarUniformRng.nextInt64();
   }
 }
 
 void BM_TestXoshiro256StarStarRngNext(benchmark::State& state) {
   for (auto _ : state) {
-    xoshiro256StarStarRng.next();
+    xoshiro256StarStarUniformRng.next();
   }
 }
 
