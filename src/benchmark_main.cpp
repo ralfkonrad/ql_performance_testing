@@ -1,11 +1,15 @@
 #include <benchmark/benchmark.h>
 #include "ql_xoshiro256starstarrng_benchmarking.hpp"
 
-BENCHMARK(BM_TestXoshiro256StarStarRngNextInt64);
-BENCHMARK(BM_TestMersenneTwisterUniformRngNextInt32);
-BENCHMARK(BM_TestXoshiro256StarStarRngNext);
-BENCHMARK(BM_TestMersenneTwisterUniformRngNext);
-BENCHMARK(BM_TestXoshiro256StarStarBoxMullerNext);
-BENCHMARK(BM_TestMersenneTwisterBoxMullerRngNext);
+BENCHMARK(BM_Xoshiro256StarStarNextInt64)->Name("xoshiro256StarStar.nextInt64();");
+BENCHMARK(BM_MersenneTwisterNextInt32)->Name("mersenneTwister.nextInt32();");
+
+BENCHMARK(BM_Xoshiro256StarStarNext)->Name("xoshiro256StarStar.next();");
+BENCHMARK(BM_MersenneTwisterNext)->Name("mersenneTwister.next();");
+
+BENCHMARK(BM_Xoshiro256StarStarBoxMullerGaussianNext)
+    ->Name("xoshiro256StarStarBoxMullerGaussian.next();");
+BENCHMARK(BM_MersenneTwisterBoxMullerGaussianNext)
+    ->Name("mersenneTwisterBoxMullerGaussian.next();");
 
 BENCHMARK_MAIN();

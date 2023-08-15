@@ -7,12 +7,12 @@
 
 #include <benchmark/benchmark.h>
 
-void BM_TestXoshiro256StarStarRngNextInt64(benchmark::State& state);
-void BM_TestXoshiro256StarStarRngNext(benchmark::State& state);
-void BM_TestXoshiro256StarStarBoxMullerNext(benchmark::State& state);
+void BM_Xoshiro256StarStarNextInt64(benchmark::State& state);
+void BM_Xoshiro256StarStarNext(benchmark::State& state);
+void BM_Xoshiro256StarStarBoxMullerGaussianNext(benchmark::State& state);
 
-void BM_TestMersenneTwisterUniformRngNextInt32(benchmark::State& state);
-void BM_TestMersenneTwisterUniformRngNext(benchmark::State& state);
-void BM_TestMersenneTwisterBoxMullerRngNext(benchmark::State& state);
+void BM_MersenneTwisterNextInt32(benchmark::State& state);
+void BM_MersenneTwisterNext(benchmark::State& state);
+void BM_MersenneTwisterBoxMullerGaussianNext(benchmark::State& state);
 
 #endif  // QL_PERFORMANCE_TESTING_QL_XOSHIRO256STARSTARRNG_BENCHMARKING_HPP

@@ -7,44 +7,42 @@
 #include <ql/math/randomnumbers/mt19937uniformrng.hpp>
 #include <ql/math/randomnumbers/xoshiro256starstaruniformrng.hpp>
 
-auto xoshiro256StarStarUniformRng = QuantLib::Xoshiro256StarStarUniformRng(1);
-auto boxMullerGaussianXoshiro256StarStarRng =
-    QuantLib::BoxMullerGaussianRng(xoshiro256StarStarUniformRng);
-auto mersenneTwisterUniformRng = QuantLib::MersenneTwisterUniformRng(1);
-auto boxMullerGaussianMersenneTwisterRng =
-    QuantLib::BoxMullerGaussianRng(mersenneTwisterUniformRng);
+auto xoshiro256StarStar = QuantLib::Xoshiro256StarStarUniformRng();
+auto xoshiro256StarStarBoxMullerGaussian = QuantLib::BoxMullerGaussianRng(xoshiro256StarStar);
+auto mersenneTwister = QuantLib::MersenneTwisterUniformRng();
+auto mersenneTwisterBoxMullerGaussian = QuantLib::BoxMullerGaussianRng(mersenneTwister);
 
-void BM_TestXoshiro256StarStarRngNextInt64(benchmark::State& state) {
+void BM_Xoshiro256StarStarNextInt64(benchmark::State& state) {
   for (auto _ : state) {
-    xoshiro256StarStarUniformRng.nextInt64();
+    xoshiro256StarStar.nextInt64();
   }
 }
 
-void BM_TestXoshiro256StarStarRngNext(benchmark::State& state) {
+void BM_Xoshiro256StarStarNext(benchmark::State& state) {
   for (auto _ : state) {
-    xoshiro256StarStarUniformRng.next();
+    xoshiro256StarStar.next();
   }
 }
 
-void BM_TestXoshiro256StarStarBoxMullerNext(benchmark::State& state) {
+void BM_Xoshiro256StarStarBoxMullerGaussianNext(benchmark::State& state) {
   for (auto _ : state) {
-    boxMullerGaussianXoshiro256StarStarRng.next();
+    xoshiro256StarStarBoxMullerGaussian.next();
   }
 }
 
-void BM_TestMersenneTwisterUniformRngNextInt32(benchmark::State& state) {
+void BM_MersenneTwisterNextInt32(benchmark::State& state) {
   for (auto _ : state) {
-    mersenneTwisterUniformRng.nextInt32();
+    mersenneTwister.nextInt32();
   }
 }
 
-void BM_TestMersenneTwisterUniformRngNext(benchmark::State& state) {
+void BM_MersenneTwisterNext(benchmark::State& state) {
   for (auto _ : state) {
-    mersenneTwisterUniformRng.next();
+    mersenneTwister.next();
   }
 }
-void BM_TestMersenneTwisterBoxMullerRngNext(benchmark::State& state) {
+void BM_MersenneTwisterBoxMullerGaussianNext(benchmark::State& state) {
   for (auto _ : state) {
-    boxMullerGaussianMersenneTwisterRng.next();
+    mersenneTwisterBoxMullerGaussian.next();
   }
 }
