@@ -23,7 +23,7 @@ endif ()
 
 find_package(Boost REQUIRED)
 
-add_subdirectory(external)
+add_subdirectory(external SYSTEM)
 
 include_directories(SYSTEM
         external/benchmark/include
