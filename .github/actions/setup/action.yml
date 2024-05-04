@@ -12,28 +12,13 @@ inputs:
     description: The c++ compiler to use.
     required: true
 
-outputs:
-  ccache-variant:
-    description: The ccache variant to use with the ccache-action
-    value: ${{ steps.determine-ccache-variant.outputs.ccache-variant }}
-
 runs:
   using: composite
   steps:
-    - id: determine-ccache-variant
+    - name: Determine ccache variant
       shell: bash
       run: |
-        echo "ccache-variant=${{ ( (runner.os == 'Windows') && 'sccache' ) || 'ccache' }}"  >> $GITHUB_OUTPUT
-
-    - name: Setup CCache
-      uses: hendrikmuhs/ccache-action@v1.2
-      with:
-        key: ${{ inputs.os }}-${{ inputs.cxx }}--${{ github.job }}
-        restore-keys: |
-          ${{ inputs.os }}-${{ inputs.cxx }}--${{ github.job }}
-          ${{ inputs.os }}-${{ inputs.cxx }}
-          ${{ inputs.os }}
-        variant: ${{ env.CMAKE_CXX_COMPILER_LAUNCHER }}
+        echo "CMAKE_CXX_COMPILER_LAUNCHER=${{ ( (runner.os == 'Windows') && 'sccache' ) || 'ccache' }}"                                 >> $GITHUB_ENV
 
     - name: Setup Linux variables
       if: runner.os == 'Linux'
@@ -50,6 +35,13 @@ runs:
 
         brew update
         brew install boost
+
+    - name: Setup build variables on macOs
+      if: runner.os == 'macOs'
+      shell: bash
+      run: |
+        echo "CXXFLAGS=-stdlib=libc++"                                                                                                  >> $GITHUB_ENV
+        echo "HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1"                                                                                 >> $GITHUB_ENV
 
     - name: Setup macOS
       if: runner.os == 'macOS'
@@ -79,3 +71,14 @@ runs:
       if: runner.os == 'Windows'
       with:
         arch: x64
+
+    - name: Setup CCache
+      uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: ${{ inputs.os }}-${{ inputs.cxx }}--${{ github.job }}
+        restore-keys: |
+          ${{ inputs.os }}-${{ inputs.cxx }}--${{ github.job }}
+          ${{ inputs.os }}-${{ inputs.cxx }}
+          ${{ inputs.os }}
+        variant: ${{ env.CMAKE_CXX_COMPILER_LAUNCHER }}
+
