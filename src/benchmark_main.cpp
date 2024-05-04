@@ -7,6 +7,9 @@ BENCHMARK(BM_MersenneTwisterNextInt32)->Name("mersenneTwister.nextInt32();");
 BENCHMARK(BM_Xoshiro256StarStarNext)->Name("xoshiro256StarStar.next();");
 BENCHMARK(BM_MersenneTwisterNext)->Name("mersenneTwister.next();");
 
+BENCHMARK(BM_Xoshiro256StarStarZigguratGaussianNext)
+    ->Name("xoshiro256StarStarZigguratGaussianNext.next();");
+
 BENCHMARK(BM_Xoshiro256StarStarBoxMullerGaussianNext)
     ->Name("xoshiro256StarStarBoxMullerGaussian.next();");
 BENCHMARK(BM_MersenneTwisterBoxMullerGaussianNext)

@@ -7,10 +7,12 @@
 #include <ql/math/randomnumbers/centrallimitgaussianrng.hpp>
 #include <ql/math/randomnumbers/mt19937uniformrng.hpp>
 #include <ql/math/randomnumbers/xoshiro256starstaruniformrng.hpp>
+#include <ql/math/randomnumbers/zigguratgaussianrng.hpp>
 
 auto xoshiro256StarStar = QuantLib::Xoshiro256StarStarUniformRng();
 auto xoshiro256StarStarBoxMullerGaussian = QuantLib::BoxMullerGaussianRng(xoshiro256StarStar);
 auto xoshiro256StarStarCLGaussian = QuantLib::CLGaussianRng(xoshiro256StarStar);
+auto xoshiro256StarStarZigguratGaussian = QuantLib::ZigguratGaussianRng(xoshiro256StarStar);
 
 auto mersenneTwister = QuantLib::MersenneTwisterUniformRng();
 auto mersenneTwisterBoxMullerGaussian = QuantLib::BoxMullerGaussianRng(mersenneTwister);
@@ -37,6 +39,12 @@ void BM_Xoshiro256StarStarBoxMullerGaussianNext(benchmark::State& state) {
 void BM_Xoshiro256StarStarCLGaussianNext(benchmark::State& state) {
   for (auto _ : state) {
     xoshiro256StarStarCLGaussian.next();
+  }
+}
+
+void BM_Xoshiro256StarStarZigguratGaussianNext(benchmark::State& state) {
+  for (auto _ : state) {
+    xoshiro256StarStarZigguratGaussian.next();
   }
 }
 

@@ -11,6 +11,7 @@ void BM_Xoshiro256StarStarNextInt64(benchmark::State& state);
 void BM_Xoshiro256StarStarNext(benchmark::State& state);
 void BM_Xoshiro256StarStarBoxMullerGaussianNext(benchmark::State& state);
 void BM_Xoshiro256StarStarCLGaussianNext(benchmark::State& state);
+void BM_Xoshiro256StarStarZigguratGaussianNext(benchmark::State& state);
 
 void BM_MersenneTwisterNextInt32(benchmark::State& state);
 void BM_MersenneTwisterNext(benchmark::State& state);
