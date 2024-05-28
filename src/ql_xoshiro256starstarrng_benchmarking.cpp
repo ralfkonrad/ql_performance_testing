@@ -3,13 +3,13 @@
 //
 
 #include "ql_xoshiro256starstarrng_benchmarking.hpp"
+#include <ql/math/distributions/normaldistribution.hpp>
 #include <ql/math/randomnumbers/boxmullergaussianrng.hpp>
 #include <ql/math/randomnumbers/centrallimitgaussianrng.hpp>
 #include <ql/math/randomnumbers/inversecumulativerng.hpp>
 #include <ql/math/randomnumbers/mt19937uniformrng.hpp>
 #include <ql/math/randomnumbers/xoshiro256starstaruniformrng.hpp>
 #include <ql/math/randomnumbers/zigguratgaussianrng.hpp>
-#include "ql/math/distributions/normaldistribution.hpp"
 
 auto xoshiro256StarStar = QuantLib::Xoshiro256StarStarUniformRng();
 auto xoshiro256StarStarBoxMullerGaussian = QuantLib::BoxMullerGaussianRng(xoshiro256StarStar);
