@@ -15,9 +15,9 @@ BENCHMARK(BM_Xoshiro256StarStarBoxMullerGaussianNext)
 BENCHMARK(BM_MersenneTwisterBoxMullerGaussianNext)
     ->Name("mersenneTwisterBoxMullerGaussian.next();");
 
-BENCHMARK(BM_Xoshiro256StarStarCLGaussianNext)
-    ->Name("xoshiro256StarStarCLGaussian.next();");
-BENCHMARK(BM_MersenneTwisterCLGaussianNext)
-    ->Name("mersenneTwisterCLGaussian.next();");
+BENCHMARK(BM_InverseCumulativeRngNext)->Name("inverseCumulativeRng.next();");
+
+BENCHMARK(BM_Xoshiro256StarStarCLGaussianNext)->Name("xoshiro256StarStarCLGaussian.next();");
+BENCHMARK(BM_MersenneTwisterCLGaussianNext)->Name("mersenneTwisterCLGaussian.next();");
 
 BENCHMARK_MAIN();

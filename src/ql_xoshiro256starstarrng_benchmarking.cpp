@@ -5,9 +5,11 @@
 #include "ql_xoshiro256starstarrng_benchmarking.hpp"
 #include <ql/math/randomnumbers/boxmullergaussianrng.hpp>
 #include <ql/math/randomnumbers/centrallimitgaussianrng.hpp>
+#include <ql/math/randomnumbers/inversecumulativerng.hpp>
 #include <ql/math/randomnumbers/mt19937uniformrng.hpp>
 #include <ql/math/randomnumbers/xoshiro256starstaruniformrng.hpp>
 #include <ql/math/randomnumbers/zigguratgaussianrng.hpp>
+#include "ql/math/distributions/normaldistribution.hpp"
 
 auto xoshiro256StarStar = QuantLib::Xoshiro256StarStarUniformRng();
 auto xoshiro256StarStarBoxMullerGaussian = QuantLib::BoxMullerGaussianRng(xoshiro256StarStar);
@@ -17,6 +19,10 @@ auto xoshiro256StarStarZigguratGaussian = QuantLib::ZigguratGaussianRng(xoshiro2
 auto mersenneTwister = QuantLib::MersenneTwisterUniformRng();
 auto mersenneTwisterBoxMullerGaussian = QuantLib::BoxMullerGaussianRng(mersenneTwister);
 auto mersenneTwisterCLGaussian = QuantLib::CLGaussianRng(mersenneTwister);
+
+auto inverseCumulativeRng =
+    QuantLib::InverseCumulativeRng<QuantLib::MersenneTwisterUniformRng,
+                                   QuantLib::InverseCumulativeNormal>(mersenneTwister);
 
 void BM_Xoshiro256StarStarNextInt64(benchmark::State& state) {
   for (auto _ : state) {
@@ -51,6 +57,12 @@ void BM_Xoshiro256StarStarZigguratGaussianNext(benchmark::State& state) {
 void BM_MersenneTwisterNextInt32(benchmark::State& state) {
   for (auto _ : state) {
     mersenneTwister.nextInt32();
+  }
+}
+
+void BM_InverseCumulativeRngNext(benchmark::State& state) {
+  for (auto _ : state) {
+    inverseCumulativeRng.next();
   }
 }
 
