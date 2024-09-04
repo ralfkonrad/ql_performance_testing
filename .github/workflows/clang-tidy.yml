@@ -23,7 +23,7 @@ jobs:
           cmake -S . -B ./build -G Ninja -DRKE_USE_CLANG_TIDY=ON -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
           cmake --build ./build -j 1 -v
 
-      - uses: peter-evans/create-pull-request@v6
+      - uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           branch: clang-tidy-fixes-${{ github.ref }}
