@@ -19,7 +19,7 @@ jobs:
           clangFormatVersion: 14
           inplace: True
 
-      - uses: peter-evans/create-pull-request@v6
+      - uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           branch: clang-format-fixes-${{ github.ref }}
