@@ -13,6 +13,10 @@ jobs:
         with:
           submodules: "true"
 
+      - name: Enable brew
+        run: |
+          echo "/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin" >> $GITHUB_PATH
+
       - name: Setup
         run: |
           sudo apt update
