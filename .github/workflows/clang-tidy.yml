@@ -2,7 +2,7 @@ name: Apply clang-tidy fixes
 
 on:
   push: { }
-  pull_request: { }
+#  pull_request: { }
   workflow_dispatch: { }
 
 jobs:
