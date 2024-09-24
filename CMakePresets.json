@@ -57,6 +57,11 @@
       "name": "release",
       "configurePreset": "release",
       "inherits": "default"
+    },
+    {
+      "name": "clang-tidy",
+      "configurePreset": "clang-tidy",
+      "inherits": "default"
     }
   ],
   "testPresets": [

@@ -28,7 +28,7 @@ jobs:
       - name: Running clang-tidy
         run: |
           cmake --version
-          cmake         --preset clang-tidy -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+          cmake --preset clang-tidy -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
           cmake --build --preset clang-tidy -j 1 -v
 
       - uses: peter-evans/create-pull-request@v7
