@@ -1,8 +1,8 @@
 name: Apply clang-format fixes
 
 on:
-  push: { }
-  pull_request: { }
+#  push: { }
+#  pull_request: { }
   workflow_dispatch: { }
 
 jobs:
