@@ -80,9 +80,9 @@ runs:
     - name: Setup CCache
       uses: hendrikmuhs/ccache-action@v1.2
       with:
-        key: ${{ inputs.os }}-${{ inputs.cxx }}--cxx-standard-${{ inputs.cxx-standard }}--${{ github.workflow }}
+        key: ${{ inputs.os }}-${{ inputs.cxx }}--cxx-standard-${{ inputs.cxx-standard }}--${{ github.job }}
         restore-keys: |
-          ${{ inputs.os }}-${{ inputs.cxx }}--cxx-standard-${{ inputs.cxx-standard }}--${{ github.workflow }}
+          ${{ inputs.os }}-${{ inputs.cxx }}--cxx-standard-${{ inputs.cxx-standard }}--${{ github.job }}
           ${{ inputs.os }}-${{ inputs.cxx }}--cxx-standard-${{ inputs.cxx-standard }}
           ${{ inputs.os }}-${{ inputs.cxx }}
           ${{ inputs.os }}
