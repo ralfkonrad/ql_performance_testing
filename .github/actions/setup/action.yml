@@ -12,6 +12,10 @@ inputs:
     description: The c++ compiler to use.
     required: true
 
+  cxx-standard:
+    description: The c++ standard to use.
+    required: true
+
 runs:
   using: composite
   steps:
@@ -56,7 +60,7 @@ runs:
         Write "BOOST_DOWNLOAD_URI=https://downloads.sourceforge.net/project/boost/boost-binaries/1.88.0/boost_1_88_0-msvc-14.3-64.exe"  >> $env:GITHUB_ENV
         Write "BOOST_INSTALLER_PATH=$env:RUNNER_TEMP\boost.exe"                                                                         >> $env:GITHUB_ENV
         Write "BOOST_INSTALL_DIR=$env:RUNNER_TEMP\boost"                                                                                >> $env:GITHUB_ENV
-        Write "Boost_DIR=$env:RUNNER_TEMP\boost\lib64-msvc-14.3\cmake\Boost-1.88.0"                                                     >> $env:GITHUB_ENV                                                                                 >> $env:GITHUB_ENV
+        Write "Boost_DIR=$env:RUNNER_TEMP\boost\lib64-msvc-14.3\cmake\Boost-1.88.0"                                                     >> $env:GITHUB_ENV
 
     - name: Setup Windows
       if: runner.os == 'Windows'
@@ -76,9 +80,10 @@ runs:
     - name: Setup CCache
       uses: hendrikmuhs/ccache-action@v1.2
       with:
-        key: ${{ inputs.os }}-${{ inputs.cxx }}--${{ github.job }}
+        key: ${{ inputs.os }}-${{ inputs.cxx }}--cxx-standard-${{ inputs.cxx-standard }}--${{ github.job }}
         restore-keys: |
-          ${{ inputs.os }}-${{ inputs.cxx }}--${{ github.job }}
+          ${{ inputs.os }}-${{ inputs.cxx }}--cxx-standard-${{ inputs.cxx-standard }}--${{ github.job }}
+          ${{ inputs.os }}-${{ inputs.cxx }}--cxx-standard-${{ inputs.cxx-standard }}
           ${{ inputs.os }}-${{ inputs.cxx }}
           ${{ inputs.os }}
         variant: ${{ env.CMAKE_CXX_COMPILER_LAUNCHER }}
