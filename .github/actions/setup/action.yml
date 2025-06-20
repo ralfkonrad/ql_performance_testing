@@ -80,10 +80,10 @@ runs:
     - name: Setup CCache
       uses: hendrikmuhs/ccache-action@v1.2
       with:
-        key: ${{ inputs.os }}-${{ inputs.cxx }}-${{ inputs.cxx-standard }}--${{ github.job }}
+        key: ${{ inputs.os }}-${{ inputs.cxx }}--cxx-standard-${{ inputs.cxx-standard }}--${{ github.job }}
         restore-keys: |
-          ${{ inputs.os }}-${{ inputs.cxx }}-${{ inputs.cxx-standard }}--${{ github.job }}
-          ${{ inputs.os }}-${{ inputs.cxx }}-${{ inputs.cxx-standard }}
+          ${{ inputs.os }}-${{ inputs.cxx }}--cxx-standard-${{ inputs.cxx-standard }}--${{ github.job }}
+          ${{ inputs.os }}-${{ inputs.cxx }}--cxx-standard-${{ inputs.cxx-standard }}
           ${{ inputs.os }}-${{ inputs.cxx }}
           ${{ inputs.os }}
         variant: ${{ env.CMAKE_CXX_COMPILER_LAUNCHER }}
