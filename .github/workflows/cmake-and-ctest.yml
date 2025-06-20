@@ -3,8 +3,8 @@ name: Build and Test with CMake and CTest
 on:
   push: { }
   pull_request: { }
-  schedule:
-    - cron: '30 4 * * *'
+#  schedule:
+#    - cron: '30 4 * * *'
   workflow_dispatch: { }
 
 jobs:
@@ -49,29 +49,23 @@ jobs:
           submodules: "true"
 
       - name: Setup needed software
-
         id:                             setup
         uses:                           ./.github/actions/setup
         with:
           os:                           ${{ matrix.settings.os }}
           cxx:                          ${{ matrix.settings.cxx }}
 
-
       - name: Configure CMake and Build
-
         env:
           CC:                           ${{ matrix.settings.cc }}
           CXX:                          ${{ matrix.settings.cxx }}
           CMAKE_CONFIG_TYPE:            Release
-          CMAKE_CXX_COMPILER_LAUNCHER:  ${{ steps.setup.outputs.ccache-variant }}
         run: |
           cmake --version
           cmake --preset ${{ matrix.cmake-preset }} -DCMAKE_CXX_STANDARD=${{ matrix.cxx-standard }} -L
           cmake --build --preset ${{ matrix.cmake-preset }} --verbose
 
-
       - name: CTest
-
         run: |
           ctest --version
           ctest --preset ${{ matrix.cmake-preset }} --extra-verbose
