@@ -12,10 +12,10 @@
 name: "CodeQL"
 
 on:
-#  push: { }
-#  pull_request: { }
-#  schedule:
-#    - cron: '0 4 * * *'
+  # push: { }
+  # pull_request: { }
+  # schedule:
+  #   - cron: '0 4 * * *'
   workflow_dispatch: { }
 
 jobs:
