@@ -11,11 +11,3 @@
 #if !defined(BOOST_ALL_NO_LIB) && defined(BOOST_MSVC)
 #    include <ql/auto_link.hpp>
 #endif
-
-BOOST_AUTO_TEST_SUITE(RKE)
-
-BOOST_AUTO_TEST_CASE(testTrue) {
-    BOOST_CHECK(true);
-}
-
-BOOST_AUTO_TEST_SUITE_END()
