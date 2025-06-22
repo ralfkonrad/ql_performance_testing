@@ -3,6 +3,7 @@ set(RKE_QL_EXT_SOURCES
 )
 
 set(RKE_QL_EXT_HEADER
+        Error.hpp
         instruments/BonusClassicOption.hpp
 )
 

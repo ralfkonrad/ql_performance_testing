@@ -10,23 +10,42 @@
 #include <ql/instruments/payoffs.hpp>
 
 namespace RKE::QL::External {
+    class BonusClassicPayoff : public QuantLib::StrikedTypePayoff {
+      public:
+        BonusClassicPayoff(QuantLib::Real barrier, QuantLib::Real bonusLevel);
+
+        [[nodiscard]] QuantLib::Real barrier() const { return strike(); }
+        [[nodiscard]] QuantLib::Real bonusLevel() const { return bonusLevel_; }
+
+        [[nodiscard]] std::string name() const override { return "BonusClassic"; }
+        QuantLib::Real operator()(QuantLib::Real price) const override;
+        void accept(QuantLib::AcyclicVisitor&) override;
+
+
+      private:
+        QuantLib::Real bonusLevel_;
+    };
+
     class BonusClassicOption : public QuantLib::OneAssetOption {
       public:
         class arguments;
         class engine;
         BonusClassicOption(QuantLib::Real barrier,
                            QuantLib::Real bonusLevel,
-                           const QuantLib::ext::shared_ptr<QuantLib::StrikedTypePayoff>& payoff,
-                           const QuantLib::ext::shared_ptr<QuantLib::EuropeanExercise>& exercise);
+                           QuantLib::Date exerciseDate);
+
+        BonusClassicOption(QuantLib::ext::shared_ptr<BonusClassicPayoff> payoff,
+                           QuantLib::ext::shared_ptr<QuantLib::EuropeanExercise> exercise);
 
         void setupArguments(QuantLib::PricingEngine::arguments*) const override;
 
-        QuantLib::Real barrier() const { return barrier_; };
-        QuantLib::Real bonusLevel() const { return bonusLevel_; };
+        [[nodiscard]] QuantLib::Real barrier() const { return bonusClassicPayoff_->barrier(); }
+        [[nodiscard]] QuantLib::Real bonusLevel() const {
+            return bonusClassicPayoff_->bonusLevel();
+        }
 
       private:
-        QuantLib::Real barrier_;
-        QuantLib::Real bonusLevel_;
+        QuantLib::ext::shared_ptr<BonusClassicPayoff> bonusClassicPayoff_;
     };
 
     //! %Arguments for barrier option calculation
