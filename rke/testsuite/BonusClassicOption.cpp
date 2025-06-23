@@ -19,6 +19,18 @@ BOOST_FIXTURE_TEST_SUITE(RkeQLExtTestSuite, TestSuiteFixture)
 
 BOOST_AUTO_TEST_SUITE(BonusClassicOptionTests)
 
+BOOST_AUTO_TEST_CASE(testBonusClassicPayoff) {
+    BOOST_TEST_MESSAGE("BonusClassicPayoff test");
+
+    auto data = OptionData();
+    auto payoff = BonusClassicPayoff(data.barrier, data.bonusLevel);
+
+    BOOST_CHECK_EQUAL(payoff(80.00), 80.00);
+    BOOST_CHECK_EQUAL(payoff(data.barrier), data.barrier);
+    BOOST_CHECK_EQUAL(payoff(100.00), data.bonusLevel);
+    BOOST_CHECK_EQUAL(payoff(125.00), 125.00);
+}
+
 BOOST_AUTO_TEST_CASE(testBonusClassicOption) {
     BOOST_TEST_MESSAGE("BonusClassicOption test");
 
