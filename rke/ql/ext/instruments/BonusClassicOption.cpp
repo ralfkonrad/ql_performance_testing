@@ -50,4 +50,9 @@ namespace RKE::QL::External {
         QL_REQUIRE(barrier != Null<Real>(), "no barrier given");
         QL_REQUIRE(bonusLevel != Null<Real>(), "no bonus level given");
     }
+
+    bool BonusClassicOption::engine::triggered(Real underlying) const {
+        QL_REQUIRE(arguments_.barrier != Null<Real>(), "no barrier given");
+        return underlying <= arguments_.barrier;
+    }
 } // namespace RKE::QL::External
