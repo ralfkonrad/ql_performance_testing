@@ -5,10 +5,11 @@
 #ifndef MCBONUSCLASSICENGINE_HPP
 #define MCBONUSCLASSICENGINE_HPP
 
-#include "ql/pricingengines/barrier/mcbarrierengine.hpp"
-#include "ql/processes/blackscholesprocess.hpp"
+#include <rke/ql/ext/Error.hpp>
 #include <rke/ql/ext/instruments/BonusClassicOption.hpp>
+#include <ql/pricingengines/barrier/mcbarrierengine.hpp>
 #include <ql/pricingengines/mcsimulation.hpp>
+#include <ql/processes/blackscholesprocess.hpp>
 
 namespace RKE::QL::External {
     template <class RNG = QuantLib::PseudoRandom, class S = QuantLib::Statistics>
@@ -76,7 +77,7 @@ namespace RKE::QL::External {
     template <class RNG, class S>
 
     void MCBonusClassicEngine<RNG, S>::calculate() const {
-        QuantLib::Real spot = process_->x0();
+        auto spot = process_->x0();
         QL_REQUIRE(spot > 0.0, "negative or null underlying given");
         QL_REQUIRE(!triggered(spot), "barrier touched");
         QuantLib::McSimulation<QuantLib::SingleVariate, RNG, S>::calculate(
@@ -89,7 +90,7 @@ namespace RKE::QL::External {
     template <class RNG, class S>
     QuantLib::ext::shared_ptr<typename MCBonusClassicEngine<RNG, S>::path_pricer_type>
     MCBonusClassicEngine<RNG, S>::pathPricer() const {
-        return {};
+        NOT_IMPLEMENTED_FAILURE();
     }
 
     template <class RNG, class S>
