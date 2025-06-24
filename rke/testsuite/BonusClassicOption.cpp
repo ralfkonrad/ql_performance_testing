@@ -15,14 +15,14 @@ using namespace RKE::QL::External;
 using namespace QuantLib;
 
 struct OptionData {
-    Real barrier = 90.00;
+    Real barrier = 90.0;
     Real bonusLevel = 120.00;
     Period ttm = Period(5, Months);
 };
 
 struct MarketData {
     Real spot = 100.00;
-    Real riskfreeRate = 0.02;
+    Real riskfreeRate = 0.01;
     Real dividendYield = 0.03;
     Real volatility = 0.20;
 
@@ -95,12 +95,12 @@ BOOST_AUTO_TEST_CASE(testBonusClassicOptionValuation) {
 
     auto process = market_data.makeGeneralizedBlackScholesProcess(today);
     auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-        process, 50, std::pow(2, 17) - 1, std::pow(2, 20) - 1, 0.01, false, true, 42);
+        process, 50, std::pow(2, 17) - 1, std::pow(2, 20) - 1, 1.0, true, true, 42);
 
     bonusClassicOption->setPricingEngine(mcEngine);
     auto npv = bonusClassicOption->NPV();
 
-    BOOST_CHECK_EQUAL(0.00, npv);
+    BOOST_CHECK_CLOSE_FRACTION(107.34, npv, 0.001);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

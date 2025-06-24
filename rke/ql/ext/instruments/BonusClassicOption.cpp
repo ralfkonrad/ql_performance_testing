@@ -2,7 +2,6 @@
 // Created by ralf.eckel on 21.06.2025.
 //
 
-#include <rke/ql/ext/Error.hpp>
 #include <rke/ql/ext/instruments/BonusClassicOption.hpp>
 
 using namespace QuantLib;

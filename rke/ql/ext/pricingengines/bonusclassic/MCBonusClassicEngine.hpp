@@ -5,7 +5,6 @@
 #ifndef MCBONUSCLASSICENGINE_HPP
 #define MCBONUSCLASSICENGINE_HPP
 
-#include <rke/ql/ext/Error.hpp>
 #include <rke/ql/ext/instruments/BonusClassicOption.hpp>
 #include <ql/pricingengines/barrier/mcbarrierengine.hpp>
 #include <ql/pricingengines/mcsimulation.hpp>
@@ -43,8 +42,8 @@ namespace RKE::QL::External {
         QuantLib::ext::shared_ptr<path_generator_type> pathGenerator() const override {
             QuantLib::TimeGrid grid = timeGrid();
             typename RNG::rsg_type gen = RNG::make_sequence_generator(grid.size() - 1, seed_);
-            return QuantLib::ext::shared_ptr<path_generator_type>(
-                new path_generator_type(process_, grid, gen, brownianBridge_));
+            return QuantLib::ext::make_shared<path_generator_type>(process_, grid, gen,
+                                                                   brownianBridge_);
         }
 
         // data members
@@ -57,6 +56,21 @@ namespace RKE::QL::External {
         bool brownianBridge_;
         QuantLib::BigNatural seed_;
     };
+
+    class BiasedBonusClassicPathPricer : public QuantLib::PathPricer<QuantLib::Path> {
+      public:
+        BiasedBonusClassicPathPricer(QuantLib::Real barrier,
+                                     QuantLib::Real bonusLevel,
+                                     QuantLib::DiscountFactor discountFactor);
+        QuantLib::Real operator()(const QuantLib::Path& path) const override;
+
+      private:
+        QuantLib::Real barrier_;
+        QuantLib::Real bonusLevel_;
+        QuantLib::DiscountFactor discountFactor_;
+        BonusClassicPayoff payoff_;
+    };
+
 
     // template definitions
     template <class RNG, class S>
@@ -73,9 +87,12 @@ namespace RKE::QL::External {
       process_(std::move(process)), timeStepsPerYear_(timeStepsPerYear),
       requiredSamples_(requiredSamples), maxSamples_(maxSamples),
       requiredTolerance_(requiredTolerance), isBiased_(isBiased), brownianBridge_(brownianBridge),
-      seed_(seed) {}
-    template <class RNG, class S>
+      seed_(seed) {
+        QL_REQUIRE(isBiased, "only biased path pricer are supported");
+        registerWith(process_);
+    }
 
+    template <class RNG, class S>
     void MCBonusClassicEngine<RNG, S>::calculate() const {
         auto spot = process_->x0();
         QL_REQUIRE(spot > 0.0, "negative or null underlying given");
@@ -90,8 +107,18 @@ namespace RKE::QL::External {
     template <class RNG, class S>
     QuantLib::ext::shared_ptr<typename MCBonusClassicEngine<RNG, S>::path_pricer_type>
     MCBonusClassicEngine<RNG, S>::pathPricer() const {
-        NOT_IMPLEMENTED_FAILURE();
+        auto payoff = QuantLib::ext::dynamic_pointer_cast<BonusClassicPayoff>(arguments_.payoff);
+        QL_REQUIRE(payoff, "non-plain payoff given");
+
+        auto grid = timeGrid();
+        auto discountFactor = process_->riskFreeRate()->discount(grid.back());
+
+        QuantLib::PseudoRandom::ursg_type sequenceGen(grid.size() - 1,
+                                                      QuantLib::PseudoRandom::urng_type(seed_));
+        return QuantLib::ext::shared_ptr<path_pricer_type>(new BiasedBonusClassicPathPricer(
+            arguments_.barrier, arguments_.bonusLevel, discountFactor));
     }
+
 
     template <class RNG, class S>
     QuantLib::TimeGrid MCBonusClassicEngine<RNG, S>::timeGrid() const {
