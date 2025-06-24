@@ -54,6 +54,9 @@ link_libraries(
 
 include(WarningLevels)
 
+include(CTest)
+enable_testing()
+
 add_subdirectory(rke)
 
 add_subdirectory(benchmark)
