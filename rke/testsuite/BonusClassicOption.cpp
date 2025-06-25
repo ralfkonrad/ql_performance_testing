@@ -95,7 +95,7 @@ BOOST_AUTO_TEST_CASE(testBonusClassicOptionValuation) {
 
     auto process = market_data.makeGeneralizedBlackScholesProcess(today);
     auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-        process, 50, std::pow(2, 17) - 1, std::pow(2, 20) - 1, 1.0, true, true, 42);
+        process, 100, 50'000, 50'001, Null<Real>(), true, true, 42);
 
     bonusClassicOption->setPricingEngine(mcEngine);
     auto npv = bonusClassicOption->NPV();
