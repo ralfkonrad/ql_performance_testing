@@ -7,6 +7,9 @@
 # my favorite build directory
 build/
 
+# cmake user defined presets
+CMakeUserPresets.json
+
 # Created by https://www.toptal.com/developers/gitignore/api/c,c++,clion+iml,cmake,ninja,visualstudio,visualstudiocode
 # Edit at https://www.toptal.com/developers/gitignore?templates=c,c++,clion+iml,cmake,ninja,visualstudio,visualstudiocode
 

@@ -1,19 +1,14 @@
 {
-  "version": 5,
-  "cmakeMinimumRequired": {
-    "major": 3,
-    "minor": 25,
-    "patch": 0
-  },
+  "version": 9,
   "configurePresets": [
     {
       "name": "default",
       "binaryDir": "${sourceDir}/build/${presetName}",
       "generator": "Ninja",
       "cacheVariables": {
-        "QL_COMPILE_WARNING_AS_ERROR": "ON",
+        "CMAKE_COMPILE_WARNING_AS_ERROR": "ON",
         "QL_BUILD_EXAMPLES": "OFF",
-        "QL_BUILD_TEST_SUITE": "OFF",
+        "QL_BUILD_TEST_SUITE": "ON",
         "QL_ENABLE_PARALLEL_UNIT_TEST_RUNNER": "OFF"
       },
       "hidden": true
@@ -59,7 +54,7 @@
         "verbosity": "extra",
         "outputOnFailure": true
       }
-    },    
+    },
     {
       "name": "debug",
       "configurePreset": "debug",
