@@ -17,14 +17,32 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 if (NOT DEFINED CMAKE_CXX_STANDARD)
-  set(CMAKE_CXX_STANDARD 17)
+    set(CMAKE_CXX_STANDARD 17)
 endif ()
 
 if (CMAKE_CXX_STANDARD LESS 17)
-  message(FATAL_ERROR "Please specify CMAKE_CXX_STANDARD of 17 or higher")
+    message(FATAL_ERROR "Please specify CMAKE_CXX_STANDARD of 17 or higher")
 endif ()
 
-find_package(Boost REQUIRED)
+# Boost static libs ON for MSVC
+if (NOT DEFINED Boost_USE_STATIC_LIBS)
+    set(Boost_USE_STATIC_LIBS ${MSVC})
+endif ()
+
+# Boost static runtime ON for MSVC
+if (NOT DEFINED Boost_USE_STATIC_RUNTIME)
+    set(Boost_USE_STATIC_RUNTIME ${MSVC})
+endif ()
+
+# The FindBoost module is removed in cmake 3.30, finding the upstream BoostConfig.cmake
+if (POLICY CMP0167)
+    find_package(Boost CONFIG REQUIRED)
+else ()
+    find_package(Boost REQUIRED)
+endif ()
+
+include(CTest)
+enable_testing()
 
 add_subdirectory(external SYSTEM)
 
@@ -39,4 +57,6 @@ link_libraries(
 
 include(WarningLevels)
 
-add_subdirectory(src)
+add_subdirectory(rke)
+
+add_subdirectory(benchmark)
