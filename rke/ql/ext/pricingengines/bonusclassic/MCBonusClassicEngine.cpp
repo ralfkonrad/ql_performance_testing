@@ -21,7 +21,7 @@ namespace RKE::QL::External {
         Size n = path.length();
         QL_REQUIRE(n > 1, "the path cannot be empty");
 
-        for (auto i = 1; i < n; i++) {
+        for (Size i = 1; i < n; i++) {
             auto assetPrice = path[i];
             if (assetPrice <= barrier_) {
                 return path.back() * discountFactor_;
