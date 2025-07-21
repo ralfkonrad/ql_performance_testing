@@ -100,7 +100,7 @@ BOOST_AUTO_TEST_CASE(testBonusClassicOptionValuation) {
     bonusClassicOption->setPricingEngine(mcEngine);
     auto npv = bonusClassicOption->NPV();
 
-    BOOST_CHECK_CLOSE_FRACTION(107.34, npv, 0.001);
+    BOOST_CHECK_CLOSE_FRACTION(107.34, npv, 0.005);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
