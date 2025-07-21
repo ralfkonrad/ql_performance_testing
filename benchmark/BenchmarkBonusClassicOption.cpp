@@ -48,12 +48,13 @@ namespace RKE::QL::External {
             return flatVol(today, ext::make_shared<SimpleQuote>(vol), dc);
         }
 
-        ext::shared_ptr<BlackVolTermStructure> flatVol(const ext::shared_ptr<Quote>& vol,
-                                                       const DayCounter& dc) {
+        [[maybe_unused]] ext::shared_ptr<BlackVolTermStructure>
+        flatVol(const ext::shared_ptr<Quote>& vol, const DayCounter& dc) {
             return ext::make_shared<BlackConstantVol>(0, NullCalendar(), Handle<Quote>(vol), dc);
         }
 
-        ext::shared_ptr<BlackVolTermStructure> flatVol(Volatility vol, const DayCounter& dc) {
+        [[maybe_unused]] ext::shared_ptr<BlackVolTermStructure> flatVol(Volatility vol,
+                                                                        const DayCounter& dc) {
             return flatVol(ext::make_shared<SimpleQuote>(vol), dc);
         }
 
