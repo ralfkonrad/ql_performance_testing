@@ -109,7 +109,7 @@ namespace RKE::QL::External {
 
         bonusClassicOption->setPricingEngine(mcEngine);
 
-        for (auto _ : state) {
+        for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
             bonusClassicOption->recalculate();
             auto npv = bonusClassicOption->NPV();
             benchmark::DoNotOptimize(npv);

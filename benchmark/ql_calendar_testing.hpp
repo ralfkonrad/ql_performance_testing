@@ -9,4 +9,4 @@
 
 void BM_TestCalendar(benchmark::State& state);
 
-#endif  // QL_PERFORMANCE_TESTING_QL_CALENDAR_TESTING_HPP
+#endif // QL_PERFORMANCE_TESTING_QL_CALENDAR_TESTING_HPP
