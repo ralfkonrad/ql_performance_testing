@@ -3,8 +3,8 @@ name: Build and Test with CMake and CTest
 on:
   push: { }
   pull_request: { }
-  #  schedule:
-  #    - cron: '30 4 * * *'
+  schedule:
+    - cron: '33 5 * * *'
   workflow_dispatch: { }
 
 jobs:
