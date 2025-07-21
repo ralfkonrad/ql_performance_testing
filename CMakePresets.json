@@ -31,7 +31,8 @@
       "name": "clang-tidy",
       "inherits": "debug",
       "cacheVariables": {
-        "CMAKE_UNITY_BUILD": "ON",
+        "CMAKE_COMPILE_WARNING_AS_ERROR": "OFF",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "CMAKE_CXX_CLANG_TIDY": "clang-tidy;-quiet;-fix"
       }
     }

@@ -1,13 +1,13 @@
 name: Apply clang-tidy fixes
 
 on:
-  #  push: { }
-  #  pull_request: { }
+  push: { }
+  pull_request: { }
   workflow_dispatch: { }
 
 jobs:
   clang-tidy:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -28,8 +28,8 @@ jobs:
       - name: Running clang-tidy
         run: |
           cmake --version
-          cmake --preset clang-tidy -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
-          cmake --build --preset clang-tidy -j 1 -v
+          cmake --preset clang-tidy -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -L
+          ./scripts/run_clang_tidy.py
 
       - uses: peter-evans/create-pull-request@v7
         with:
