@@ -1,8 +1,9 @@
 name: Apply clang-tidy fixes
 
 on:
-  push: { }
-  pull_request: { }
+  push:
+    branches:
+      - master
   workflow_dispatch: { }
 
 jobs:
