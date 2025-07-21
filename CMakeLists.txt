@@ -41,6 +41,9 @@ else ()
     find_package(Boost REQUIRED)
 endif ()
 
+include(CTest)
+enable_testing()
+
 add_subdirectory(external SYSTEM)
 
 include_directories(SYSTEM
@@ -53,9 +56,6 @@ link_libraries(
         benchmark::benchmark)
 
 include(WarningLevels)
-
-include(CTest)
-enable_testing()
 
 add_subdirectory(rke)
 
