@@ -1,27 +1,36 @@
 name: Apply clang-tidy fixes
 
 on:
-  #  push: { }
-  #  pull_request: { }
+  push:
+    branches:
+      - master
   workflow_dispatch: { }
 
 jobs:
   clang-tidy:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
         with:
           submodules: "true"
+
+      - name: Enable brew
+        run: |
+          echo "/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin" >> $GITHUB_PATH
 
       - name: Setup
         run: |
           sudo apt update
           sudo apt install -y clang-tidy ninja-build
 
+          brew update
+          brew install boost
+
       - name: Running clang-tidy
         run: |
-          cmake -S . -B ./build -G Ninja -DRKE_USE_CLANG_TIDY=ON -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
-          cmake --build ./build -j 1 -v
+          cmake --version
+          cmake --preset clang-tidy -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -L
+          ./scripts/run_clang_tidy.py
 
       - uses: peter-evans/create-pull-request@v7
         with:
