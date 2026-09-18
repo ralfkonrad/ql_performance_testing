@@ -12,8 +12,7 @@
 
 namespace RKE::QL::External {
 
-    class TestSuiteFixture {
-        // NOLINT(cppcoreguidelines-special-member-functions)
+    class TestSuiteFixture { // NOLINT(cppcoreguidelines-special-member-functions)
       public:
         TestSuiteFixture() = default;
 
