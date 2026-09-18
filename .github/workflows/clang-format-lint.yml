@@ -18,6 +18,8 @@ jobs:
         with:
           clangFormatVersion: 14
           inplace: True
+          # .clang-format-ignore needs clang-format 18; the action excludes via this input.
+          exclude: './external'
 
       - uses: peter-evans/create-pull-request@v8
         with:
