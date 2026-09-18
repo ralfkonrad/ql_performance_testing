@@ -6,7 +6,9 @@ cmake_policy(SET CMP0091 NEW)
 project(ql_performance_testing VERSION 0.0.1)
 
 # Options
-option(CMAKE_COMPILE_WARNING_AS_ERROR "Compile warnings as errors" ON)
+# Applied in WarningLevels, which is included after add_subdirectory(external) so that
+# it cannot reach the submodules.
+option(RKE_COMPILE_WARNING_AS_ERROR "Compile warnings as errors" ON)
 
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
