@@ -17,7 +17,11 @@ namespace RKE::QL::External {
     }
 
     void BonusClassicPayoff::accept(AcyclicVisitor& acyclic_visitor) {
-        StrikedTypePayoff::accept(acyclic_visitor);
+        auto* visitor = dynamic_cast<Visitor<BonusClassicPayoff>*>(&acyclic_visitor);
+        if (visitor != nullptr)
+            visitor->visit(*this);
+        else
+            StrikedTypePayoff::accept(acyclic_visitor);
     }
 
 
