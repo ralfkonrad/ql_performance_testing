@@ -1,4 +1,19 @@
 ---
+# Note: clang-tidy splits this list on commas, so every entry needs one.
 Checks: >
-    *
-    -llvmlibc*
+    *,
+    -abseil-*,
+    -altera-*,
+    -fuchsia-*,
+    -llvmlibc-*,
+    -cppcoreguidelines-avoid-magic-numbers,
+    -google-build-using-namespace,
+    -google-readability-namespace-comments,
+    -llvm-header-guard,
+    -llvm-include-order,
+    -llvm-namespace-comment,
+    -misc-include-cleaner,
+    -misc-non-private-member-variables-in-classes,
+    -modernize-use-trailing-return-type,
+    -readability-identifier-length,
+    -readability-magic-numbers
