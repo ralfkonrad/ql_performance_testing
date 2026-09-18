@@ -18,8 +18,10 @@ namespace RKE::QL::External {
         TestSuiteFixture() = default;
 
         ~TestSuiteFixture() {
-            QuantLib::IndexManager::instance().clearHistories();
+            // Tests must clean up the fixings they set; this also guarantees that every
+            // test case contains at least one assertion.
             BOOST_CHECK(QuantLib::IndexManager::instance().histories().empty());
+            QuantLib::IndexManager::instance().clearHistories();
         }
 
       private:
