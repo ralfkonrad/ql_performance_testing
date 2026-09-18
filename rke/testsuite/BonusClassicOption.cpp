@@ -5,14 +5,20 @@
 #include "TestSuiteFixture.hpp"
 #include <rke/ql/ext/instruments/BonusClassicOption.hpp>
 #include <rke/ql/ext/pricingengines/bonusclassic/MCBonusClassicEngine.hpp>
+#include <ql/instruments/barrieroption.hpp>
+#include <ql/pricingengines/barrier/analyticbarrierengine.hpp>
 #include <ql/processes/blackscholesprocess.hpp>
 #include <ql/quotes/simplequote.hpp>
 #include <ql/time/daycounters/actual360.hpp>
 #include <boost/test/unit_test.hpp>
+#include <cmath>
 #include <test-suite/utilities.hpp>
 
 using namespace RKE::QL::External;
 using namespace QuantLib;
+
+// Barrier monitoring dates of the MC engine are its time grid points.
+constexpr Size timeStepsPerYear = 100;
 
 struct OptionData {
     Real barrier = 90.0;
@@ -95,12 +101,66 @@ BOOST_AUTO_TEST_CASE(testBonusClassicOptionValuation) {
 
     auto process = market_data.makeGeneralizedBlackScholesProcess(today);
     auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-        process, 100, 50'000, 50'001, Null<Real>(), true, true, 42);
+        process, timeStepsPerYear, 50'000, 50'001, Null<Real>(), true, true, 42);
 
     bonusClassicOption->setPricingEngine(mcEngine);
     auto npv = bonusClassicOption->NPV();
 
-    BOOST_CHECK_CLOSE_FRACTION(107.34, npv, 0.005);
+    // Regression lock. The low-discrepancy sequence is deterministic for a fixed seed
+    // and time grid, so this pins the engine to its own output; it is not an
+    // externally validated price. See testBonusClassicOptionReplication for that.
+    BOOST_CHECK_CLOSE_FRACTION(106.96041418042263, npv, 1e-8);
+}
+
+BOOST_AUTO_TEST_CASE(testBonusClassicOptionReplication) {
+    BOOST_TEST_MESSAGE("BonusClassicOption replication test");
+
+    auto option_data = OptionData();
+    auto market_data = MarketData();
+
+    auto today = Date(22, Jun, 2025);
+    Settings::instance().evaluationDate() = today;
+
+    auto exerciseDate = today + option_data.ttm;
+
+    auto process = market_data.makeGeneralizedBlackScholesProcess(today);
+
+    auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
+        option_data.barrier, option_data.bonusLevel, exerciseDate);
+    bonusClassicOption->setPricingEngine(ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
+        process, timeStepsPerYear, 50'000, 50'001, Null<Real>(), true, true, 42));
+    auto npv = bonusClassicOption->NPV();
+
+    // The pricer pays S_T once the barrier has been touched and max(S_T, bonusLevel)
+    // otherwise, i.e. S_T + 1{never touched} * max(bonusLevel - S_T, 0): the asset
+    // itself plus a down-and-out put struck at the bonus level.
+    //
+    // AnalyticBarrierEngine assumes continuous monitoring, while the engine monitors
+    // on its time grid only. Broadie, Glasserman and Kou (1997), "A continuity
+    // correction for discrete barrier options", Mathematical Finance 7(4), 325-349,
+    // give the correction as a shift of a down barrier to H * exp(-beta * sigma *
+    // sqrt(dt)) with beta = -zeta(1/2) / sqrt(2 * pi).
+    auto residualTime = process->time(exerciseDate);
+    auto steps = static_cast<Size>(timeStepsPerYear * residualTime);
+    auto dt = residualTime / static_cast<Time>(steps);
+    constexpr Real beta = 0.5826;
+    auto correctedBarrier =
+        option_data.barrier * std::exp(-beta * market_data.volatility * std::sqrt(dt));
+
+    // Receiving the asset at maturity is worth spot * exp(-q * T).
+    auto assetLeg = process->x0() * process->dividendYield()->discount(exerciseDate);
+
+    auto downOutPut =
+        BarrierOption(Barrier::DownOut, correctedBarrier, 0.0,
+                      ext::make_shared<PlainVanillaPayoff>(Option::Put, option_data.bonusLevel),
+                      ext::make_shared<EuropeanExercise>(exerciseDate));
+    downOutPut.setPricingEngine(ext::make_shared<AnalyticBarrierEngine>(process));
+
+    auto replication = assetLeg + downOutPut.NPV();
+
+    // Measured residual 3.8e-4 relative; the correction is O(1 / sqrt(steps)) and the
+    // grid has 42 steps. Both sides are deterministic, so this is model error, not noise.
+    BOOST_CHECK_CLOSE_FRACTION(replication, npv, 1e-3);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
