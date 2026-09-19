@@ -7,7 +7,7 @@
 #include <vector>
 
 void BM_TestCalendar(benchmark::State& state) {
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     auto target = QuantLib::TARGET();
 
     auto numberOfDates = QuantLib::Date::maxDate() - QuantLib::Date::minDate() + 1;
