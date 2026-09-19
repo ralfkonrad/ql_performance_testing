@@ -25,61 +25,61 @@ auto inverseCumulativeRng =
                                    QuantLib::InverseCumulativeNormal>(mersenneTwister);
 
 void BM_Xoshiro256StarStarNextInt64(benchmark::State& state) {
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     xoshiro256StarStar.nextInt64();
   }
 }
 
 void BM_Xoshiro256StarStarNext(benchmark::State& state) {
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     xoshiro256StarStar.next();
   }
 }
 
 void BM_Xoshiro256StarStarBoxMullerGaussianNext(benchmark::State& state) {
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     xoshiro256StarStarBoxMullerGaussian.next();
   }
 }
 
 void BM_Xoshiro256StarStarCLGaussianNext(benchmark::State& state) {
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     xoshiro256StarStarCLGaussian.next();
   }
 }
 
 void BM_Xoshiro256StarStarZigguratGaussianNext(benchmark::State& state) {
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     xoshiro256StarStarZigguratGaussian.next();
   }
 }
 
 void BM_MersenneTwisterNextInt32(benchmark::State& state) {
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     mersenneTwister.nextInt32();
   }
 }
 
 void BM_InverseCumulativeRngNext(benchmark::State& state) {
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     inverseCumulativeRng.next();
   }
 }
 
 void BM_MersenneTwisterNext(benchmark::State& state) {
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     mersenneTwister.next();
   }
 }
 
 void BM_MersenneTwisterBoxMullerGaussianNext(benchmark::State& state) {
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     mersenneTwisterBoxMullerGaussian.next();
   }
 }
 
 void BM_MersenneTwisterCLGaussianNext(benchmark::State& state) {
-  for (auto _ : state) {
+  for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
     mersenneTwisterCLGaussian.next();
   }
 }
