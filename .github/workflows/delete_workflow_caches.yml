@@ -35,6 +35,9 @@ jobs:
     if: github.event_name != 'delete' || github.event.ref_type == 'branch'
     runs-on: ubuntu-24.04
 
+    # Two REST calls per cache and nothing else; minutes here mean the API is not answering.
+    timeout-minutes: 10
+
     # `&&` binds tighter than `||`, so each event picks its own branch and a manual run falls
     # through to the input, where empty still means every cache of the repository.
     env:

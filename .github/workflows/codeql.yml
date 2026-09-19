@@ -22,6 +22,12 @@ jobs:
   analyze:
     name: Analyze
     runs-on: ubuntu-24.04
+
+    # Never run, so there is nothing to measure. Autobuild repeats the Ubuntu build, whose
+    # measured maximum in the matrix is 34 min, without a compiler cache and adds database
+    # extraction and query evaluation on top.
+    timeout-minutes: 90
+
     permissions:
       actions: read
       contents: read

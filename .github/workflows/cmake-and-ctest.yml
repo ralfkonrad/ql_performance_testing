@@ -15,6 +15,20 @@ on:
     - cron: '33 5 * * *'
   workflow_dispatch: { }
 
+# Nothing here needs to write anything back. Declared so that flipping the repository
+# default to read-write does not silently hand a write token to cmake, ctest, brew, apt,
+# choco and the third-party actions this matrix runs.
+permissions:
+  contents: read
+
+# Pushing twice in quick succession to an open pull request otherwise runs the full matrix
+# twice. `github.ref` is `refs/pull/<n>/merge` on a pull request and `refs/heads/master` on
+# a push to master, so the two never share a group, and master is the ref that must never be
+# cancelled: it is the only one whose compiler caches every other ref restores from.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+
 jobs:
   cmake-build-and-test:
     strategy:
@@ -60,6 +74,11 @@ jobs:
         cmake-preset: [ release ]
 
     runs-on: ${{ matrix.settings.os }}
+
+    # A hang catcher, not a budget. Measured maxima over the runs of the last weeks are
+    # 25 min on macOS, 34 on Ubuntu and 83 on Windows, so Windows gets its own bound and
+    # the rest share one; both sit far below GitHub's 6h default.
+    timeout-minutes: ${{ (startsWith(matrix.settings.os, 'windows') && 120) || 60 }}
 
     steps:
       - uses: actions/checkout@v7
