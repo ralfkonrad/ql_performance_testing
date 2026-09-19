@@ -45,6 +45,7 @@ runs:
       shell: bash
       run: |
         sudo apt-get update
+        # ccache comes from hendrikmuhs/ccache-action below; an apt one would shadow it.
         sudo apt-get install -y ninja-build
 
         brew update
@@ -54,12 +55,16 @@ runs:
       if: runner.os == 'macOS'
       shell: bash
       run: |
+        # Do not reintroduce HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: it makes Homebrew
+        # annotate every job that sets it, and the upgrades below are what it guards.
         echo "CXXFLAGS=-stdlib=libc++" >> $GITHUB_ENV
 
     - name: Setup macOS
       if: runner.os == 'macOS'
       shell: bash
       run: |
+        # The image ships both formulae, and `brew install` on a present one warns rather
+        # than no-ops. Ask brew what is missing and what is outdated, and act only on that.
         formulae=(ninja boost)
         missing=()
         outdated=()
@@ -82,6 +87,8 @@ runs:
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
+        # Stated once: the download URI and every path derive from these, so a bump cannot
+        # leave a stale copy behind.
         $boostVersion = '1.88.0'
         $boostUnderscored = $boostVersion.Replace('.', '_')
         $msvcToolset = '14.3'
@@ -92,6 +99,8 @@ runs:
         $boostDir = "$installDir\lib64-msvc-$msvcToolset\cmake\Boost-$boostVersion"
         $downloadUri = "$baseUri/$boostVersion/$installerName"
 
+        # Key on the SHA-256 of the URI, not the URI itself: keys are prefix-matched and a
+        # raw URI is unreadable as one. A $boostVersion bump then misses the cache by itself.
         $uriBytes = [System.Text.Encoding]::UTF8.GetBytes($downloadUri)
         $uriHash = [System.Security.Cryptography.SHA256]::HashData($uriBytes)
         $uriDigest = [System.Convert]::ToHexString($uriHash).ToLowerInvariant()
@@ -103,6 +112,8 @@ runs:
         Write-Output "BOOST_INSTALL_DIR=$installDir" >> $env:GITHUB_ENV
         Write-Output "Boost_DIR=$boostDir" >> $env:GITHUB_ENV
 
+        # The cache step reads these as step outputs; the composite-action docs do not
+        # promise the env context for a step's `with`.
         Write-Output "installer-path=$installerPath" >> $env:GITHUB_OUTPUT
         Write-Output "uri-digest=$uriDigest" >> $env:GITHUB_OUTPUT
 
@@ -118,6 +129,8 @@ runs:
       if: runner.os == 'Windows' && steps.cache-boost-installer.outputs.cache-hit != 'true'
       shell: pwsh
       run: |
+        # SourceForge mirrors drop the connection mid-transfer. -RetryTimeout also bounds
+        # BITS itself, whose 14-day default keeps a hopeless transfer alive past any runtime.
         $uri = $env:BOOST_DOWNLOAD_URI
         $exe = $env:BOOST_INSTALLER_PATH
         $maxAttempts = 3
@@ -131,6 +144,7 @@ runs:
           }
           catch {
             Write-Warning "Downloading $uri failed: $($_.Exception.Message)"
+            # A partial file must not survive into the next attempt or into the cache.
             Remove-Item -LiteralPath $exe -Force -ErrorAction SilentlyContinue
             if ($attempt -eq $maxAttempts) {
               throw "Boost download from $uri failed after $maxAttempts attempts."
@@ -139,6 +153,8 @@ runs:
           }
         }
 
+        # Start-BitsTransfer reports success even for a mirror's HTML error page, so check
+        # that what landed can plausibly be the installer.
         if (-not (Test-Path -LiteralPath $exe)) {
           throw "Boost download from $uri produced no file at $exe."
         }
@@ -151,14 +167,18 @@ runs:
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
+        # A cache hit restores the installer but installs nothing, so this runs on both paths.
         $exe = $env:BOOST_INSTALLER_PATH
 
+        # Without -PassThru the exit code is discarded and a failed install stays green until
+        # the caller's CMake fails to find Boost.
         $installArgs = @('/SILENT', '/SP-', '/SUPPRESSMSGBOXES', "/DIR=$env:BOOST_INSTALL_DIR")
         $process = Start-Process -Wait -PassThru -FilePath $exe -ArgumentList $installArgs
         if ($process.ExitCode -ne 0) {
           throw "Boost installer failed with exit code $($process.ExitCode)."
         }
 
+        # Boost_DIR is the tree the caller's CMake consumes; fail here rather than there.
         if (-not (Test-Path -LiteralPath $env:Boost_DIR)) {
           throw "Boost install left no CMake package directory at $env:Boost_DIR."
         }
@@ -172,14 +192,23 @@ runs:
         arch: x64
 
     - name: Setup CCache
+      # Pinned to v1.2.24, not the floating v1.2: that still resolves to v1.2.20, which
+      # declares node20 and so has the runner annotate every job using it.
       uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d # v1.2.24
       with:
+        # Prefix-matched, so no rung may prefix a sibling variant's key: the architecture
+        # keeps a runner apart from its `-arm` twin, and the compiler sits ahead of the
+        # standard so a g++ job cannot restore a clang++ entry. The one fallback left is the
+        # same compiler at another standard.
         key: ${{ inputs.os }}-${{ runner.arch }}-${{ inputs.cxx }}-std-${{ inputs.cxx-standard }}
         restore-keys: |
           ${{ inputs.os }}-${{ runner.arch }}-${{ inputs.cxx }}-std-${{ inputs.cxx-standard }}
           ${{ inputs.os }}-${{ runner.arch }}-${{ inputs.cxx }}-std-
         variant: ${{ env.CMAKE_CXX_COMPILER_LAUNCHER }}
+        # The last character is the unit, and sccache silently falls back to its own 10GB
+        # default for a size it cannot parse: `M`, never `MB`. Windows entries are the largest.
         max-size: ${{ ( (runner.os == 'Windows') && '400M' ) || '250M' }}
+        # ccache only; the action skips it for sccache, where max-size does the bounding.
         evict-old-files: 7d
         save: ${{ inputs.save-ccache }}
 

@@ -1,6 +1,9 @@
 version: 2
 updates:
 
+  # `directories` takes globs, so one entry covers every workflow and every composite
+  # action: an action used in two of them yields one pull request, not two, and a new
+  # composite action needs no change here.
   - package-ecosystem: "github-actions"
     directories:
       - "/"
@@ -10,6 +13,9 @@ updates:
       time: "01:46"
       timezone: "Europe/Berlin"
     groups:
+      # Minor and patch share a pull request; a major stays alone so it can be reverted
+      # alone. That needs Dependabot to read the version from the `# vX.Y.Z` beside each
+      # pinned SHA, which is unverified; if a major is ever swept in, split this by pattern.
       actions-minor-and-patch:
         update-types:
           - "minor"

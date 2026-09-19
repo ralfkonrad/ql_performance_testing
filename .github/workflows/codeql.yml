@@ -1,6 +1,8 @@
 name: "CodeQL"
 
 on:
+  # Dispatch only: autobuild repeats the whole Ubuntu build without a compiler cache, which
+  # is more runner time than a per-push or nightly scan of this tree is worth.
   # push: { }
   # pull_request: { }
   # schedule:
@@ -12,6 +14,8 @@ jobs:
     name: Analyze
     runs-on: ubuntu-24.04
 
+    # Never run, so nothing is measured. Autobuild repeats the Ubuntu build, whose measured
+    # maximum in the matrix is 34 min, uncached, and adds extraction and queries on top.
     timeout-minutes: 90
 
     permissions:
@@ -22,6 +26,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # C++ is the whole tree. The matrix stays so that `category` below keeps its
+        # per-language form and a second language is one entry away.
         language: [ 'cpp' ]
 
     steps:
@@ -35,6 +41,7 @@ jobs:
       with:
         languages: ${{ matrix.language }}
 
+    # Autobuild's CMake detection handles this tree, so there is no build script to keep.
     - name: Autobuild
       uses: github/codeql-action/autobuild@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
 
