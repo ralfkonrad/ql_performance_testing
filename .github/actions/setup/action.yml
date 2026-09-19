@@ -58,6 +58,7 @@ runs:
         brew install ninja boost
 
     - name: Setup Windows variables
+      id: windows-variables
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
@@ -71,28 +72,82 @@ runs:
         $installerName = "boost_$boostUnderscored-msvc-$msvcToolset-64.exe"
         $installDir = "$env:RUNNER_TEMP\boost"
         $boostDir = "$installDir\lib64-msvc-$msvcToolset\cmake\Boost-$boostVersion"
+        $downloadUri = "$baseUri/$boostVersion/$installerName"
 
-        Write-Output "BOOST_DOWNLOAD_URI=$baseUri/$boostVersion/$installerName" >> $env:GITHUB_ENV
-        Write-Output "BOOST_INSTALLER_PATH=$env:RUNNER_TEMP\boost.exe" >> $env:GITHUB_ENV
+        # The cache key is the SHA-256 of the download URI, not the URI itself: cache keys are
+        # prefix-matched and a raw URI's '/' and ':' make an unreadable key. Hashing keeps the
+        # key a pure function of the URI, so bumping $boostVersion misses the cache without a
+        # version string being repeated anywhere.
+        $uriBytes = [System.Text.Encoding]::UTF8.GetBytes($downloadUri)
+        $uriHash = [System.Security.Cryptography.SHA256]::HashData($uriBytes)
+        $uriDigest = [System.Convert]::ToHexString($uriHash).ToLowerInvariant()
+
+        $installerPath = "$env:RUNNER_TEMP\boost.exe"
+
+        Write-Output "BOOST_DOWNLOAD_URI=$downloadUri" >> $env:GITHUB_ENV
+        Write-Output "BOOST_INSTALLER_PATH=$installerPath" >> $env:GITHUB_ENV
         Write-Output "BOOST_INSTALL_DIR=$installDir" >> $env:GITHUB_ENV
         Write-Output "Boost_DIR=$boostDir" >> $env:GITHUB_ENV
 
-    - name: Setup Windows
+        # The cache step reads these as step outputs rather than from the env context, which
+        # the composite action documentation does not promise for a step's `with`.
+        Write-Output "installer-path=$installerPath" >> $env:GITHUB_OUTPUT
+        Write-Output "uri-digest=$uriDigest" >> $env:GITHUB_OUTPUT
+
+    - name: Restore the cached Boost installer on Windows
+      id: cache-boost-installer
       if: runner.os == 'Windows'
+      uses: actions/cache@v4
+      with:
+        path: ${{ steps.windows-variables.outputs.installer-path }}
+        key: boost-installer-${{ steps.windows-variables.outputs.uri-digest }}
+
+    - name: Download Boost on Windows
+      if: runner.os == 'Windows' && steps.cache-boost-installer.outputs.cache-hit != 'true'
       shell: pwsh
       run: |
+        # SourceForge mirrors regularly drop the connection mid-transfer, so retry instead of
+        # failing the job on the first error. -RetryTimeout also bounds BITS itself: its
+        # 14-day default window keeps a hopeless transfer alive far past any useful runtime.
+        $uri = $env:BOOST_DOWNLOAD_URI
         $exe = $env:BOOST_INSTALLER_PATH
-        Start-BitsTransfer -Source $env:BOOST_DOWNLOAD_URI -Destination $exe
+        $maxAttempts = 3
+
+        for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+          try {
+            Write-Host "Downloading $uri (attempt $attempt of $maxAttempts)"
+            Start-BitsTransfer -Source $uri -Destination $exe `
+              -RetryInterval 60 -RetryTimeout 300 -ErrorAction Stop
+            break
+          }
+          catch {
+            Write-Warning "Downloading $uri failed: $($_.Exception.Message)"
+            # A partial file must not survive into the next attempt or into the cache.
+            Remove-Item -LiteralPath $exe -Force -ErrorAction SilentlyContinue
+            if ($attempt -eq $maxAttempts) {
+              throw "Boost download from $uri failed after $maxAttempts attempts."
+            }
+            Start-Sleep -Seconds (30 * $attempt)
+          }
+        }
 
         # Start-BitsTransfer reports success even when a SourceForge mirror answers with an
         # HTML error page, so check that what landed can plausibly be the installer.
         if (-not (Test-Path -LiteralPath $exe)) {
-          throw "Boost download from $env:BOOST_DOWNLOAD_URI produced no file at $exe."
+          throw "Boost download from $uri produced no file at $exe."
         }
         $downloadedBytes = (Get-Item -LiteralPath $exe).Length
         if ($downloadedBytes -lt 50MB) {
           throw "Boost download is only $downloadedBytes bytes, not a Boost installer."
         }
+
+    - name: Setup Windows
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        # A cache hit restores the installer but installs nothing, so this step runs on both
+        # the cache-hit and the download path.
+        $exe = $env:BOOST_INSTALLER_PATH
 
         # Without -PassThru the installer's exit code is discarded and a failed Boost install
         # stays green until the caller's CMake fails to find Boost.
