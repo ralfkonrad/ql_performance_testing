@@ -1,12 +1,6 @@
 name: Build and Test with CMake and CTest
 
 on:
-  # `pull_request` already builds every branch, so an unscoped `push` built each commit of a
-  # branch with an open pull request twice and stored two full sets of caches against the
-  # repository's single 10GB quota. Scoping `push` to master keeps master building, which is
-  # what seeds the only caches other branches and pull requests can restore from.
-  # Consequence: a push to a branch with no open pull request runs no CI until the pull
-  # request is opened. `workflow_dispatch` is the escape hatch.
   push:
     branches:
       - master
@@ -15,16 +9,9 @@ on:
     - cron: '33 5 * * *'
   workflow_dispatch: { }
 
-# Nothing here needs to write anything back. Declared so that flipping the repository
-# default to read-write does not silently hand a write token to cmake, ctest, brew, apt,
-# choco and the third-party actions this matrix runs.
 permissions:
   contents: read
 
-# Pushing twice in quick succession to an open pull request otherwise runs the full matrix
-# twice. `github.ref` is `refs/pull/<n>/merge` on a pull request and `refs/heads/master` on
-# a push to master, so the two never share a group, and master is the ref that must never be
-# cancelled: it is the only one whose compiler caches every other ref restores from.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
@@ -34,11 +21,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # A `*-latest` label moves to a new OS image on GitHub's schedule. The ccache key is
-        # built from this label, so a migration swaps the toolchain while leaving the key
-        # untouched, and the restored cache is one the new compiler cannot hit. These pins
-        # are what the three labels resolve to today; Dependabot does not bump runner
-        # labels, so a newer image is a deliberate edit here.
         settings:
           [
             { os: macos-26,       cc: clang,    cxx: clang++ },
@@ -75,9 +57,6 @@ jobs:
 
     runs-on: ${{ matrix.settings.os }}
 
-    # A hang catcher, not a budget. Measured maxima over the runs of the last weeks are
-    # 25 min on macOS, 34 on Ubuntu and 83 on Windows, so Windows gets its own bound and
-    # the rest share one; both sit far below GitHub's 6h default.
     timeout-minutes: ${{ (startsWith(matrix.settings.os, 'windows') && 120) || 60 }}
 
     steps:
@@ -92,10 +71,6 @@ jobs:
           os: ${{ matrix.settings.os }}
           cxx: ${{ matrix.settings.cxx }}
           cxx-standard: ${{ matrix.cxx-standard }}
-          # A compiler cache is scoped to the ref that wrote it and only master's entries are
-          # restorable from every other ref, so a topic branch's entry fills the quota with a
-          # cache no other run can read. The gate lives here, next to the triggers it follows,
-          # not inside the shared action.
           save-ccache: ${{ github.ref == 'refs/heads/master' }}
 
       - name: Configure CMake and Build
@@ -103,8 +78,6 @@ jobs:
           CC: ${{ matrix.settings.cc }}
           CXX: ${{ matrix.settings.cxx }}
           CMAKE_CONFIG_TYPE: Release
-        # Folded, not literal: the configure command exceeds the 100-column limit on one
-        # line, and a shell continuation would have to differ between bash and pwsh.
         run: >-
           cmake --version
 

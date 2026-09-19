@@ -5,14 +5,6 @@ on:
   #  pull_request: { }
   workflow_dispatch: { }
 
-# `create-pull-request` pushes a branch and opens a pull request. The repository's default
-# token is read-only, so both of these are needed; the action's README asks for exactly
-# them and nothing more.
-#
-# This block cannot switch on "Allow GitHub Actions to create and approve pull requests".
-# That is a repository setting, and while it is off the last step fails with
-# "GitHub Actions is not permitted to create or approve pull requests" no matter what is
-# granted here.
 permissions:
   contents: write
   pull-requests: write
@@ -20,9 +12,6 @@ permissions:
 jobs:
   clang-tidy:
     runs-on: ubuntu-24.04
-    # Never run, so there is nothing to measure. This builds the submodules serially
-    # (`-j 1`, Debug, no compiler cache) where the matrix job builds them in parallel
-    # against a warm ccache in 34 min, so the bound is set far above that.
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
