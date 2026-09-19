@@ -22,30 +22,34 @@ runs:
     - name: Determine ccache variant
       shell: bash
       run: |
-        echo "CMAKE_CXX_COMPILER_LAUNCHER=${{ ( (runner.os == 'Windows') && 'sccache' ) || 'ccache' }}"                                 >> $GITHUB_ENV
+        variant="${{ ( (runner.os == 'Windows') && 'sccache' ) || 'ccache' }}"
+        echo "CMAKE_CXX_COMPILER_LAUNCHER=$variant" >> $GITHUB_ENV
 
     - name: Setup Linux variables
       if: runner.os == 'Linux'
       shell: bash
       run: |
-        echo "/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin"                                                           >> $GITHUB_PATH
+        echo "/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin" >> $GITHUB_PATH
 
     - name: Setup Linux
       if: runner.os == 'Linux'
       shell: bash
       run: |
         sudo apt-get update
-        sudo apt-get install -y ccache ninja-build
+        # ccache is provided by hendrikmuhs/ccache-action below; installing it here as well
+        # only shadows the action's build with an older apt one.
+        sudo apt-get install -y ninja-build
 
         brew update
         brew install boost
 
-    - name: Setup build variables on macOs
-      if: runner.os == 'macOs'
+    - name: Setup build variables on macOS
+      if: runner.os == 'macOS'
       shell: bash
       run: |
-        echo "CXXFLAGS=-stdlib=libc++"                                                                                                  >> $GITHUB_ENV
-        echo "HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1"                                                                                 >> $GITHUB_ENV
+        # Do not reintroduce HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: this action never runs
+        # `brew upgrade`, so it silences nothing and Homebrew annotates every job that sets it.
+        echo "CXXFLAGS=-stdlib=libc++" >> $GITHUB_ENV
 
     - name: Setup macOS
       if: runner.os == 'macOS'
@@ -57,17 +61,51 @@ runs:
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
-        Write "BOOST_DOWNLOAD_URI=https://downloads.sourceforge.net/project/boost/boost-binaries/1.88.0/boost_1_88_0-msvc-14.3-64.exe"  >> $env:GITHUB_ENV
-        Write "BOOST_INSTALLER_PATH=$env:RUNNER_TEMP\boost.exe"                                                                         >> $env:GITHUB_ENV
-        Write "BOOST_INSTALL_DIR=$env:RUNNER_TEMP\boost"                                                                                >> $env:GITHUB_ENV
-        Write "Boost_DIR=$env:RUNNER_TEMP\boost\lib64-msvc-14.3\cmake\Boost-1.88.0"                                                     >> $env:GITHUB_ENV
+        # The Boost version and the MSVC toolset are stated once here; the download URI and
+        # every path are derived from them, so a bump cannot leave a stale copy behind.
+        $boostVersion = '1.88.0'
+        $boostUnderscored = $boostVersion.Replace('.', '_')
+        $msvcToolset = '14.3'
+
+        $baseUri = 'https://downloads.sourceforge.net/project/boost/boost-binaries'
+        $installerName = "boost_$boostUnderscored-msvc-$msvcToolset-64.exe"
+        $installDir = "$env:RUNNER_TEMP\boost"
+        $boostDir = "$installDir\lib64-msvc-$msvcToolset\cmake\Boost-$boostVersion"
+
+        Write-Output "BOOST_DOWNLOAD_URI=$baseUri/$boostVersion/$installerName" >> $env:GITHUB_ENV
+        Write-Output "BOOST_INSTALLER_PATH=$env:RUNNER_TEMP\boost.exe" >> $env:GITHUB_ENV
+        Write-Output "BOOST_INSTALL_DIR=$installDir" >> $env:GITHUB_ENV
+        Write-Output "Boost_DIR=$boostDir" >> $env:GITHUB_ENV
 
     - name: Setup Windows
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
-        Start-BitsTransfer -Source $env:BOOST_DOWNLOAD_URI -Destination $env:BOOST_INSTALLER_PATH
-        Start-Process -Wait -FilePath "$env:BOOST_INSTALLER_PATH" "/SILENT","/SP-","/SUPPRESSMSGBOXES","/DIR=$env:BOOST_INSTALL_DIR"
+        $exe = $env:BOOST_INSTALLER_PATH
+        Start-BitsTransfer -Source $env:BOOST_DOWNLOAD_URI -Destination $exe
+
+        # Start-BitsTransfer reports success even when a SourceForge mirror answers with an
+        # HTML error page, so check that what landed can plausibly be the installer.
+        if (-not (Test-Path -LiteralPath $exe)) {
+          throw "Boost download from $env:BOOST_DOWNLOAD_URI produced no file at $exe."
+        }
+        $downloadedBytes = (Get-Item -LiteralPath $exe).Length
+        if ($downloadedBytes -lt 50MB) {
+          throw "Boost download is only $downloadedBytes bytes, not a Boost installer."
+        }
+
+        # Without -PassThru the installer's exit code is discarded and a failed Boost install
+        # stays green until the caller's CMake fails to find Boost.
+        $installArgs = @('/SILENT', '/SP-', '/SUPPRESSMSGBOXES', "/DIR=$env:BOOST_INSTALL_DIR")
+        $process = Start-Process -Wait -PassThru -FilePath $exe -ArgumentList $installArgs
+        if ($process.ExitCode -ne 0) {
+          throw "Boost installer failed with exit code $($process.ExitCode)."
+        }
+
+        # Boost_DIR is the tree the caller's CMake consumes; fail here rather than there.
+        if (-not (Test-Path -LiteralPath $env:Boost_DIR)) {
+          throw "Boost install left no CMake package directory at $env:Boost_DIR."
+        }
 
         choco install -y ninja
 
