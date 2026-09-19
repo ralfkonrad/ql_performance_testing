@@ -18,7 +18,7 @@ using namespace RKE::QL::External;
 using namespace QuantLib;
 
 // Barrier monitoring dates of the MC engine are its time grid points.
-constexpr Size timeStepsPerYear = 100;
+constexpr Size mcTimeStepsPerYear = 100;
 
 struct OptionData {
     Real barrier = 90.0;
@@ -101,7 +101,7 @@ BOOST_AUTO_TEST_CASE(testBonusClassicOptionValuation) {
 
     auto process = market_data.makeGeneralizedBlackScholesProcess(today);
     auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-        process, timeStepsPerYear, 50'000, 50'001, Null<Real>(), true, true, 42);
+        process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), true, true, 42);
 
     bonusClassicOption->setPricingEngine(mcEngine);
     auto npv = bonusClassicOption->NPV();
@@ -128,7 +128,7 @@ BOOST_AUTO_TEST_CASE(testBonusClassicOptionReplication) {
     auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
         option_data.barrier, option_data.bonusLevel, exerciseDate);
     bonusClassicOption->setPricingEngine(ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-        process, timeStepsPerYear, 50'000, 50'001, Null<Real>(), true, true, 42));
+        process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), true, true, 42));
     auto npv = bonusClassicOption->NPV();
 
     // The pricer pays S_T once the barrier has been touched and max(S_T, bonusLevel)
@@ -141,7 +141,7 @@ BOOST_AUTO_TEST_CASE(testBonusClassicOptionReplication) {
     // give the correction as a shift of a down barrier to H * exp(-beta * sigma *
     // sqrt(dt)) with beta = -zeta(1/2) / sqrt(2 * pi).
     auto residualTime = process->time(exerciseDate);
-    auto steps = static_cast<Size>(timeStepsPerYear * residualTime);
+    auto steps = static_cast<Size>(mcTimeStepsPerYear * residualTime);
     auto dt = residualTime / static_cast<Time>(steps);
     constexpr Real beta = 0.5826;
     auto correctedBarrier =
