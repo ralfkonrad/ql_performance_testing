@@ -66,10 +66,11 @@ jobs:
               params.ref = ref;
             }
 
+            // No map function: paginate already replaces response.data with the inner
+            // actions_caches array, so reading .actions_caches off it yields undefined
+            // once per page and the loop below then dereferences undefined.id.
             const caches = await github.paginate(
-              github.rest.actions.getActionsCacheList,
-              params,
-              (response) => response.data.actions_caches);
+              github.rest.actions.getActionsCacheList, params);
             core.info(`Found ${caches.length} cache(s).`);
 
             let deleted = 0;
