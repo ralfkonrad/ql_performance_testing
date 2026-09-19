@@ -20,12 +20,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # A `*-latest` label moves to a new OS image on GitHub's schedule. The ccache key is
+        # built from this label, so a migration swaps the toolchain while leaving the key
+        # untouched, and the restored cache is one the new compiler cannot hit. These pins
+        # are what the three labels resolve to today; Dependabot does not bump runner
+        # labels, so a newer image is a deliberate edit here.
         settings:
           [
-            { os: macos-latest,   cc: clang,    cxx: clang++ },
-            { os: ubuntu-latest,  cc: clang,    cxx: clang++ },
-            { os: ubuntu-latest,  cc: gcc,      cxx: g++ },
-            { os: windows-latest, cc: cl,       cxx: cl }
+            { os: macos-26,       cc: clang,    cxx: clang++ },
+            { os: ubuntu-24.04,   cc: clang,    cxx: clang++ },
+            { os: ubuntu-24.04,   cc: gcc,      cxx: g++ },
+            { os: windows-2025,   cc: cl,       cxx: cl }
 
             # { os: macos-13,       cc: clang,    cxx: clang++ },
             # { os: macos-14,       cc: clang,    cxx: clang++ },

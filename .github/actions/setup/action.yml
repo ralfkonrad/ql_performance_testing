@@ -56,15 +56,34 @@ runs:
       if: runner.os == 'macOS'
       shell: bash
       run: |
-        # Do not reintroduce HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: this action never runs
-        # `brew upgrade`, so it silences nothing and Homebrew annotates every job that sets it.
+        # Do not reintroduce HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: Homebrew annotates every
+        # job that sets it, and the step below upgrades only what brew reports as outdated,
+        # whose dependents are exactly what the check is there to catch.
         echo "CXXFLAGS=-stdlib=libc++" >> $GITHUB_ENV
 
     - name: Setup macOS
       if: runner.os == 'macOS'
       shell: bash
       run: |
-        brew install ninja boost
+        # The runner image ships these already, and `brew install` on a formula that is
+        # present is a warning rather than a no-op. Ask brew what is missing and what is
+        # outdated, and act only on that.
+        formulae=(ninja boost)
+        missing=()
+        outdated=()
+
+        for formula in "${formulae[@]}"; do
+          if brew list --formula --versions "$formula" > /dev/null 2>&1; then
+            if [ -n "$(brew outdated --formula --quiet "$formula")" ]; then
+              outdated+=("$formula")
+            fi
+          else
+            missing+=("$formula")
+          fi
+        done
+
+        [ ${#missing[@]} -eq 0 ] || brew install "${missing[@]}"
+        [ ${#outdated[@]} -eq 0 ] || brew upgrade "${outdated[@]}"
 
     - name: Setup Windows variables
       id: windows-variables
@@ -180,7 +199,10 @@ runs:
         arch: x64
 
     - name: Setup CCache
-      uses: hendrikmuhs/ccache-action@v1.2
+      # The floating v1.2 tag still resolves to v1.2.20, whose action.yml declares node20,
+      # so the runner annotates every job that uses it. v1.2.24 is the newest release and
+      # declares node24.
+      uses: hendrikmuhs/ccache-action@v1.2.24
       with:
         # Restore keys are prefix-matched, so no rung may be a prefix of a sibling variant's
         # key. The architecture separates a runner from its `-arm` counterpart, and the
