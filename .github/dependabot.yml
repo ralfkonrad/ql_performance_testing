@@ -1,18 +1,23 @@
 version: 2
 updates:
 
-  # Maintain dependencies for GitHub Actions
+  # One entry covers every workflow and every composite action: `directories` takes globs,
+  # so an action used in more than one directory yields one pull request instead of one per
+  # directory, and a new composite action needs no change here.
   - package-ecosystem: "github-actions"
-    directory: "/"
+    directories:
+      - "/"
+      - "/.github/actions/**"
     schedule:
       interval: "daily"
       time: "01:46"
       timezone: "Europe/Berlin"
-
-  # Maintain dependencies for GitHub Actions
-  - package-ecosystem: "github-actions"
-    directory: "/.github/actions/setup"
-    schedule:
-      interval: "daily"
-      time: "01:46"
-      timezone: "Europe/Berlin"
+    groups:
+      # Minor and patch bumps share one pull request; a major stays on its own so a breaking
+      # update is reviewed and reverted alone. The filter needs Dependabot to read the
+      # version from the `# vX.Y.Z` comment beside each pinned SHA, which is unverified here.
+      # If a major is ever swept into the group, split this into two pattern-based groups.
+      actions-minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"

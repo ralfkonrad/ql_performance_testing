@@ -125,7 +125,7 @@ runs:
     - name: Restore the cached Boost installer on Windows
       id: cache-boost-installer
       if: runner.os == 'Windows'
-      uses: actions/cache@v4
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: ${{ steps.windows-variables.outputs.installer-path }}
         key: boost-installer-${{ steps.windows-variables.outputs.uri-digest }}
@@ -193,16 +193,16 @@ runs:
         choco install -y ninja
 
     - name: Set up Visual Studio shell on Windows
-      uses: TheMrMilchmann/setup-msvc-dev@v4
+      uses: TheMrMilchmann/setup-msvc-dev@368ef7d1ee4d1171b31d4a7f67f4d954f903f5a9 # v4.1.0
       if: runner.os == 'Windows'
       with:
         arch: x64
 
     - name: Setup CCache
-      # The floating v1.2 tag still resolves to v1.2.20, whose action.yml declares node20,
-      # so the runner annotates every job that uses it. v1.2.24 is the newest release and
-      # declares node24.
-      uses: hendrikmuhs/ccache-action@v1.2.24
+      # The pinned commit is v1.2.24 rather than the floating v1.2, which still resolves to
+      # v1.2.20, whose action.yml declares node20 and so has the runner annotate every job
+      # that uses it. v1.2.24 declares node24.
+      uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d # v1.2.24
       with:
         # Restore keys are prefix-matched, so no rung may be a prefix of a sibling variant's
         # key. The architecture separates a runner from its `-arm` counterpart, and the
