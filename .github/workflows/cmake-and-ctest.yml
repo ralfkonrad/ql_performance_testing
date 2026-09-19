@@ -1,7 +1,15 @@
 name: Build and Test with CMake and CTest
 
 on:
-  push: { }
+  # `pull_request` already builds every branch, so an unscoped `push` built each commit of a
+  # branch with an open pull request twice and stored two full sets of caches against the
+  # repository's single 10GB quota. Scoping `push` to master keeps master building, which is
+  # what seeds the only caches other branches and pull requests can restore from.
+  # Consequence: a push to a branch with no open pull request runs no CI until the pull
+  # request is opened. `workflow_dispatch` is the escape hatch.
+  push:
+    branches:
+      - master
   pull_request: { }
   schedule:
     - cron: '33 5 * * *'
@@ -60,15 +68,25 @@ jobs:
           os: ${{ matrix.settings.os }}
           cxx: ${{ matrix.settings.cxx }}
           cxx-standard: ${{ matrix.cxx-standard }}
+          # A compiler cache is scoped to the ref that wrote it and only master's entries are
+          # restorable from every other ref, so a topic branch's entry fills the quota with a
+          # cache no other run can read. The gate lives here, next to the triggers it follows,
+          # not inside the shared action.
+          save-ccache: ${{ github.ref == 'refs/heads/master' }}
 
       - name: Configure CMake and Build
         env:
           CC: ${{ matrix.settings.cc }}
           CXX: ${{ matrix.settings.cxx }}
           CMAKE_CONFIG_TYPE: Release
-        run: |
+        # Folded, not literal: the configure command exceeds the 100-column limit on one
+        # line, and a shell continuation would have to differ between bash and pwsh.
+        run: >-
           cmake --version
-          cmake --preset ${{ matrix.cmake-preset }} -DCMAKE_CXX_STANDARD=${{ matrix.cxx-standard }} -L
+
+          cmake --preset ${{ matrix.cmake-preset }}
+          -DCMAKE_CXX_STANDARD=${{ matrix.cxx-standard }} -L
+
           cmake --build --preset ${{ matrix.cmake-preset }} --verbose
 
       - name: CTest

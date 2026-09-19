@@ -16,6 +16,15 @@ inputs:
     description: The c++ standard to use.
     required: true
 
+  save-ccache:
+    description:
+      Whether this job may write its compiler cache back. The caller decides, so that moving
+      the gate is a one-token edit next to the matrix rather than a change in here. It
+      defaults to false, so a caller that forgets it loses cache writes but cannot fill the
+      quota.
+    required: false
+    default: 'false'
+
 runs:
   using: composite
   steps:
@@ -173,11 +182,22 @@ runs:
     - name: Setup CCache
       uses: hendrikmuhs/ccache-action@v1.2
       with:
-        key: ${{ inputs.os }}-${{ inputs.cxx }}--cxx-standard-${{ inputs.cxx-standard }}--${{ github.job }}
+        # Restore keys are prefix-matched, so no rung may be a prefix of a sibling variant's
+        # key. The architecture separates a runner from its `-arm` counterpart, and the
+        # compiler sits ahead of the standard so a g++ job cannot restore a clang++ entry and
+        # store the merged result back under its own key. The only fallback left is the same
+        # os, architecture and compiler at another standard, which is a real prefix and the
+        # one worth keeping. The action prepends the variant and appends a timestamp itself.
+        key: ${{ inputs.os }}-${{ runner.arch }}-${{ inputs.cxx }}-std-${{ inputs.cxx-standard }}
         restore-keys: |
-          ${{ inputs.os }}-${{ inputs.cxx }}--cxx-standard-${{ inputs.cxx-standard }}--${{ github.job }}
-          ${{ inputs.os }}-${{ inputs.cxx }}--cxx-standard-${{ inputs.cxx-standard }}
-          ${{ inputs.os }}-${{ inputs.cxx }}
-          ${{ inputs.os }}
+          ${{ inputs.os }}-${{ runner.arch }}-${{ inputs.cxx }}-std-${{ inputs.cxx-standard }}
+          ${{ inputs.os }}-${{ runner.arch }}-${{ inputs.cxx }}-std-
         variant: ${{ env.CMAKE_CXX_COMPILER_LAUNCHER }}
+        # Both variants read the last character as the unit and sccache silently falls back
+        # to its own 10GB default for a size it cannot parse, so the unit must be `M` and not
+        # `MB`. Windows entries are by far the largest, hence the wider cap there.
+        max-size: ${{ ( (runner.os == 'Windows') && '400M' ) || '250M' }}
+        # ccache only; the action skips it for sccache, where max-size does the bounding.
+        evict-old-files: 7d
+        save: ${{ inputs.save-ccache }}
 
