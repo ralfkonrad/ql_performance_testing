@@ -52,7 +52,6 @@ namespace RKE::QL::External {
         QuantLib::Size requiredSamples_;
         QuantLib::Size maxSamples_;
         QuantLib::Real requiredTolerance_;
-        bool isBiased_;
         bool brownianBridge_;
         QuantLib::BigNatural seed_;
     };
@@ -86,8 +85,7 @@ namespace RKE::QL::External {
     : QuantLib::McSimulation<QuantLib::SingleVariate, RNG, S>(false, false),
       process_(std::move(process)), timeStepsPerYear_(timeStepsPerYear),
       requiredSamples_(requiredSamples), maxSamples_(maxSamples),
-      requiredTolerance_(requiredTolerance), isBiased_(isBiased), brownianBridge_(brownianBridge),
-      seed_(seed) {
+      requiredTolerance_(requiredTolerance), brownianBridge_(brownianBridge), seed_(seed) {
         QL_REQUIRE(isBiased, "only biased path pricer are supported");
         registerWith(process_);
     }
@@ -113,8 +111,6 @@ namespace RKE::QL::External {
         auto grid = timeGrid();
         auto discountFactor = process_->riskFreeRate()->discount(grid.back());
 
-        QuantLib::PseudoRandom::ursg_type sequenceGen(grid.size() - 1,
-                                                      QuantLib::PseudoRandom::urng_type(seed_));
         return QuantLib::ext::shared_ptr<path_pricer_type>(new BiasedBonusClassicPathPricer(
             arguments_.barrier, arguments_.bonusLevel, discountFactor));
     }

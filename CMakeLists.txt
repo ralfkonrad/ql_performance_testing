@@ -6,7 +6,10 @@ cmake_policy(SET CMP0091 NEW)
 project(ql_performance_testing VERSION 0.0.1)
 
 # Options
-option(CMAKE_COMPILE_WARNING_AS_ERROR "Compile warnings as errors" ON)
+# Applied in WarningLevels, which is included after add_subdirectory(external) so that
+# it cannot reach the submodules.
+option(RKE_COMPILE_WARNING_AS_ERROR "Compile warnings as errors" ON)
+option(RKE_USE_CLANG_TIDY "Use clang-tidy when building" OFF)
 
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
@@ -56,6 +59,18 @@ link_libraries(
         benchmark::benchmark)
 
 include(WarningLevels)
+
+# Set after add_subdirectory(external) so that clang-tidy analyses our own targets only.
+if (RKE_USE_CLANG_TIDY)
+    if (NOT DEFINED RKE_CLANG_TIDY)
+        set(RKE_CLANG_TIDY clang-tidy)
+    endif ()
+    if (RKE_CLANG_TIDY_OPTIONS)
+        set(CMAKE_CXX_CLANG_TIDY "${RKE_CLANG_TIDY};${RKE_CLANG_TIDY_OPTIONS}")
+    else ()
+        set(CMAKE_CXX_CLANG_TIDY "${RKE_CLANG_TIDY}")
+    endif ()
+endif ()
 
 add_subdirectory(rke)
 

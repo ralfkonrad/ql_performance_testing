@@ -18,12 +18,14 @@ jobs:
         with:
           clangFormatVersion: 14
           inplace: True
+          # .clang-format-ignore needs clang-format 18; the action excludes via this input.
+          exclude: './external'
 
       - uses: peter-evans/create-pull-request@v8
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          branch: clang-format-fixes-${{ github.ref }}
-          base: ${{ github.head_ref }}
+          branch: clang-format-fixes-${{ github.ref_name }}
+          base: ${{ github.ref_name }}
           delete-branch: true
           commit-message: "Automated fixes by clang-format"
           title: "Automated fixes by clang-format"

@@ -8,6 +8,6 @@ else ()
 endif ()
 
 # Specify whether to treat warnings on compile as errors.
-if (QL_COMPILE_WARNING_AS_ERROR)
+if (RKE_COMPILE_WARNING_AS_ERROR)
   set(CMAKE_COMPILE_WARNING_AS_ERROR ON)
 endif ()

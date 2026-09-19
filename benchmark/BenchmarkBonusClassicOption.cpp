@@ -21,43 +21,11 @@ namespace RKE::QL::External {
             return ext::make_shared<FlatForward>(today, Handle<Quote>(forward), dc);
         }
 
-        [[maybe_unused]] ext::shared_ptr<YieldTermStructure>
-        flatRate(const Date& today, Rate forward, const DayCounter& dc) {
-            return flatRate(today, boost::make_shared<SimpleQuote>(forward), dc);
-        }
-
-        [[maybe_unused]] ext::shared_ptr<YieldTermStructure>
-        flatRate(const ext::shared_ptr<Quote>& forward, const DayCounter& dc) {
-            return ext::make_shared<FlatForward>(0, NullCalendar(), Handle<Quote>(forward), dc);
-        }
-
-        [[maybe_unused]] ext::shared_ptr<YieldTermStructure> flatRate(Rate forward,
-                                                                      const DayCounter& dc) {
-            return flatRate(ext::make_shared<SimpleQuote>(forward), dc);
-        }
-
-
         ext::shared_ptr<BlackVolTermStructure>
         flatVol(const Date& today, const ext::shared_ptr<Quote>& vol, const DayCounter& dc) {
             return ext::make_shared<BlackConstantVol>(today, NullCalendar(), Handle<Quote>(vol),
                                                       dc);
         }
-
-        [[maybe_unused]] ext::shared_ptr<BlackVolTermStructure>
-        flatVol(const Date& today, Volatility vol, const DayCounter& dc) {
-            return flatVol(today, ext::make_shared<SimpleQuote>(vol), dc);
-        }
-
-        [[maybe_unused]] ext::shared_ptr<BlackVolTermStructure>
-        flatVol(const ext::shared_ptr<Quote>& vol, const DayCounter& dc) {
-            return ext::make_shared<BlackConstantVol>(0, NullCalendar(), Handle<Quote>(vol), dc);
-        }
-
-        [[maybe_unused]] ext::shared_ptr<BlackVolTermStructure> flatVol(Volatility vol,
-                                                                        const DayCounter& dc) {
-            return flatVol(ext::make_shared<SimpleQuote>(vol), dc);
-        }
-
     }
 
     struct OptionData {

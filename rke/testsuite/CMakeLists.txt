@@ -6,6 +6,13 @@ add_executable(rke_ql_ext_testsuite
         ../../external/QuantLib/test-suite/utilities.hpp
 )
 
+# Upstream sources compiled into our target: never lint or auto-fix them.
+# SKIP_LINTING needs cmake 3.27; older versions ignore the property.
+set_source_files_properties(
+        ../../external/QuantLib/test-suite/utilities.cpp
+        PROPERTIES SKIP_LINTING TRUE
+)
+
 target_link_libraries(rke_ql_ext_testsuite PUBLIC
         rke_ql_ext
 )
