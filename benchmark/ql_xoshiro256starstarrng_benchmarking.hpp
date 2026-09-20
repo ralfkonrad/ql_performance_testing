@@ -20,4 +20,4 @@ void BM_MersenneTwisterCLGaussianNext(benchmark::State& state);
 
 void BM_InverseCumulativeRngNext(benchmark::State& state);
 
-#endif  // QL_PERFORMANCE_TESTING_QL_XOSHIRO256STARSTARRNG_BENCHMARKING_HPP
+#endif // QL_PERFORMANCE_TESTING_QL_XOSHIRO256STARSTARRNG_BENCHMARKING_HPP
