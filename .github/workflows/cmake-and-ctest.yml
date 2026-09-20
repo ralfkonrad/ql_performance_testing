@@ -107,3 +107,24 @@ jobs:
         run: |
           ctest --version
           ctest --preset ${{ matrix.cmake-preset }} --extra-verbose
+
+  # The single name the branch ruleset requires: the twelve generated matrix names would each
+  # have to be mirrored there, and a removed leg would leave a context that never reports.
+  ci-gate:
+    needs: cmake-build-and-test
+    # Without this a failing leg skips the job, and a skipped required check counts as neutral.
+    if: always()
+    runs-on: ubuntu-24.04
+
+    # No checkout, no build, one comparison.
+    timeout-minutes: 5
+
+    steps:
+      - name: Check the result of the matrix
+        # `result` is `success` only when every leg was; a run the concurrency group cancelled
+        # reports `cancelled` here and blocks, which is correct.
+        env:
+          RESULT: ${{ needs.cmake-build-and-test.result }}
+        run: |
+          echo "cmake-build-and-test: $RESULT"
+          test "$RESULT" = "success"
