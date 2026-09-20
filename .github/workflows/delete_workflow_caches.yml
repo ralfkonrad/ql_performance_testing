@@ -2,11 +2,10 @@ name: Delete Workflow Caches
 
 on:
   # GitHub never reclaims the caches of a closed pull request or a deleted branch, and the
-  # whole repository shares one 10GB quota. Once it is full GitHub evicts the least recently
-  # used entries, which takes out the master entries every other run restores from.
+  # repository shares one 10GB quota; once it is full the master entries get evicted too.
   #
   # `pull_request_target`, not `pull_request`: a fork pull request's token is read-only
-  # whatever the `permissions` block below says, so every deletion would 403 into a green job.
+  # whatever the `permissions` block says, so every deletion would 403 into a green job.
   # Nothing from the pull request is checked out or run here, only the cache API is called.
   pull_request_target:
     types: [ closed ]
@@ -35,10 +34,9 @@ jobs:
     if: github.event_name != 'delete' || github.event.ref_type == 'branch'
     runs-on: ubuntu-24.04
 
-    # Two REST calls per cache and nothing else; minutes here mean the API is not answering.
     timeout-minutes: 10
 
-    # `&&` binds tighter than `||`, so each event picks its own branch and a manual run falls
+    # `&&` binds tighter than `||`, so each event picks its own branch; a manual run falls
     # through to the input, where empty still means every cache of the repository.
     env:
       CACHE_REF: >-
@@ -54,8 +52,8 @@ jobs:
           script: |
             let ref = (process.env.CACHE_REF || '').trim();
             if (ref && !ref.startsWith('refs/')) {
-              // The caches API matches a fully qualified ref only. An unqualified one is not
-              // rejected, it just matches nothing, so qualify it and say so.
+              // The caches API matches a fully qualified ref only; an unqualified one is
+              // not rejected, it just matches nothing.
               core.info(`Qualifying '${ref}' as 'refs/heads/${ref}'.`);
               ref = `refs/heads/${ref}`;
             }
@@ -84,8 +82,8 @@ jobs:
                 deleted += 1;
                 core.info(`Deleted ${cache.id} ${cache.ref} ${cache.key}`);
               } catch (error) {
-                // Only a concurrent deletion is tolerable; anything else fails the job, so
-                // that a revoked token does not report a green cleanup that deleted nothing.
+                // Only a concurrent deletion is tolerable, so that a revoked token cannot
+                // report a green cleanup that deleted nothing.
                 if (error.status !== 404) {
                   throw error;
                 }

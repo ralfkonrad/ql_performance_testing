@@ -45,8 +45,7 @@ runs:
       shell: bash
       run: |
         sudo apt-get update
-        # ccache is provided by hendrikmuhs/ccache-action below; installing it here as well
-        # only shadows the action's build with an older apt one.
+        # ccache comes from hendrikmuhs/ccache-action below; an apt one would shadow it.
         sudo apt-get install -y ninja-build
 
         brew update
@@ -56,18 +55,16 @@ runs:
       if: runner.os == 'macOS'
       shell: bash
       run: |
-        # Do not reintroduce HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: Homebrew annotates every
-        # job that sets it, and the step below upgrades only what brew reports as outdated,
-        # whose dependents are exactly what the check is there to catch.
+        # Do not reintroduce HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: it makes Homebrew
+        # annotate every job that sets it, and the upgrades below are what it guards.
         echo "CXXFLAGS=-stdlib=libc++" >> $GITHUB_ENV
 
     - name: Setup macOS
       if: runner.os == 'macOS'
       shell: bash
       run: |
-        # The runner image ships these already, and `brew install` on a formula that is
-        # present is a warning rather than a no-op. Ask brew what is missing and what is
-        # outdated, and act only on that.
+        # The image ships both formulae, and `brew install` on a present one warns rather
+        # than no-ops. Ask brew what is missing and what is outdated, and act only on that.
         formulae=(ninja boost)
         missing=()
         outdated=()
@@ -90,8 +87,8 @@ runs:
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
-        # The Boost version and the MSVC toolset are stated once here; the download URI and
-        # every path are derived from them, so a bump cannot leave a stale copy behind.
+        # Stated once: the download URI and every path derive from these, so a bump cannot
+        # leave a stale copy behind.
         $boostVersion = '1.88.0'
         $boostUnderscored = $boostVersion.Replace('.', '_')
         $msvcToolset = '14.3'
@@ -102,10 +99,8 @@ runs:
         $boostDir = "$installDir\lib64-msvc-$msvcToolset\cmake\Boost-$boostVersion"
         $downloadUri = "$baseUri/$boostVersion/$installerName"
 
-        # The cache key is the SHA-256 of the download URI, not the URI itself: cache keys are
-        # prefix-matched and a raw URI's '/' and ':' make an unreadable key. Hashing keeps the
-        # key a pure function of the URI, so bumping $boostVersion misses the cache without a
-        # version string being repeated anywhere.
+        # Key on the SHA-256 of the URI, not the URI itself: keys are prefix-matched and a
+        # raw URI is unreadable as one. A $boostVersion bump then misses the cache by itself.
         $uriBytes = [System.Text.Encoding]::UTF8.GetBytes($downloadUri)
         $uriHash = [System.Security.Cryptography.SHA256]::HashData($uriBytes)
         $uriDigest = [System.Convert]::ToHexString($uriHash).ToLowerInvariant()
@@ -117,8 +112,8 @@ runs:
         Write-Output "BOOST_INSTALL_DIR=$installDir" >> $env:GITHUB_ENV
         Write-Output "Boost_DIR=$boostDir" >> $env:GITHUB_ENV
 
-        # The cache step reads these as step outputs rather than from the env context, which
-        # the composite action documentation does not promise for a step's `with`.
+        # The cache step reads these as step outputs; the composite-action docs do not
+        # promise the env context for a step's `with`.
         Write-Output "installer-path=$installerPath" >> $env:GITHUB_OUTPUT
         Write-Output "uri-digest=$uriDigest" >> $env:GITHUB_OUTPUT
 
@@ -134,9 +129,8 @@ runs:
       if: runner.os == 'Windows' && steps.cache-boost-installer.outputs.cache-hit != 'true'
       shell: pwsh
       run: |
-        # SourceForge mirrors regularly drop the connection mid-transfer, so retry instead of
-        # failing the job on the first error. -RetryTimeout also bounds BITS itself: its
-        # 14-day default window keeps a hopeless transfer alive far past any useful runtime.
+        # SourceForge mirrors drop the connection mid-transfer. -RetryTimeout also bounds
+        # BITS itself, whose 14-day default keeps a hopeless transfer alive past any runtime.
         $uri = $env:BOOST_DOWNLOAD_URI
         $exe = $env:BOOST_INSTALLER_PATH
         $maxAttempts = 3
@@ -159,8 +153,8 @@ runs:
           }
         }
 
-        # Start-BitsTransfer reports success even when a SourceForge mirror answers with an
-        # HTML error page, so check that what landed can plausibly be the installer.
+        # Start-BitsTransfer reports success even for a mirror's HTML error page, so check
+        # that what landed can plausibly be the installer.
         if (-not (Test-Path -LiteralPath $exe)) {
           throw "Boost download from $uri produced no file at $exe."
         }
@@ -173,12 +167,11 @@ runs:
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
-        # A cache hit restores the installer but installs nothing, so this step runs on both
-        # the cache-hit and the download path.
+        # A cache hit restores the installer but installs nothing, so this runs on both paths.
         $exe = $env:BOOST_INSTALLER_PATH
 
-        # Without -PassThru the installer's exit code is discarded and a failed Boost install
-        # stays green until the caller's CMake fails to find Boost.
+        # Without -PassThru the exit code is discarded and a failed install stays green until
+        # the caller's CMake fails to find Boost.
         $installArgs = @('/SILENT', '/SP-', '/SUPPRESSMSGBOXES', "/DIR=$env:BOOST_INSTALL_DIR")
         $process = Start-Process -Wait -PassThru -FilePath $exe -ArgumentList $installArgs
         if ($process.ExitCode -ne 0) {
@@ -199,25 +192,21 @@ runs:
         arch: x64
 
     - name: Setup CCache
-      # The pinned commit is v1.2.24 rather than the floating v1.2, which still resolves to
-      # v1.2.20, whose action.yml declares node20 and so has the runner annotate every job
-      # that uses it. v1.2.24 declares node24.
+      # Pinned to v1.2.24, not the floating v1.2: that still resolves to v1.2.20, which
+      # declares node20 and so has the runner annotate every job using it.
       uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d # v1.2.24
       with:
-        # Restore keys are prefix-matched, so no rung may be a prefix of a sibling variant's
-        # key. The architecture separates a runner from its `-arm` counterpart, and the
-        # compiler sits ahead of the standard so a g++ job cannot restore a clang++ entry and
-        # store the merged result back under its own key. The only fallback left is the same
-        # os, architecture and compiler at another standard, which is a real prefix and the
-        # one worth keeping. The action prepends the variant and appends a timestamp itself.
+        # Prefix-matched, so no rung may prefix a sibling variant's key: the architecture
+        # keeps a runner apart from its `-arm` twin, and the compiler sits ahead of the
+        # standard so a g++ job cannot restore a clang++ entry. The one fallback left is the
+        # same compiler at another standard.
         key: ${{ inputs.os }}-${{ runner.arch }}-${{ inputs.cxx }}-std-${{ inputs.cxx-standard }}
         restore-keys: |
           ${{ inputs.os }}-${{ runner.arch }}-${{ inputs.cxx }}-std-${{ inputs.cxx-standard }}
           ${{ inputs.os }}-${{ runner.arch }}-${{ inputs.cxx }}-std-
         variant: ${{ env.CMAKE_CXX_COMPILER_LAUNCHER }}
-        # Both variants read the last character as the unit and sccache silently falls back
-        # to its own 10GB default for a size it cannot parse, so the unit must be `M` and not
-        # `MB`. Windows entries are by far the largest, hence the wider cap there.
+        # The last character is the unit, and sccache silently falls back to its own 10GB
+        # default for a size it cannot parse: `M`, never `MB`. Windows entries are the largest.
         max-size: ${{ ( (runner.os == 'Windows') && '400M' ) || '250M' }}
         # ccache only; the action skips it for sccache, where max-size does the bounding.
         evict-old-files: 7d
