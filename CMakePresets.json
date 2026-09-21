@@ -53,6 +53,11 @@
       "output": {
         "verbosity": "extra",
         "outputOnFailure": true
+      },
+      "filter": {
+        "include": {
+          "name": "^rke_"
+        }
       }
     },
     {
