@@ -18,7 +18,9 @@ namespace RKE::QL::External {
 
         ~TestSuiteFixture() {
             // Tests must clean up the fixings they set; this also guarantees that every
-            // test case contains at least one assertion.
+            // test case contains at least one assertion. IndexManager exposes the names it
+            // holds and nothing below them, and it inserts a name on a read as well, so a
+            // case that only reads a fixing has to clear it too.
             BOOST_CHECK(QuantLib::IndexManager::instance().histories().empty());
             QuantLib::IndexManager::instance().clearHistories();
         }

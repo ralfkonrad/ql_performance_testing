@@ -13,8 +13,8 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: Ref whose caches to delete, e.g. refs/heads/master. Empty means all.
-        required: false
+        description: Ref whose caches to delete, e.g. refs/heads/master, or ALL for every one.
+        required: true
         default: ''
 
 permissions:
@@ -37,7 +37,7 @@ jobs:
     timeout-minutes: 10
 
     # `&&` binds tighter than `||`, so each event picks its own branch; a manual run falls
-    # through to the input, where empty still means every cache of the repository.
+    # through to the input, which the script below requires to name a ref or say ALL.
     env:
       CACHE_REF: >-
         ${{ (github.event_name == 'delete' && format('refs/heads/{0}', github.event.ref))
@@ -51,7 +51,15 @@ jobs:
         with:
           script: |
             let ref = (process.env.CACHE_REF || '').trim();
-            if (ref && !ref.startsWith('refs/')) {
+            if (!ref) {
+              // `required: true` is satisfied by the empty string the form is pre-filled
+              // with, and empty would mean every cache of the repository, master's included.
+              core.setFailed('Name a ref whose caches to delete, or ALL for every one.');
+              return;
+            }
+            if (ref === 'ALL') {
+              ref = '';
+            } else if (!ref.startsWith('refs/')) {
               // The caches API matches a fully qualified ref only; an unqualified one is
               // not rejected, it just matches nothing.
               core.info(`Qualifying '${ref}' as 'refs/heads/${ref}'.`);
