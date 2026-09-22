@@ -135,8 +135,8 @@ cmake --build ./build/tidy -j 1 -v
 units, and parallel jobs corrupt each other's edits.
 
 clang-format is not wired into the build. Run it over the touched files only, and
-never over `external/` — `.clang-format-ignore` excludes it, but that file needs
-clang-format 18, and CI pins version 14:
+never over `external/` — `.clang-format-ignore` excludes it, and CI pins version
+20, past the 18 that file needs:
 
 ```bash
 clang-format -i rke/ql/ext/instruments/BonusClassicOption.cpp

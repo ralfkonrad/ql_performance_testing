@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   clang-format:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     # Never run, so nothing is measured; clang-format over this tree is minutes and the
     # QuantLib submodule checkout is the only part that can drag.
     timeout-minutes: 20
@@ -29,9 +29,12 @@ jobs:
 
       - uses: DoozyX/clang-format-lint-action@bcb4eb2cb0d707ee4f3e5cc3b456eb075f12cf73 # v0.20
         with:
-          clangFormatVersion: 14
+          # The action ships its own clang-format 5 to 20, so the runner image does not
+          # decide this and 20 is the ceiling until the action itself is bumped.
+          clangFormatVersion: 20
           inplace: True
-          # .clang-format-ignore needs clang-format 18; the action excludes via this input.
+          # Past 18, clang-format reads .clang-format-ignore itself, so external/ is now
+          # excluded twice over. The input stays because it does not depend on the binary.
           exclude: './external'
 
       - uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1

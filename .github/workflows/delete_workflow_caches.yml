@@ -32,7 +32,7 @@ jobs:
   delete-workflow-caches:
     # A deleted tag has no caches of its own.
     if: github.event_name != 'delete' || github.event.ref_type == 'branch'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
 
     timeout-minutes: 10
 

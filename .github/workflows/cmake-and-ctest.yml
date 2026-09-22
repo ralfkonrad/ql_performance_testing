@@ -34,8 +34,9 @@ jobs:
         # not bump runner labels, so a newer image is a deliberate edit here.
         #
         # ubuntu-26.04 is still a public preview. It carries the CMake the other two images
-        # already have, which is the reason to be on it; the cost is that the one image under
-        # the required gate has no support commitment behind it.
+        # already have, which is the reason to be on it; the cost is that every Ubuntu job in
+        # this repository, the required gate included, rides an image with no support
+        # commitment behind it.
         settings:
           [
             { os: macos-26,       cc: clang,    cxx: clang++ },
@@ -128,7 +129,7 @@ jobs:
     needs: cmake-build-and-test
     # Without this a failing leg skips the job, and a skipped required check counts as neutral.
     if: always()
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
 
     # No checkout, no build, one comparison.
     timeout-minutes: 5
