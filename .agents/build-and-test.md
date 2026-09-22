@@ -148,12 +148,12 @@ Everything is under `.github/workflows/`.
 
 | Workflow                     | Triggers                                                                 | Notes                                               |
 | ---------------------------- | ------------------------------------------------------------------------ | --------------------------------------------------- |
-| `cmake-and-ctest.yml`        | push to `master`, every pull request, nightly 05:33 Berlin, dispatch     | The only workflow that gates a pull request.        |
+| `cmake-and-ctest.yml`        | push to `master`, every pull request, nightly 00:33 Berlin, dispatch     | The only workflow that gates a pull request.        |
 | `clang-format-lint.yml`      | weekly, Mondays 02:23 Berlin, dispatch                                   | Opens a pull request with the fixes.                |
 | `clang-tidy.yml`             | weekly, Mondays 02:23 Berlin, dispatch                                   | Opens a pull request with the fixes.                |
 | `codeql.yml`                 | dispatch only                                                            | Autobuild repeats the whole Ubuntu build, uncached. |
 | `delete_workflow_caches.yml` | pull request closed, branch deleted, dispatch                            | Keeps the shared 10 GB cache quota clear.           |
-| `prune_ccache_entries.yml`   | nightly 08:33 Berlin, dispatch                                           | Thins `master`'s compiler caches; `dry-run` input.  |
+| `prune_ccache_entries.yml`   | nightly 03:33 Berlin, dispatch                                           | Thins `master`'s compiler caches; `dry-run` input.  |
 
 The matrix is macOS/clang, Ubuntu/clang, Ubuntu/gcc and Windows/MSVC, each at
 C++17, 20 and 23, release only — twelve legs. `ci-gate` collapses them into the

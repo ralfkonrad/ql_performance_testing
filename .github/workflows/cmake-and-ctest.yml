@@ -9,7 +9,7 @@ on:
       - master
   pull_request: { }
   schedule:
-    - cron: '33 5 * * *'
+    - cron: '33 0 * * *'
       timezone: Europe/Berlin
   workflow_dispatch: { }
 
