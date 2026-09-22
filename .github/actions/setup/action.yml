@@ -29,10 +29,14 @@ runs:
   using: composite
   steps:
     - name: Determine ccache variant
+      id: ccache-variant
       shell: bash
       run: |
         variant="${{ ( (runner.os == 'Windows') && 'sccache' ) || 'ccache' }}"
+        # Env for CMake, output for the cache step below: the composite-action docs do not
+        # promise the env context for a step's `with`.
         echo "CMAKE_CXX_COMPILER_LAUNCHER=$variant" >> $GITHUB_ENV
+        echo "variant=$variant" >> $GITHUB_OUTPUT
 
     - name: Setup Linux variables
       if: runner.os == 'Linux'
@@ -48,6 +52,8 @@ runs:
         # ccache comes from hendrikmuhs/ccache-action below; an apt one would shadow it.
         sudo apt-get install -y ninja-build
 
+        # Plain install, unlike macOS below: Linuxbrew ships no boost, so there is nothing
+        # to warn about and the formula index has to be fetched before it can be built.
         brew update
         brew install boost
 
@@ -153,22 +159,26 @@ runs:
           }
         }
 
-        # Start-BitsTransfer reports success even for a mirror's HTML error page, so check
-        # that what landed can plausibly be the installer.
-        if (-not (Test-Path -LiteralPath $exe)) {
-          throw "Boost download from $uri produced no file at $exe."
-        }
-        $downloadedBytes = (Get-Item -LiteralPath $exe).Length
-        if ($downloadedBytes -lt 50MB) {
-          throw "Boost download is only $downloadedBytes bytes, not a Boost installer."
-        }
-
     - name: Setup Windows
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
         # A cache hit restores the installer but installs nothing, so this runs on both paths.
         $exe = $env:BOOST_INSTALLER_PATH
+
+        # Start-BitsTransfer reports success even for a mirror's HTML error page, and the
+        # cache key is the download URI, not the content: a bad file would be restored by
+        # every later run. Check here, where both paths meet.
+        if (-not (Test-Path -LiteralPath $exe)) {
+          throw "No Boost installer at $exe."
+        }
+        $installerBytes = (Get-Item -LiteralPath $exe).Length
+        if ($installerBytes -lt 50MB) {
+          # Delete it first: the cache's post step saves whatever is at this path, failed
+          # job or not, and would hand the same file to every later run.
+          Remove-Item -LiteralPath $exe -Force -ErrorAction SilentlyContinue
+          throw "The Boost installer at $exe is only $installerBytes bytes."
+        }
 
         # Without -PassThru the exit code is discarded and a failed install stays green until
         # the caller's CMake fails to find Boost.
@@ -205,7 +215,7 @@ runs:
         restore-keys: |
           ${{ inputs.os }}-${{ runner.arch }}-${{ inputs.cxx }}-std-${{ inputs.cxx-standard }}
           ${{ inputs.os }}-${{ runner.arch }}-${{ inputs.cxx }}-std
-        variant: ${{ env.CMAKE_CXX_COMPILER_LAUNCHER }}
+        variant: ${{ steps.ccache-variant.outputs.variant }}
         # The last character is the unit, and sccache silently falls back to its own 10GB
         # default for a size it cannot parse: `M`, never `MB`. Windows entries are the largest.
         max-size: ${{ ( (runner.os == 'Windows') && '400M' ) || '250M' }}
