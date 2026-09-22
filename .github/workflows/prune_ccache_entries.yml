@@ -1,0 +1,91 @@
+name: Prune Superseded ccache Entries
+
+on:
+  # After the nightly build at 05:33, whose slowest leg is bounded at 120 min. Every master
+  # run writes one new timestamped entry per leg and supersedes the last, so without this the
+  # 12 entries of every run stay until the 10GB quota evicts them.
+  schedule:
+    - cron: '33 8 * * *'
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: List what would be deleted without deleting it.
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  actions: write
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  prune-ccache-entries:
+    runs-on: ubuntu-24.04
+
+    timeout-minutes: 10
+
+    steps:
+      - name: Delete every master ccache entry but the newest of each key
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          DRY_RUN: ${{ inputs.dry-run }}
+        with:
+          script: |
+            const dryRun = process.env.DRY_RUN === 'true';
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            // Only master writes ccache entries, and only its entries are restorable from
+            // every other ref.
+            const caches = await github.paginate(
+              github.rest.actions.getActionsCacheList,
+              { owner, repo, ref: 'refs/heads/master', per_page: 100 });
+
+            // hendrikmuhs/ccache-action appends an ISO timestamp to the key it is given, so
+            // each run writes a new entry rather than updating one. Anything without that
+            // suffix is somebody else's cache and is left alone.
+            const stamped = /-\d{4}-\d{2}-\d{2}T[\d:.]+Z?$/;
+
+            const newest = new Map();
+            const superseded = [];
+            const byAgeDescending = caches
+              .filter((cache) => stamped.test(cache.key))
+              .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+            for (const cache of byAgeDescending) {
+              const key = cache.key.replace(stamped, '');
+              if (newest.has(key)) {
+                superseded.push(cache);
+              } else {
+                newest.set(key, cache);
+              }
+            }
+
+            core.info(`${caches.length} cache(s) on master, ${byAgeDescending.length} of them `
+                      + `ccache entries under ${newest.size} key(s).`);
+
+            let deleted = 0;
+            for (const cache of superseded) {
+              const size = (cache.size_in_bytes / 1e6).toFixed(0);
+              if (dryRun) {
+                core.info(`Would delete ${cache.id} ${cache.key} (${size} MB)`);
+                continue;
+              }
+              try {
+                await github.rest.actions.deleteActionsCacheById(
+                  { owner, repo, cache_id: cache.id });
+                deleted += 1;
+                core.info(`Deleted ${cache.id} ${cache.key} (${size} MB)`);
+              } catch (error) {
+                // Only a concurrent deletion is tolerable, so that a revoked token cannot
+                // report a green cleanup that deleted nothing.
+                if (error.status !== 404) {
+                  throw error;
+                }
+                core.info(`Cache ${cache.id} was already gone.`);
+              }
+            }
+            core.info(`Deleted ${deleted} of ${superseded.length} superseded entry/entries.`);
