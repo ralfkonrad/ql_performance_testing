@@ -17,10 +17,6 @@ permissions:
 
 jobs:
   clang-tidy:
-    # Same image as the build matrix, so this configures with the CMake the matrix uses. It
-    # also pins nothing about clang-tidy: the apt default moves with the image, and a newer
-    # one enables checks `.clang-tidy`'s `*` picks up, so a dispatch may report more than the
-    # last one did.
     runs-on: ubuntu-26.04
     # Never run, so nothing is measured. This builds the submodules serially and uncached
     # where the matrix builds them in parallel against a warm ccache in 34 min.

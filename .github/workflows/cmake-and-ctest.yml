@@ -32,11 +32,8 @@ jobs:
         # Pinned, not `*-latest`: the ccache key is built from this label, so an image
         # migration would swap the toolchain while leaving the key untouched. Dependabot does
         # not bump runner labels, so a newer image is a deliberate edit here.
-        #
-        # ubuntu-26.04 is still a public preview. It carries the CMake the other two images
-        # already have, which is the reason to be on it; the cost is that every Ubuntu job in
-        # this repository, the required gate included, rides an image with no support
-        # commitment behind it.
+        # ubuntu-26.04 is a public preview: the only image carrying the CMake the floor
+        # needs, so the required gate rides a runner with no support commitment.
         settings:
           [
             { os: macos-26,       cc: clang,    cxx: clang++ },

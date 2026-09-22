@@ -33,8 +33,8 @@ jobs:
           # decide this and 20 is the ceiling until the action itself is bumped.
           clangFormatVersion: 20
           inplace: True
-          # Past 18, clang-format reads .clang-format-ignore itself, so external/ is now
-          # excluded twice over. The input stays because it does not depend on the binary.
+          # Redundant past clang-format 18, which reads .clang-format-ignore itself, but
+          # this input holds whatever binary the action is pinned to.
           exclude: './external'
 
       - uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
