@@ -10,4 +10,6 @@ endif ()
 # Specify whether to treat warnings on compile as errors.
 if (RKE_COMPILE_WARNING_AS_ERROR)
   set(CMAKE_COMPILE_WARNING_AS_ERROR ON)
+else ()
+  set(CMAKE_COMPILE_WARNING_AS_ERROR OFF)
 endif ()
