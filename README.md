@@ -12,6 +12,7 @@ CMake 3.25 or newer, Ninja, Boost, a C++17 compiler.
 ```bash
 git clone --recurse-submodules \
     https://github.com/ralfkonrad/ql_performance_testing
+cd ql_performance_testing
 cmake --preset release          # or: debug
 cmake --build --preset release
 ctest --preset release
