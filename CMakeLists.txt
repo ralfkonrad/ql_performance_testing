@@ -45,16 +45,10 @@ find_package(Boost CONFIG REQUIRED)
 # Calls enable_testing() itself, under BUILD_TESTING.
 include(CTest)
 
+# SYSTEM: both submodules export their own include directories, and the directory property
+# demotes those to -isystem for every target created under it. Nothing here has to name a
+# path inside external/ itself.
 add_subdirectory(external SYSTEM)
-
-include_directories(SYSTEM
-        external/benchmark/include
-        external/QuantLib
-        ${Boost_INCLUDE_DIRS})
-
-link_libraries(
-        ql_library
-        benchmark::benchmark)
 
 include(WarningLevels)
 
