@@ -32,11 +32,15 @@ jobs:
         # Pinned, not `*-latest`: the ccache key is built from this label, so an image
         # migration would swap the toolchain while leaving the key untouched. Dependabot does
         # not bump runner labels, so a newer image is a deliberate edit here.
+        #
+        # ubuntu-26.04 is still a public preview. It carries the CMake the other two images
+        # already have, which is the reason to be on it; the cost is that the one image under
+        # the required gate has no support commitment behind it.
         settings:
           [
             { os: macos-26,       cc: clang,    cxx: clang++ },
-            { os: ubuntu-24.04,   cc: clang,    cxx: clang++ },
-            { os: ubuntu-24.04,   cc: gcc,      cxx: g++ },
+            { os: ubuntu-26.04,   cc: clang,    cxx: clang++ },
+            { os: ubuntu-26.04,   cc: gcc,      cxx: g++ },
             { os: windows-2025,   cc: cl,       cxx: cl }
 
             # { os: macos-13,       cc: clang,    cxx: clang++ },
@@ -58,6 +62,14 @@ jobs:
             # { os: ubuntu-24.04,   cc: gcc-12,   cxx: g++-12 },
             # { os: ubuntu-24.04,   cc: gcc-13,   cxx: g++-13 },
             # { os: ubuntu-24.04,   cc: gcc-14,   cxx: g++-14 },
+            #
+            # { os: ubuntu-26.04,   cc: clang-20, cxx: clang++-20 },
+            # { os: ubuntu-26.04,   cc: clang-21, cxx: clang++-21 },
+            # { os: ubuntu-26.04,   cc: clang-22, cxx: clang++-22 },
+            #
+            # { os: ubuntu-26.04,   cc: gcc-13,   cxx: g++-13 },
+            # { os: ubuntu-26.04,   cc: gcc-14,   cxx: g++-14 },
+            # { os: ubuntu-26.04,   cc: gcc-15,   cxx: g++-15 },
             #
             # { os: windows-2019,   cc: cl,       cxx: cl },
             # { os: windows-2022,   cc: cl,       cxx: cl },

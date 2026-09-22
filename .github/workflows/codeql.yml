@@ -12,7 +12,9 @@ on:
 jobs:
   analyze:
     name: Analyze
-    runs-on: ubuntu-24.04
+    # Same image as the build matrix: autobuild configures this tree with whatever CMake the
+    # image ships, so it has to be an image that satisfies the project's floor.
+    runs-on: ubuntu-26.04
 
     # Never run, so nothing is measured. Autobuild repeats the Ubuntu build, whose measured
     # maximum in the matrix is 34 min, uncached, and adds extraction and queries on top.
