@@ -1,9 +1,8 @@
 name: Prune Superseded ccache Entries
 
 on:
-  # After the nightly build at 05:33, whose slowest leg is bounded at 120 min. Every master
-  # run writes one new timestamped entry per leg and supersedes the last, so without this the
-  # 12 entries of every run stay until the 10GB quota evicts them.
+  # After the nightly build at 05:33, which is bounded at 120 min. Every master run writes a
+  # new timestamped entry per leg, so without this they pile up until the quota evicts them.
   schedule:
     - cron: '33 8 * * *'
   workflow_dispatch:
