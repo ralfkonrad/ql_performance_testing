@@ -60,16 +60,13 @@ namespace RKE::QL::External {
 
     class BiasedBonusClassicPathPricer : public QuantLib::PathPricer<QuantLib::Path> {
       public:
-        BiasedBonusClassicPathPricer(QuantLib::Real barrier,
-                                     QuantLib::Real bonusLevel,
+        BiasedBonusClassicPathPricer(BonusClassicPayoff payoff,
                                      QuantLib::DiscountFactor discountFactor);
         QuantLib::Real operator()(const QuantLib::Path& path) const override;
 
       private:
-        QuantLib::Real barrier_;
-        QuantLib::Real bonusLevel_;
-        QuantLib::DiscountFactor discountFactor_;
         BonusClassicPayoff payoff_;
+        QuantLib::DiscountFactor discountFactor_;
     };
 
 
@@ -113,8 +110,10 @@ namespace RKE::QL::External {
         auto grid = timeGrid();
         auto discountFactor = process_->riskFreeRate()->discount(grid.back());
 
-        return QuantLib::ext::shared_ptr<path_pricer_type>(new BiasedBonusClassicPathPricer(
-            arguments_.barrier, arguments_.bonusLevel, discountFactor));
+        // From the payoff, not from arguments_: the two carry the same barrier and bonus
+        // level, and only this way does the object checked above price the paths.
+        return QuantLib::ext::shared_ptr<path_pricer_type>(
+            new BiasedBonusClassicPathPricer(*payoff, discountFactor));
     }
 
 

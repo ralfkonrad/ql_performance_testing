@@ -3,18 +3,16 @@
 //
 
 #include "MCBonusClassicEngine.hpp"
-#include <iostream>
+#include <utility>
 
 using namespace QuantLib;
 
 namespace RKE::QL::External {
-    BiasedBonusClassicPathPricer::BiasedBonusClassicPathPricer(Real barrier,
-                                                               Real bonusLevel,
+    BiasedBonusClassicPathPricer::BiasedBonusClassicPathPricer(BonusClassicPayoff payoff,
                                                                DiscountFactor discountFactor)
-    : barrier_(barrier), bonusLevel_(bonusLevel), discountFactor_(discountFactor),
-      payoff_(barrier, bonusLevel) {
-        QL_REQUIRE(barrier_ > 0.0, "barrier less/equal zero not allowed");
-        QL_REQUIRE(bonusLevel_ > 0.0, "bonus level less/equal zero not allowed");
+    : payoff_(std::move(payoff)), discountFactor_(discountFactor) {
+        QL_REQUIRE(payoff_.barrier() > 0.0, "barrier less/equal zero not allowed");
+        QL_REQUIRE(payoff_.bonusLevel() > 0.0, "bonus level less/equal zero not allowed");
     }
 
     Real BiasedBonusClassicPathPricer::operator()(const Path& path) const {
@@ -23,7 +21,7 @@ namespace RKE::QL::External {
 
         for (Size i = 1; i < n; i++) {
             auto assetPrice = path[i];
-            if (assetPrice <= barrier_) {
+            if (assetPrice <= payoff_.barrier()) {
                 return path.back() * discountFactor_;
             }
         }
