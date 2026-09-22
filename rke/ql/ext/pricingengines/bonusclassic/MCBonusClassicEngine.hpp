@@ -35,10 +35,12 @@ namespace RKE::QL::External {
 
         void calculate() const override;
         QuantLib::ext::shared_ptr<path_pricer_type> pathPricer() const override;
+        // Public so that a caller can read the grid the price was sampled on instead of
+        // rebuilding it; valid once the instrument has passed its arguments to the engine.
+        QuantLib::TimeGrid timeGrid() const override;
 
       private:
         // McSimulation implementation
-        QuantLib::TimeGrid timeGrid() const override;
         QuantLib::ext::shared_ptr<path_generator_type> pathGenerator() const override {
             QuantLib::TimeGrid grid = timeGrid();
             typename RNG::rsg_type gen = RNG::make_sequence_generator(grid.size() - 1, seed_);
@@ -58,16 +60,13 @@ namespace RKE::QL::External {
 
     class BiasedBonusClassicPathPricer : public QuantLib::PathPricer<QuantLib::Path> {
       public:
-        BiasedBonusClassicPathPricer(QuantLib::Real barrier,
-                                     QuantLib::Real bonusLevel,
+        BiasedBonusClassicPathPricer(BonusClassicPayoff payoff,
                                      QuantLib::DiscountFactor discountFactor);
         QuantLib::Real operator()(const QuantLib::Path& path) const override;
 
       private:
-        QuantLib::Real barrier_;
-        QuantLib::Real bonusLevel_;
-        QuantLib::DiscountFactor discountFactor_;
         BonusClassicPayoff payoff_;
+        QuantLib::DiscountFactor discountFactor_;
     };
 
 
@@ -111,8 +110,10 @@ namespace RKE::QL::External {
         auto grid = timeGrid();
         auto discountFactor = process_->riskFreeRate()->discount(grid.back());
 
-        return QuantLib::ext::shared_ptr<path_pricer_type>(new BiasedBonusClassicPathPricer(
-            arguments_.barrier, arguments_.bonusLevel, discountFactor));
+        // From the payoff, not from arguments_: the two carry the same barrier and bonus
+        // level, and only this way does the object checked above price the paths.
+        return QuantLib::ext::shared_ptr<path_pricer_type>(
+            new BiasedBonusClassicPathPricer(*payoff, discountFactor));
     }
 
 
