@@ -11,6 +11,7 @@ invocations, lint runs, and the CI map.
 - Boost, resolved by `find_package(Boost CONFIG REQUIRED)`. On Linux and macOS
   CI installs it with Homebrew; on Windows the setup action installs the
   SourceForge MSVC binaries and exports `Boost_DIR`.
+- CMake 4.0 or newer — `CMakeLists.txt` sets that floor.
 - Ninja — both presets use it as the generator.
 
 ## 2. Presets
@@ -114,7 +115,7 @@ main one keeps its cached objects:
 cmake -S . -B ./build/tidy -G Ninja \
     -DRKE_USE_CLANG_TIDY=ON -DRKE_CLANG_TIDY_OPTIONS=--fix \
     -DCMAKE_BUILD_TYPE=Debug \
-    -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+    -DCMAKE_CXX_COMPILER=clang++
 cmake --build ./build/tidy -j 1 -v
 ```
 

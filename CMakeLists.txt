@@ -1,25 +1,23 @@
-# 3.27 for SKIP_LINTING: older versions ignore the property, and clang-tidy --fix then
-# rewrites the upstream sources compiled into rke_ql_ext_testsuite.
-cmake_minimum_required(VERSION 3.27.0)
+# CMake 4 is the floor: it turns every policy through 4.0 NEW without restating them one at
+# a time, CMP0167 above all, which retires the FindBoost module for the upstream
+# BoostConfig.cmake. Every image the matrix runs on ships 4.4.3.
+cmake_minimum_required(VERSION 4.0)
 
-# For MSVC RUNTIME LIBRARY, need CMP0091=NEW and cmake 3.15+
-cmake_policy(SET CMP0091 NEW)
-
-project(ql_performance_testing VERSION 0.0.1)
+# LANGUAGES CXX: both submodules declare CXX only, so nothing here needs a C compiler and
+# probing for one only slows configure down.
+project(ql_performance_testing VERSION 0.0.1 LANGUAGES CXX)
 
 # Options
 # Applied in WarningLevels, which is included after add_subdirectory(external) so that
 # it cannot reach the submodules.
 option(RKE_COMPILE_WARNING_AS_ERROR "Compile warnings as errors" ON)
-# A build tree configured before the knob was renamed still holds the old cache entry,
-# which takes effect here, ahead of the submodules. Drop it.
-unset(CMAKE_COMPILE_WARNING_AS_ERROR CACHE)
 option(RKE_USE_CLANG_TIDY "Use clang-tidy when building" OFF)
 
+# Honoured because CMP0091 is NEW, which the floor above guarantees.
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 # Path for package-local cmake modules
-set(CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
+list(PREPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -42,15 +40,10 @@ if (NOT DEFINED Boost_USE_STATIC_RUNTIME)
     set(Boost_USE_STATIC_RUNTIME ${MSVC})
 endif ()
 
-# The FindBoost module is removed in cmake 3.30, finding the upstream BoostConfig.cmake
-if (POLICY CMP0167)
-    find_package(Boost CONFIG REQUIRED)
-else ()
-    find_package(Boost REQUIRED)
-endif ()
+find_package(Boost CONFIG REQUIRED)
 
+# Calls enable_testing() itself, under BUILD_TESTING.
 include(CTest)
-enable_testing()
 
 add_subdirectory(external SYSTEM)
 

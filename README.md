@@ -7,7 +7,7 @@ and `benchmark/` measures it and QuantLib itself with google-benchmark. QuantLib
 
 ## Building
 
-CMake 3.27 or newer, Ninja, Boost, a C++17 compiler.
+CMake 4.0 or newer, Ninja, Boost, a C++17 compiler.
 
 ```bash
 git clone --recurse-submodules \
