@@ -8,8 +8,7 @@ cmake_minimum_required(VERSION 4.0)
 project(ql_performance_testing VERSION 0.0.1 LANGUAGES CXX)
 
 # Options
-# Applied in WarningLevels, which is included after add_subdirectory(external) so that
-# it cannot reach the submodules.
+# Read by rke_target_warnings(), which each of our targets calls for itself.
 option(RKE_COMPILE_WARNING_AS_ERROR "Compile warnings as errors" ON)
 option(RKE_USE_CLANG_TIDY "Use clang-tidy when building" OFF)
 
@@ -18,6 +17,10 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 # Path for package-local cmake modules
 list(PREPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
+
+# Defines rke_warnings and rke_target_warnings. Position no longer matters for safety: the
+# warnings apply to the targets that link them, not to everything declared afterwards.
+include(WarningLevels)
 
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -49,8 +52,6 @@ include(CTest)
 # demotes those to -isystem for every target created under it. Nothing here has to name a
 # path inside external/ itself.
 add_subdirectory(external SYSTEM)
-
-include(WarningLevels)
 
 # Set after add_subdirectory(external) so that clang-tidy analyses our own targets only.
 if (RKE_USE_CLANG_TIDY)

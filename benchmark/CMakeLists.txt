@@ -18,3 +18,5 @@ target_link_libraries(
         rke_ql_ext
         benchmark::benchmark
 )
+
+rke_target_warnings(ql_performance_testing)

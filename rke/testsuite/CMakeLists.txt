@@ -18,6 +18,8 @@ target_link_libraries(rke_ql_ext_testsuite PRIVATE
         rke_ql_ext
 )
 
+rke_target_warnings(rke_ql_ext_testsuite)
+
 add_test(
         NAME rke_ql_ext_testsuite
         COMMAND rke_ql_ext_testsuite -l message

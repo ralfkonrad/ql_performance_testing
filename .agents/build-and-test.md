@@ -34,14 +34,26 @@ cmake --build --preset release
 ctest --preset release
 ```
 
+`workflowPresets` chains the same three under one name, which is what to reach
+for when you want all of them:
+
+```bash
+cmake --workflow release
+```
+
 Add `-DCMAKE_CXX_STANDARD=20` (or `23`) to the configure step to reproduce the
-other CI legs.
+other CI legs. A workflow preset takes no such flag, so the standards other than
+the default need the three steps separately.
+
+Both presets set `CMAKE_EXPORT_COMPILE_COMMANDS`, so each binary dir carries the
+`compile_commands.json` clangd wants.
 
 ## 3. Options
 
 From `CMakeLists.txt`:
 
-- `RKE_COMPILE_WARNING_AS_ERROR` — default `ON`.
+- `RKE_COMPILE_WARNING_AS_ERROR` — default `ON`. Reaches a target through
+  `rke_target_warnings()`, not through a directory-scoped flag.
 - `RKE_USE_CLANG_TIDY` — default `OFF`. Set at configure time; the
   `CMAKE_CXX_CLANG_TIDY` assignment sits after `add_subdirectory(external)`, so
   only our own targets are analysed.
