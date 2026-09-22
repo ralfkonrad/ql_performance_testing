@@ -1,4 +1,7 @@
 ---
+# Our own headers only: clang-tidy's default header filter is empty, which reports
+# diagnostics for each translation unit's main file and for no header at all.
+HeaderFilterRegex: '.*/rke/.*'
 # Note: clang-tidy splits this list on commas, so every entry needs one.
 Checks: >
     *,
@@ -16,4 +19,4 @@ Checks: >
     -misc-non-private-member-variables-in-classes,
     -modernize-use-trailing-return-type,
     -readability-identifier-length,
-    -readability-magic-numbers
+    -readability-magic-numbers,

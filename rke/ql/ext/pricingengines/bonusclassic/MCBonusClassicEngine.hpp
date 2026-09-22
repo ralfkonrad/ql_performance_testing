@@ -35,10 +35,12 @@ namespace RKE::QL::External {
 
         void calculate() const override;
         QuantLib::ext::shared_ptr<path_pricer_type> pathPricer() const override;
+        // Public so that a caller can read the grid the price was sampled on instead of
+        // rebuilding it; valid once the instrument has passed its arguments to the engine.
+        QuantLib::TimeGrid timeGrid() const override;
 
       private:
         // McSimulation implementation
-        QuantLib::TimeGrid timeGrid() const override;
         QuantLib::ext::shared_ptr<path_generator_type> pathGenerator() const override {
             QuantLib::TimeGrid grid = timeGrid();
             typename RNG::rsg_type gen = RNG::make_sequence_generator(grid.size() - 1, seed_);
