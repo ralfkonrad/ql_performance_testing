@@ -153,6 +153,7 @@ Everything is under `.github/workflows/`.
 | `clang-tidy.yml`             | dispatch only                                                            | Opens a pull request with the fixes.                |
 | `codeql.yml`                 | dispatch only                                                            | Autobuild repeats the whole Ubuntu build, uncached. |
 | `delete_workflow_caches.yml` | pull request closed, branch deleted, dispatch                            | Keeps the shared 10 GB cache quota clear.           |
+| `prune_ccache_entries.yml`   | nightly `33 8 * * *` UTC, dispatch                                       | Thins `master`'s compiler caches; `dry-run` input.  |
 
 The matrix is macOS/clang, Ubuntu/clang, Ubuntu/gcc and Windows/MSVC, each at
 C++17, 20 and 23, release only — twelve legs. `ci-gate` collapses them into the
@@ -163,6 +164,13 @@ Compiler caches (ccache, sccache on Windows) are keyed on
 os-arch-compiler-standard and are written back **only** from `master`. A topic
 branch restores `master`'s entry but never writes one, so its build times are not
 comparable with master's.
+
+Every `master` run writes a new timestamped entry per key rather than replacing
+one, so `prune_ccache_entries.yml` keeps the newest per key and deletes the rest.
+It also deletes the survivor once nothing has refreshed that key for 30 days: a
+key only stops being refreshed when the leg writing it is gone, and its entry
+then holds quota no build can restore from. Dispatch it with `dry-run` to see
+what it would remove.
 
 `clang-format-lint.yml` and `clang-tidy.yml` open a pull request with whatever
 they changed, which is why neither has a push or `pull_request` trigger. **Ask
