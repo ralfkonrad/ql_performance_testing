@@ -32,17 +32,21 @@ jobs:
         # Pinned, not `*-latest`: the ccache key is built from this label, so an image
         # migration would swap the toolchain while leaving the key untouched. Dependabot does
         # not bump runner labels, so a newer image is a deliberate edit here.
+        # ubuntu-26.04 is a public preview: the only image carrying the CMake the floor
+        # needs, so the required gate rides a runner with no support commitment.
         settings:
           [
             { os: macos-26,       cc: clang,    cxx: clang++ },
-            { os: ubuntu-24.04,   cc: clang,    cxx: clang++ },
-            { os: ubuntu-24.04,   cc: gcc,      cxx: g++ },
+            { os: ubuntu-26.04,   cc: clang,    cxx: clang++ },
+            { os: ubuntu-26.04,   cc: gcc,      cxx: g++ },
             { os: windows-2025,   cc: cl,       cxx: cl }
 
             # { os: macos-13,       cc: clang,    cxx: clang++ },
             # { os: macos-14,       cc: clang,    cxx: clang++ },
             # { os: macos-15,       cc: clang,    cxx: clang++ },
             #
+            # The ubuntu-22.04 and ubuntu-24.04 images ship CMake 3.31.6, under the floor
+            # CMakeLists.txt sets, so either group needs a CMake install step first.
             # { os: ubuntu-22.04,   cc: clang-13, cxx: clang++-13 },
             # { os: ubuntu-22.04,   cc: clang-14, cxx: clang++-14 },
             # { os: ubuntu-22.04,   cc: clang-15, cxx: clang++-15 },
@@ -58,6 +62,14 @@ jobs:
             # { os: ubuntu-24.04,   cc: gcc-12,   cxx: g++-12 },
             # { os: ubuntu-24.04,   cc: gcc-13,   cxx: g++-13 },
             # { os: ubuntu-24.04,   cc: gcc-14,   cxx: g++-14 },
+            #
+            # { os: ubuntu-26.04,   cc: clang-20, cxx: clang++-20 },
+            # { os: ubuntu-26.04,   cc: clang-21, cxx: clang++-21 },
+            # { os: ubuntu-26.04,   cc: clang-22, cxx: clang++-22 },
+            #
+            # { os: ubuntu-26.04,   cc: gcc-13,   cxx: g++-13 },
+            # { os: ubuntu-26.04,   cc: gcc-14,   cxx: g++-14 },
+            # { os: ubuntu-26.04,   cc: gcc-15,   cxx: g++-15 },
             #
             # { os: windows-2019,   cc: cl,       cxx: cl },
             # { os: windows-2022,   cc: cl,       cxx: cl },
@@ -114,7 +126,7 @@ jobs:
     needs: cmake-build-and-test
     # Without this a failing leg skips the job, and a skipped required check counts as neutral.
     if: always()
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
 
     # No checkout, no build, one comparison.
     timeout-minutes: 5

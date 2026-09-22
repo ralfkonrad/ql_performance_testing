@@ -14,11 +14,9 @@ add_executable(
 )
 
 target_link_libraries(
-        ql_performance_testing
+        ql_performance_testing PRIVATE
         rke_ql_ext
+        benchmark::benchmark
 )
 
-target_include_directories(
-        ql_performance_testing PUBLIC
-        $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}>
-)
+rke_target_warnings(ql_performance_testing)

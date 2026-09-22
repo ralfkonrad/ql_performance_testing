@@ -12,20 +12,25 @@ itself. QuantLib and google-benchmark are git submodules under `external/`.
   tracks the `ralfkonrad/QuantLib` fork, `external/benchmark` tracks
   `google/benchmark`. Never edit a file there, never reformat one
   (`.clang-format-ignore` excludes `external/**`), and never move a submodule
-  pointer as a side effect of another change. `CMakeLists.txt` includes
-  `WarningLevels` and sets `CMAKE_CXX_CLANG_TIDY` _after_
-  `add_subdirectory(external)` so that neither reaches the submodules; keep that
-  order.
-- **Warnings are build failures.** `RKE_COMPILE_WARNING_AS_ERROR` defaults to
-  `ON`, and `cmake/WarningLevels.cmake` adds `-Wall -Wextra -Wpedantic`, or `-W4`
-  under MSVC. Every CI leg builds that way.
+  pointer as a side effect of another change. `CMakeLists.txt` sets
+  `CMAKE_CXX_CLANG_TIDY` _after_ `add_subdirectory(external)` so that it cannot
+  reach the submodules; keep that order.
+- **Warnings are build failures, and a target opts in by name.**
+  `cmake/WarningLevels.cmake` defines `rke_target_warnings(<target>)`, which links
+  the `rke_warnings` interface library (`-Wall -Wextra -Wpedantic`, `-W4` under
+  MSVC) and sets `COMPILE_WARNING_AS_ERROR` from `RKE_COMPILE_WARNING_AS_ERROR`,
+  default `ON`. Call it for every target you add under `rke/` or `benchmark/`, or
+  it is built unwarned. Never make the flags directory-scoped again: that is what
+  used to put them one `add_subdirectory` away from the submodules.
 - **C++17 is the baseline, not a floor to build on.** `CMakeLists.txt` defaults
   `CMAKE_CXX_STANDARD` to 17 and fails below it. CI compiles each platform at 17,
   20 and 23, so a post-C++17 construct passes two thirds of the matrix and fails
   the rest.
 - **Every `.cpp` _and_ `.hpp` is listed by hand in CMake.** Nothing is globbed:
   `rke/ql/ext/CMakeLists.txt` keeps separate `RKE_QL_EXT_SOURCES` and
-  `RKE_QL_EXT_HEADER` lists, `rke/testsuite/CMakeLists.txt` and
+  `RKE_QL_EXT_HEADER` lists, the second reaching `rke_ql_ext` through
+  `target_sources(... FILE_SET HEADERS)`, whose `BASE_DIRS` is also what puts the
+  repository root on the include path. `rke/testsuite/CMakeLists.txt` and
   `benchmark/CMakeLists.txt` name every file. An unlisted header still compiles,
   so nothing will tell you it is missing.
 - **An upstream source compiled into one of our targets must not be linted.**
@@ -56,8 +61,8 @@ Source of truth: `.clang-format`.
 - One merged, sorted include block in the order `"local"` → `<rke/...>` →
   `<ql/...>` → `<boost/...>` → standard headers.
 - Formatting is **not** checked on pull requests — the workflow that applies
-  clang-format is dispatch-only. Run it yourself; CI pins clang-format 14, so a
-  much newer local binary may reformat more than CI would.
+  clang-format is dispatch-only. Run it yourself; CI pins clang-format 20, so a
+  newer local binary may still reformat more than CI would.
 
 ### 3.2 Naming and Namespaces
 
@@ -96,6 +101,12 @@ file says so, because clang-tidy splits on commas.
 
 ```bash
 git submodule update --init --recursive
+cmake --workflow release      # configure, build and test in one step
+```
+
+The three steps separately, when you want only one of them:
+
+```bash
 cmake --preset release
 cmake --build --preset release
 ctest --preset release
@@ -164,7 +175,8 @@ Before finishing a change:
 - [ ] `ctest --preset release` passes.
 - [ ] New behaviour has a test; new pricing code has both a regression lock and
       an independent check, as under "The Valuation Test Is a Regression Lock".
-- [ ] Every new `.cpp` and `.hpp` is listed in the owning `CMakeLists.txt`.
+- [ ] Every new `.cpp` and `.hpp` is listed in the owning `CMakeLists.txt`, and
+      every new target calls `rke_target_warnings`.
 - [ ] New benchmarks are registered in `benchmark/benchmark_main.cpp`.
 - [ ] Errors go through the `QL_*` macros, ownership through `ext::shared_ptr`.
 - [ ] Numerical tolerances are justified, and the conventions behind a price are

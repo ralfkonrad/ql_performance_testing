@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   clang-tidy:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     # Never run, so nothing is measured. This builds the submodules serially and uncached
     # where the matrix builds them in parallel against a warm ccache in 34 min.
     timeout-minutes: 120
@@ -36,7 +36,7 @@ jobs:
           cmake -S . -B ./build -G Ninja \
             -DRKE_USE_CLANG_TIDY=ON -DRKE_CLANG_TIDY_OPTIONS=--fix \
             -DCMAKE_BUILD_TYPE=Debug \
-            -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+            -DCMAKE_CXX_COMPILER=clang++
           cmake --build ./build -j 1 -v
 
       - uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1

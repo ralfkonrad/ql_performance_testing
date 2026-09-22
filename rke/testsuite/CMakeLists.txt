@@ -7,15 +7,18 @@ add_executable(rke_ql_ext_testsuite
 )
 
 # Upstream sources compiled into our target: never lint or auto-fix them.
-# SKIP_LINTING is why the project requires cmake 3.27.
 set_source_files_properties(
         ../../external/QuantLib/test-suite/utilities.cpp
         PROPERTIES SKIP_LINTING TRUE
 )
 
-target_link_libraries(rke_ql_ext_testsuite PUBLIC
+# Boost.Test is header-only here, through <boost/test/included/unit_test.hpp>, so it needs
+# no component of its own; the include directories arrive with ql_library.
+target_link_libraries(rke_ql_ext_testsuite PRIVATE
         rke_ql_ext
 )
+
+rke_target_warnings(rke_ql_ext_testsuite)
 
 add_test(
         NAME rke_ql_ext_testsuite

@@ -11,6 +11,7 @@ invocations, lint runs, and the CI map.
 - Boost, resolved by `find_package(Boost CONFIG REQUIRED)`. On Linux and macOS
   CI installs it with Homebrew; on Windows the setup action installs the
   SourceForge MSVC binaries and exports `Boost_DIR`.
+- CMake 4.0 or newer — `CMakeLists.txt` sets that floor.
 - Ninja — both presets use it as the generator.
 
 ## 2. Presets
@@ -33,14 +34,26 @@ cmake --build --preset release
 ctest --preset release
 ```
 
+`workflowPresets` chains the same three under one name, which is what to reach
+for when you want all of them:
+
+```bash
+cmake --workflow release
+```
+
 Add `-DCMAKE_CXX_STANDARD=20` (or `23`) to the configure step to reproduce the
-other CI legs.
+other CI legs. A workflow preset takes no such flag, so the standards other than
+the default need the three steps separately.
+
+Both presets set `CMAKE_EXPORT_COMPILE_COMMANDS`, so each binary dir carries the
+`compile_commands.json` clangd wants.
 
 ## 3. Options
 
 From `CMakeLists.txt`:
 
-- `RKE_COMPILE_WARNING_AS_ERROR` — default `ON`.
+- `RKE_COMPILE_WARNING_AS_ERROR` — default `ON`. Reaches a target through
+  `rke_target_warnings()`, not through a directory-scoped flag.
 - `RKE_USE_CLANG_TIDY` — default `OFF`. Set at configure time; the
   `CMAKE_CXX_CLANG_TIDY` assignment sits after `add_subdirectory(external)`, so
   only our own targets are analysed.
@@ -114,7 +127,7 @@ main one keeps its cached objects:
 cmake -S . -B ./build/tidy -G Ninja \
     -DRKE_USE_CLANG_TIDY=ON -DRKE_CLANG_TIDY_OPTIONS=--fix \
     -DCMAKE_BUILD_TYPE=Debug \
-    -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+    -DCMAKE_CXX_COMPILER=clang++
 cmake --build ./build/tidy -j 1 -v
 ```
 
@@ -122,8 +135,8 @@ cmake --build ./build/tidy -j 1 -v
 units, and parallel jobs corrupt each other's edits.
 
 clang-format is not wired into the build. Run it over the touched files only, and
-never over `external/` — `.clang-format-ignore` excludes it, but that file needs
-clang-format 18, and CI pins version 14:
+never over `external/` — `.clang-format-ignore` excludes it, and CI pins version
+20, past the 18 that file needs:
 
 ```bash
 clang-format -i rke/ql/ext/instruments/BonusClassicOption.cpp
