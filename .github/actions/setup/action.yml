@@ -199,11 +199,12 @@ runs:
         # Prefix-matched, so no rung may prefix a sibling variant's key: the architecture
         # keeps a runner apart from its `-arm` twin, and the compiler sits ahead of the
         # standard so a g++ job cannot restore a clang++ entry. The one fallback left is the
-        # same compiler at another standard.
+        # same compiler at another standard — written without a trailing dash, because the
+        # action appends one to every restore key itself.
         key: ${{ inputs.os }}-${{ runner.arch }}-${{ inputs.cxx }}-std-${{ inputs.cxx-standard }}
         restore-keys: |
           ${{ inputs.os }}-${{ runner.arch }}-${{ inputs.cxx }}-std-${{ inputs.cxx-standard }}
-          ${{ inputs.os }}-${{ runner.arch }}-${{ inputs.cxx }}-std-
+          ${{ inputs.os }}-${{ runner.arch }}-${{ inputs.cxx }}-std
         variant: ${{ env.CMAKE_CXX_COMPILER_LAUNCHER }}
         # The last character is the unit, and sccache silently falls back to its own 10GB
         # default for a size it cannot parse: `M`, never `MB`. Windows entries are the largest.
