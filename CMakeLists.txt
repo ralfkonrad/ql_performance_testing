@@ -1,4 +1,6 @@
-cmake_minimum_required(VERSION 3.25.0)
+# 3.27 for SKIP_LINTING: older versions ignore the property, and clang-tidy --fix then
+# rewrites the upstream sources compiled into rke_ql_ext_testsuite.
+cmake_minimum_required(VERSION 3.27.0)
 
 # For MSVC RUNTIME LIBRARY, need CMP0091=NEW and cmake 3.15+
 cmake_policy(SET CMP0091 NEW)
@@ -9,6 +11,9 @@ project(ql_performance_testing VERSION 0.0.1)
 # Applied in WarningLevels, which is included after add_subdirectory(external) so that
 # it cannot reach the submodules.
 option(RKE_COMPILE_WARNING_AS_ERROR "Compile warnings as errors" ON)
+# A build tree configured before the knob was renamed still holds the old cache entry,
+# which takes effect here, ahead of the submodules. Drop it.
+unset(CMAKE_COMPILE_WARNING_AS_ERROR CACHE)
 option(RKE_USE_CLANG_TIDY "Use clang-tidy when building" OFF)
 
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
