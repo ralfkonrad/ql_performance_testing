@@ -1,11 +1,11 @@
 name: Prune Superseded ccache Entries
 
 on:
-  # After the nightly build at 05:33, whose slowest leg is bounded at 120 min. Every master
-  # run writes one new timestamped entry per leg and supersedes the last, so without this the
-  # 12 entries of every run stay until the 10GB quota evicts them.
+  # After the nightly build at 00:33, which is bounded at 120 min. Every master run writes a
+  # new timestamped entry per leg, so without this they pile up until the quota evicts them.
   schedule:
-    - cron: '33 8 * * *'
+    - cron: '33 3 * * *'
+      timezone: Europe/Berlin
   workflow_dispatch:
     inputs:
       dry-run:
@@ -28,7 +28,7 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - name: Delete every master ccache entry but the newest of each key
+      - name: Delete superseded master ccache entries, and keys nothing restores
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           DRY_RUN: ${{ inputs.dry-run }}
@@ -49,6 +49,12 @@ jobs:
             // suffix is somebody else's cache and is left alone.
             const stamped = /-\d{4}-\d{2}-\d{2}T[\d:.]+Z?$/;
 
+            // Every master run rewrites every live key, so a key whose newest entry is this
+            // stale is one nothing asks for any more — a retired runner label, compiler or
+            // standard. Its survivor holds quota that no build can ever restore from.
+            const retiredAfterDays = 30;
+            const retiredBefore = Date.now() - retiredAfterDays * 24 * 60 * 60 * 1000;
+
             const newest = new Map();
             const superseded = [];
             const byAgeDescending = caches
@@ -64,11 +70,15 @@ jobs:
               }
             }
 
+            const retired = [...newest.values()].filter(
+              (cache) => new Date(cache.created_at).getTime() < retiredBefore);
+
             core.info(`${caches.length} cache(s) on master, ${byAgeDescending.length} of them `
-                      + `ccache entries under ${newest.size} key(s).`);
+                      + `ccache entries under ${newest.size} key(s); ${superseded.length} `
+                      + `superseded, ${retired.length} under a key nothing restores.`);
 
             let deleted = 0;
-            for (const cache of superseded) {
+            for (const cache of [...superseded, ...retired]) {
               const size = (cache.size_in_bytes / 1e6).toFixed(0);
               if (dryRun) {
                 core.info(`Would delete ${cache.id} ${cache.key} (${size} MB)`);
@@ -88,4 +98,5 @@ jobs:
                 core.info(`Cache ${cache.id} was already gone.`);
               }
             }
-            core.info(`Deleted ${deleted} of ${superseded.length} superseded entry/entries.`);
+            const doomed = superseded.length + retired.length;
+            core.info(`Deleted ${deleted} of ${doomed} entry/entries.`);

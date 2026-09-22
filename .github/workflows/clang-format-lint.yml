@@ -1,10 +1,13 @@
 name: Apply clang-format fixes
 
 on:
-  # Dispatch only: every run opens a pull request, so a push or pull_request trigger would
-  # open one per push.
+  # Weekly, not per push: every run opens a pull request, and create-pull-request reuses one
+  # branch, so each run updates that pull request instead of opening another.
   # push: { }
   # pull_request: { }
+  schedule:
+    - cron: '23 2 * * 1'
+      timezone: Europe/Berlin
   workflow_dispatch: { }
 
 # `create-pull-request` pushes a branch and opens a pull request, and the repository's

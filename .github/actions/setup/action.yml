@@ -166,9 +166,8 @@ runs:
         # A cache hit restores the installer but installs nothing, so this runs on both paths.
         $exe = $env:BOOST_INSTALLER_PATH
 
-        # Start-BitsTransfer reports success even for a mirror's HTML error page, and the
-        # cache key is the download URI, not the content: a bad file would be restored by
-        # every later run. Check here, where both paths meet.
+        # Checked where the download and cache-hit paths meet: Start-BitsTransfer reports
+        # success even for a mirror's error page, and the key is the URI, not the content.
         if (-not (Test-Path -LiteralPath $exe)) {
           throw "No Boost installer at $exe."
         }
@@ -206,12 +205,11 @@ runs:
       # declares node20 and so has the runner annotate every job using it.
       uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d # v1.2.24
       with:
-        # Prefix-matched, so no rung may prefix a sibling variant's key: the architecture
-        # keeps a runner apart from its `-arm` twin, and the compiler sits ahead of the
-        # standard so a g++ job cannot restore a clang++ entry. The one fallback left is the
-        # same compiler at another standard — written without a trailing dash, because the
-        # action appends one to every restore key itself.
+        # Segment order is what stops a rung prefixing a sibling variant's key: architecture
+        # before compiler before standard, so no g++ job can restore a clang++ entry.
         key: ${{ inputs.os }}-${{ runner.arch }}-${{ inputs.cxx }}-std-${{ inputs.cxx-standard }}
+        # The one fallback left is the same compiler at another standard, written without a
+        # trailing dash because the action appends one to every restore key itself.
         restore-keys: |
           ${{ inputs.os }}-${{ runner.arch }}-${{ inputs.cxx }}-std-${{ inputs.cxx-standard }}
           ${{ inputs.os }}-${{ runner.arch }}-${{ inputs.cxx }}-std

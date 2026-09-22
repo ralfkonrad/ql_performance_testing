@@ -61,8 +61,9 @@ Source of truth: `.clang-format`.
 - One merged, sorted include block in the order `"local"` → `<rke/...>` →
   `<ql/...>` → `<boost/...>` → standard headers.
 - Formatting is **not** checked on pull requests — the workflow that applies
-  clang-format is dispatch-only. Run it yourself; CI pins clang-format 20, so a
-  newer local binary may still reformat more than CI would.
+  clang-format runs weekly and on dispatch, never on a pull request. Run it
+  yourself; CI pins clang-format 20, so a newer local binary may still reformat
+  more than CI would.
 
 ### 3.2 Naming and Namespaces
 
