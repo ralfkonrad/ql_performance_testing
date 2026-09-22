@@ -127,8 +127,9 @@ BOOST_AUTO_TEST_CASE(testBonusClassicOptionReplication) {
 
     auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
         option_data.barrier, option_data.bonusLevel, exerciseDate);
-    bonusClassicOption->setPricingEngine(ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-        process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), true, true, 42));
+    auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
+        process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), true, true, 42);
+    bonusClassicOption->setPricingEngine(mcEngine);
     auto npv = bonusClassicOption->NPV();
 
     // The pricer pays S_T once the barrier has been touched and max(S_T, bonusLevel)
@@ -140,9 +141,9 @@ BOOST_AUTO_TEST_CASE(testBonusClassicOptionReplication) {
     // correction for discrete barrier options", Mathematical Finance 7(4), 325-349,
     // give the correction as a shift of a down barrier to H * exp(-beta * sigma *
     // sqrt(dt)) with beta = -zeta(1/2) / sqrt(2 * pi).
-    auto residualTime = process->time(exerciseDate);
-    auto steps = static_cast<Size>(mcTimeStepsPerYear * residualTime);
-    auto dt = residualTime / static_cast<Time>(steps);
+    // Read from the engine's own grid, so the correction always uses the step the paths
+    // were monitored on.
+    auto dt = mcEngine->timeGrid().dt(0);
     constexpr Real beta = 0.5826;
     auto correctedBarrier =
         option_data.barrier * std::exp(-beta * market_data.volatility * std::sqrt(dt));
