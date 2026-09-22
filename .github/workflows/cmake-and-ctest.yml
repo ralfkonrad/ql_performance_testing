@@ -10,6 +10,7 @@ on:
   pull_request: { }
   schedule:
     - cron: '33 5 * * *'
+      timezone: Europe/Berlin
   workflow_dispatch: { }
 
 # Declared read-only so that flipping the repository default to read-write does not hand a

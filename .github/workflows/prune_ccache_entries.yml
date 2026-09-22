@@ -5,6 +5,7 @@ on:
   # new timestamped entry per leg, so without this they pile up until the quota evicts them.
   schedule:
     - cron: '33 8 * * *'
+      timezone: Europe/Berlin
   workflow_dispatch:
     inputs:
       dry-run:

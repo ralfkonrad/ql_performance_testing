@@ -148,12 +148,12 @@ Everything is under `.github/workflows/`.
 
 | Workflow                     | Triggers                                                                 | Notes                                               |
 | ---------------------------- | ------------------------------------------------------------------------ | --------------------------------------------------- |
-| `cmake-and-ctest.yml`        | push to `master`, every pull request, nightly `33 5 * * *` UTC, dispatch | The only workflow that gates a pull request.        |
-| `clang-format-lint.yml`      | dispatch only                                                            | Opens a pull request with the fixes.                |
-| `clang-tidy.yml`             | dispatch only                                                            | Opens a pull request with the fixes.                |
+| `cmake-and-ctest.yml`        | push to `master`, every pull request, nightly 05:33 Berlin, dispatch     | The only workflow that gates a pull request.        |
+| `clang-format-lint.yml`      | weekly, Mondays 02:23 Berlin, dispatch                                   | Opens a pull request with the fixes.                |
+| `clang-tidy.yml`             | weekly, Mondays 02:23 Berlin, dispatch                                   | Opens a pull request with the fixes.                |
 | `codeql.yml`                 | dispatch only                                                            | Autobuild repeats the whole Ubuntu build, uncached. |
 | `delete_workflow_caches.yml` | pull request closed, branch deleted, dispatch                            | Keeps the shared 10 GB cache quota clear.           |
-| `prune_ccache_entries.yml`   | nightly `33 8 * * *` UTC, dispatch                                       | Thins `master`'s compiler caches; `dry-run` input.  |
+| `prune_ccache_entries.yml`   | nightly 08:33 Berlin, dispatch                                           | Thins `master`'s compiler caches; `dry-run` input.  |
 
 The matrix is macOS/clang, Ubuntu/clang, Ubuntu/gcc and Windows/MSVC, each at
 C++17, 20 and 23, release only — twelve legs. `ci-gate` collapses them into the
@@ -173,9 +173,12 @@ then holds quota no build can restore from. Dispatch it with `dry-run` to see
 what it would remove.
 
 `clang-format-lint.yml` and `clang-tidy.yml` open a pull request with whatever
-they changed, which is why neither has a push or `pull_request` trigger. **Ask
-before dispatching one**; never start a run on your own initiative. Both also
-need the repository setting "Allow GitHub Actions to create and approve pull
+they changed, which is why neither has a push or `pull_request` trigger. They
+run weekly on Monday at 02:23 Europe/Berlin — `schedule` takes an IANA
+`timezone`, so that hour holds across DST — and `create-pull-request` reuses one
+branch each, so a run updates its open pull request rather than opening another.
+**Ask before dispatching one**; never start a run on your own initiative. Both
+also need the repository setting "Allow GitHub Actions to create and approve pull
 requests", which no `permissions:` block can grant — while it is off, their last
 step fails however the workflow is triggered.
 
