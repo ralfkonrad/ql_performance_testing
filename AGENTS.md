@@ -130,7 +130,10 @@ and a tolerance justified in a comment.
 `TestSuiteFixture` holds a `QuantLib::SavedSettings` and asserts on teardown that
 `IndexManager` histories are empty. So no test case needs its own
 `SavedSettings`, assigning `Settings::instance().evaluationDate()` inside a case
-is fine, and a case that sets fixings must clear them itself.
+is fine, and a case that sets fixings must clear them itself. The assertion is on
+the names `IndexManager` holds, not on the fixings under them, because that is all
+its public interface offers — and `getHistory()` inserts an empty entry although it
+is `const`, so a case that only reads a fixing has to clear it too.
 
 ### 5.3 Lazy Evaluation
 
