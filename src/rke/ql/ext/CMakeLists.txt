@@ -18,7 +18,7 @@ add_library(rke_ql_ext STATIC
 # <rke/ql/ext/...> resolves for this target and for everything that links it.
 target_sources(rke_ql_ext PUBLIC
         FILE_SET HEADERS
-        BASE_DIRS "${PROJECT_SOURCE_DIR}"
+        BASE_DIRS "${PROJECT_SOURCE_DIR}/src"
         FILES ${RKE_QL_EXT_HEADER}
 )
 

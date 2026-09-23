@@ -2,7 +2,7 @@
 
 > How AI coding agents should work in this repository.
 
-A QuantLib playground: a small extension library (`rke/ql/ext`) with its own
+A QuantLib playground: a small extension library (`src/rke/ql/ext`) with its own
 Boost.Test suite, plus google-benchmark benchmarks that measure it and QuantLib
 itself. QuantLib and google-benchmark are git submodules under `external/`.
 
@@ -19,7 +19,7 @@ itself. QuantLib and google-benchmark are git submodules under `external/`.
   `cmake/WarningLevels.cmake` defines `rke_target_warnings(<target>)`, which links
   the `rke_warnings` interface library (`-Wall -Wextra -Wpedantic`, `-W4` under
   MSVC) and sets `COMPILE_WARNING_AS_ERROR` from `RKE_COMPILE_WARNING_AS_ERROR`,
-  default `ON`. Call it for every target you add under `rke/` or `benchmark/`, or
+  default `ON`. Call it for every target you add under `src/rke/` or `src/benchmark/`, or
   it is built unwarned. Never make the flags directory-scoped again: that is what
   used to put them one `add_subdirectory` away from the submodules.
 - **C++17 is the baseline, not a floor to build on.** `CMakeLists.txt` defaults
@@ -27,14 +27,14 @@ itself. QuantLib and google-benchmark are git submodules under `external/`.
   20 and 23, so a post-C++17 construct passes two thirds of the matrix and fails
   the rest.
 - **Every `.cpp` _and_ `.hpp` is listed by hand in CMake.** Nothing is globbed:
-  `rke/ql/ext/CMakeLists.txt` keeps separate `RKE_QL_EXT_SOURCES` and
+  `src/rke/ql/ext/CMakeLists.txt` keeps separate `RKE_QL_EXT_SOURCES` and
   `RKE_QL_EXT_HEADER` lists, the second reaching `rke_ql_ext` through
-  `target_sources(... FILE_SET HEADERS)`, whose `BASE_DIRS` is also what puts the
-  repository root on the include path. `rke/testsuite/CMakeLists.txt` and
-  `benchmark/CMakeLists.txt` name every file. An unlisted header still compiles,
+  `target_sources(... FILE_SET HEADERS)`, whose `BASE_DIRS` is `src/`, which is
+  also what puts `<rke/...>` on the include path. `src/rke/testsuite/CMakeLists.txt` and
+  `src/benchmark/CMakeLists.txt` name every file. An unlisted header still compiles,
   so nothing will tell you it is missing.
 - **An upstream source compiled into one of our targets must not be linted.**
-  `rke/testsuite/CMakeLists.txt` pulls in
+  `src/rke/testsuite/CMakeLists.txt` pulls in
   `external/QuantLib/test-suite/utilities.cpp` and sets `SKIP_LINTING TRUE` on
   it. Any further upstream file added this way needs the same property.
 
@@ -46,7 +46,7 @@ task calls for it:
 | Read this                                                                | When                                                                                                                  |
 | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
 | [`.agents/build-and-test.md`](.agents/build-and-test.md)                 | You need build options, targets, single test invocations, local clang-tidy/clang-format runs, or the CI workflow map. |
-| [`.agents/extending-rke-ql-ext.md`](.agents/extending-rke-ql-ext.md)     | You add an instrument, payoff, pricing engine, or test to `rke/`.                                                     |
+| [`.agents/extending-rke-ql-ext.md`](.agents/extending-rke-ql-ext.md)     | You add an instrument, payoff, pricing engine, or test to `src/rke/`.                                                     |
 | [`.agents/benchmarking.md`](.agents/benchmarking.md)                     | You add, change, or run a benchmark.                                                                                  |
 | [`.agents/maintaining-agent-docs.md`](.agents/maintaining-agent-docs.md) | You edit this file or anything in `.agents/`.                                                                         |
 
@@ -74,7 +74,7 @@ Source of truth: `.clang-format`.
   `google-build-using-namespace` is off in `.clang-tidy`.
 - Types `PascalCase`, functions `lowerCamelCase`, data members with a trailing
   underscore, benchmark entry points `BM_PascalCase`.
-- File names in `rke/` and `benchmark/Benchmark*` are `PascalCase`, the
+- File names in `src/rke/` and `src/benchmark/Benchmark*` are `PascalCase`, the
   directories under them lowercase. Include guards are the bare file name
   uppercased (`BONUSCLASSICOPTION_HPP`), not a path; `llvm-header-guard` is off
   for that reason.
@@ -85,7 +85,7 @@ Source of truth: `.clang-format`.
 - Ownership through `QuantLib::ext::shared_ptr`, `ext::make_shared`,
   `ext::dynamic_pointer_cast`, not the `std::` spellings.
 - Errors through `QL_REQUIRE`, `QL_ENSURE`, `QL_FAIL`, `QL_ASSERT`, never a raw
-  `throw`. `NOT_IMPLEMENTED_FAILURE()` from `rke/ql/ext/Error.hpp` for an
+  `throw`. `NOT_IMPLEMENTED_FAILURE()` from `src/rke/ql/ext/Error.hpp` for an
   override that is not implemented.
 - `Null<Real>()` and friends are the "not given" sentinel, checked in
   `arguments::validate()`.
@@ -178,7 +178,7 @@ Before finishing a change:
       an independent check, as under "The Valuation Test Is a Regression Lock".
 - [ ] Every new `.cpp` and `.hpp` is listed in the owning `CMakeLists.txt`, and
       every new target calls `rke_target_warnings`.
-- [ ] New benchmarks are registered in `benchmark/benchmark_main.cpp`.
+- [ ] New benchmarks are registered in `src/benchmark/benchmark_main.cpp`.
 - [ ] Errors go through the `QL_*` macros, ownership through `ext::shared_ptr`.
 - [ ] Numerical tolerances are justified, and the conventions behind a price are
       stated, as under "Quant Claims Need Their Conventions Spelled Out".

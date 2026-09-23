@@ -65,6 +65,5 @@ if (RKE_USE_CLANG_TIDY)
     endif ()
 endif ()
 
-add_subdirectory(rke)
+add_subdirectory(src)
 
-add_subdirectory(benchmark)

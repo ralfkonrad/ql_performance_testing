@@ -1,8 +1,8 @@
 # ql_performance_testing
 
-A QuantLib playground: `rke/ql/ext` is a small extension library — currently a
+A QuantLib playground: `src/rke/ql/ext` is a small extension library — currently a
 `BonusClassicOption` with a Monte Carlo engine — with its own Boost.Test suite,
-and `benchmark/` measures it and QuantLib itself with google-benchmark. QuantLib
+and `src/benchmark/` measures it and QuantLib itself with google-benchmark. QuantLib
 (the `ralfkonrad` fork) and google-benchmark are git submodules under `external/`.
 
 ## Building
@@ -16,7 +16,7 @@ cd ql_performance_testing
 cmake --preset release          # or: debug
 cmake --build --preset release
 ctest --preset release
-./build/release/benchmark/ql_performance_testing
+./build/release/src/benchmark/ql_performance_testing
 ```
 
 The test presets filter on `^rke_`, so `ctest` runs the extension tests only.

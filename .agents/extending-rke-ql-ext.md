@@ -1,7 +1,7 @@
-# Extending `rke/ql/ext`
+# Extending `src/rke/ql/ext`
 
 Read this when adding an instrument, payoff, pricing engine, or test under
-`rke/`. Every recipe ends the same way: list the new files in the owning
+`src/rke/`. Every recipe ends the same way: list the new files in the owning
 `CMakeLists.txt`, and give the new number a reference.
 
 `BonusClassicOption` and `MCBonusClassicEngine` are the worked example for all of
@@ -21,7 +21,7 @@ its barrier rather than storing it twice. Then:
 
 ## 2. A New Instrument
 
-Under `rke/ql/ext/instruments/`, derived from the fitting QuantLib base
+Under `src/rke/ql/ext/instruments/`, derived from the fitting QuantLib base
 (`OneAssetOption` for the existing one):
 
 1. Forward-declare the nested `class arguments;` and `class engine;` in the
@@ -37,7 +37,7 @@ Under `rke/ql/ext/instruments/`, derived from the fitting QuantLib base
 
 ## 3. A New Pricing Engine
 
-Under `rke/ql/ext/pricingengines/<instrument>/`. A Monte Carlo engine derives
+Under `src/rke/ql/ext/pricingengines/<instrument>/`. A Monte Carlo engine derives
 from both the instrument's `engine` and
 `QuantLib::McSimulation<SingleVariate, RNG, S>`, and:
 
@@ -63,15 +63,15 @@ A template engine is header-only, and still has to be listed — in
 
 ## 4. Registering the Files
 
-`rke/ql/ext/CMakeLists.txt` keeps two lists, `RKE_QL_EXT_SOURCES` and
+`src/rke/ql/ext/CMakeLists.txt` keeps two lists, `RKE_QL_EXT_SOURCES` and
 `RKE_QL_EXT_HEADER`. Add each new file to the right one, keeping the paths
 alphabetical. Nothing is globbed, and an unlisted header compiles anyway, so the
 mistake is invisible until someone looks for the file in an IDE.
 
 ## 5. Tests
 
-Add the `.cpp` to `rke/testsuite/CMakeLists.txt` and follow
-`rke/testsuite/BonusClassicOption.cpp`:
+Add the `.cpp` to `src/rke/testsuite/CMakeLists.txt` and follow
+`src/rke/testsuite/BonusClassicOption.cpp`:
 
 - `BOOST_FIXTURE_TEST_SUITE(RkeQLExtTestSuite, TestSuiteFixture)` on the outside,
   a `BOOST_AUTO_TEST_SUITE` per instrument inside, cases within that.

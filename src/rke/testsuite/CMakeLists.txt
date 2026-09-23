@@ -2,13 +2,13 @@ add_executable(rke_ql_ext_testsuite
         testsuite.cpp
         BonusClassicOption.cpp
         TestSuiteFixture.hpp
-        ../../external/QuantLib/test-suite/utilities.cpp
-        ../../external/QuantLib/test-suite/utilities.hpp
+        ${PROJECT_SOURCE_DIR}/external/QuantLib/test-suite/utilities.cpp
+        ${PROJECT_SOURCE_DIR}/external/QuantLib/test-suite/utilities.hpp
 )
 
 # Upstream sources compiled into our target: never lint or auto-fix them.
 set_source_files_properties(
-        ../../external/QuantLib/test-suite/utilities.cpp
+        ${PROJECT_SOURCE_DIR}/external/QuantLib/test-suite/utilities.cpp
         PROPERTIES SKIP_LINTING TRUE
 )
 
