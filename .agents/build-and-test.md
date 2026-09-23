@@ -49,7 +49,9 @@ Every preset sets `CMAKE_EXPORT_COMPILE_COMMANDS`, so each binary dir carries th
 `compile_commands.json` clangd wants.
 
 `clang-tidy` inherits `debug` and adds `RKE_USE_CLANG_TIDY=ON`, in `build/clang-tidy`
-so that no ordinary debug tree carries `CMAKE_CXX_CLANG_TIDY`. It is report-only:
+so that no ordinary debug tree carries `CMAKE_CXX_CLANG_TIDY`. It also pins
+`CMAKE_CXX_COMPILER=clang++`, because clang-tidy reads the flags of whatever compiler
+configured the tree and the default here is g++. It is report-only:
 `--fix` is passed on the command line, never stored in the preset. It has no test
 preset and no workflow preset, because linting runs no tests and the fixing form
 needs a `-D` that `cmake --workflow` refuses.

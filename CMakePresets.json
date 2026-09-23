@@ -32,7 +32,8 @@
       "name": "clang-tidy",
       "inherits": "debug",
       "cacheVariables": {
-        "RKE_USE_CLANG_TIDY": "ON"
+        "RKE_USE_CLANG_TIDY": "ON",
+        "CMAKE_CXX_COMPILER": "clang++"
       }
     }
   ],

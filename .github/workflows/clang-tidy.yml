@@ -51,12 +51,11 @@ jobs:
         run: brew install llvm@23
 
       # The preset is report-only, so --fix is passed here, where a -D overrides the cache
-      # variable: this is the one place that means to rewrite sources.
+      # variable: this is the one place that means to rewrite sources. The compiler is the
+      # preset's, so that a local run of it configures the tree this one does.
       - name: Running clang-tidy
         run: |
-          cmake --preset clang-tidy \
-            -DRKE_CLANG_TIDY_OPTIONS=--fix \
-            -DCMAKE_CXX_COMPILER=clang++
+          cmake --preset clang-tidy -DRKE_CLANG_TIDY_OPTIONS=--fix
           cmake --build --preset clang-tidy -j 1 --verbose
 
       - uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
