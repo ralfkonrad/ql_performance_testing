@@ -18,6 +18,12 @@ jobs:
     # maximum in the matrix is 34 min, uncached, and adds extraction and queries on top.
     timeout-minutes: 90
 
+    # ccache serves a hit without ever execing the compiler, and CodeQL extracts what the
+    # compiler is called on, so a hit would silently shrink the database. The setup action
+    # below always names ccache as the launcher; this leaves it a pass-through wrapper.
+    env:
+      CCACHE_DISABLE: '1'
+
     permissions:
       actions: read
       contents: read
@@ -35,6 +41,17 @@ jobs:
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         submodules: "true"
+
+    # Autobuild configures this tree with CMake, which requires Boost; the runner image ships
+    # none. Same action as the build matrix, so it is the same Boost.
+    - name: Setup needed software
+      uses: ./.github/actions/setup
+      with:
+        os: ubuntu-26.04
+        # Autobuild builds with the image default, not with the matrix's clang leg.
+        cxx: g++
+        cxx-standard: 17
+        save-ccache: 'false'
 
     - name: Initialize CodeQL
       uses: github/codeql-action/init@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
