@@ -16,7 +16,7 @@ namespace RKE::QL::External {
     }
 
     Real BiasedBonusClassicPathPricer::operator()(const Path& path) const {
-        Size n = path.length();
+        Size const n = path.length();
         QL_REQUIRE(n > 1, "the path cannot be empty");
 
         for (Size i = 1; i < n; i++) {

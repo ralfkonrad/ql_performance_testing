@@ -11,17 +11,19 @@ namespace RKE::QL::External {
     : StrikedTypePayoff(Option::Call, barrier), bonusLevel_(bonusLevel) {}
 
     Real BonusClassicPayoff::operator()(Real price) const {
-        if (price <= barrier())
+        if (price <= barrier()) {
             return price;
+}
         return std::max(price, bonusLevel());
     }
 
     void BonusClassicPayoff::accept(AcyclicVisitor& acyclic_visitor) {
         auto* visitor = dynamic_cast<Visitor<BonusClassicPayoff>*>(&acyclic_visitor);
-        if (visitor != nullptr)
+        if (visitor != nullptr) {
             visitor->visit(*this);
-        else
+        } else {
             StrikedTypePayoff::accept(acyclic_visitor);
+}
     }
 
 

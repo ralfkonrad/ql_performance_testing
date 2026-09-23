@@ -15,13 +15,9 @@ namespace RKE::QL::External {
     class MCBonusClassicEngine : public BonusClassicOption::engine,
                                  public QuantLib::McSimulation<QuantLib::SingleVariate, RNG, S> {
       public:
-        typedef
-            typename QuantLib::McSimulation<QuantLib::SingleVariate, RNG, S>::path_generator_type
-                path_generator_type;
-        typedef typename QuantLib::McSimulation<QuantLib::SingleVariate, RNG, S>::path_pricer_type
-            path_pricer_type;
-        typedef
-            typename QuantLib::McSimulation<QuantLib::SingleVariate, RNG, S>::stats_type stats_type;
+        using path_generator_type = typename QuantLib::McSimulation<QuantLib::SingleVariate, RNG, S>::path_generator_type;
+        using path_pricer_type = typename QuantLib::McSimulation<QuantLib::SingleVariate, RNG, S>::path_pricer_type;
+        using stats_type = typename QuantLib::McSimulation<QuantLib::SingleVariate, RNG, S>::stats_type;
 
         MCBonusClassicEngine(
             QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process,
@@ -42,8 +38,8 @@ namespace RKE::QL::External {
       private:
         // McSimulation implementation
         QuantLib::ext::shared_ptr<path_generator_type> pathGenerator() const override {
-            QuantLib::TimeGrid grid = timeGrid();
-            typename RNG::rsg_type gen = RNG::make_sequence_generator(grid.size() - 1, seed_);
+            QuantLib::TimeGrid const grid = timeGrid();
+            typename RNG::rsg_type const gen = RNG::make_sequence_generator(grid.size() - 1, seed_);
             return QuantLib::ext::make_shared<path_generator_type>(process_, grid, gen,
                                                                    brownianBridge_);
         }
@@ -97,8 +93,9 @@ namespace RKE::QL::External {
         QuantLib::McSimulation<QuantLib::SingleVariate, RNG, S>::calculate(
             requiredTolerance_, requiredSamples_, maxSamples_);
         results_.value = this->mcModel_->sampleAccumulator().mean();
-        if constexpr (RNG::allowsErrorEstimate)
+        if constexpr (RNG::allowsErrorEstimate) {
             results_.errorEstimate = this->mcModel_->sampleAccumulator().errorEstimate();
+}
     }
 
     template <class RNG, class S>

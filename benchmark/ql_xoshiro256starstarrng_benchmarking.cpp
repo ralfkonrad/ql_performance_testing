@@ -11,16 +11,16 @@
 #include <ql/math/randomnumbers/xoshiro256starstaruniformrng.hpp>
 #include <ql/math/randomnumbers/zigguratgaussianrng.hpp>
 
-auto xoshiro256StarStar = QuantLib::Xoshiro256StarStarUniformRng();
-auto xoshiro256StarStarBoxMullerGaussian = QuantLib::BoxMullerGaussianRng(xoshiro256StarStar);
-auto xoshiro256StarStarCLGaussian = QuantLib::CLGaussianRng(xoshiro256StarStar);
-auto xoshiro256StarStarZigguratGaussian = QuantLib::ZigguratGaussianRng(xoshiro256StarStar);
+static auto xoshiro256StarStar = QuantLib::Xoshiro256StarStarUniformRng();
+static auto xoshiro256StarStarBoxMullerGaussian = QuantLib::BoxMullerGaussianRng(xoshiro256StarStar);
+static auto xoshiro256StarStarCLGaussian = QuantLib::CLGaussianRng(xoshiro256StarStar);
+static auto xoshiro256StarStarZigguratGaussian = QuantLib::ZigguratGaussianRng(xoshiro256StarStar);
 
-auto mersenneTwister = QuantLib::MersenneTwisterUniformRng();
-auto mersenneTwisterBoxMullerGaussian = QuantLib::BoxMullerGaussianRng(mersenneTwister);
-auto mersenneTwisterCLGaussian = QuantLib::CLGaussianRng(mersenneTwister);
+static auto mersenneTwister = QuantLib::MersenneTwisterUniformRng();
+static auto mersenneTwisterBoxMullerGaussian = QuantLib::BoxMullerGaussianRng(mersenneTwister);
+static auto mersenneTwisterCLGaussian = QuantLib::CLGaussianRng(mersenneTwister);
 
-auto inverseCumulativeRng =
+static auto inverseCumulativeRng =
     QuantLib::InverseCumulativeRng<QuantLib::MersenneTwisterUniformRng,
                                    QuantLib::InverseCumulativeNormal>(mersenneTwister);
 
