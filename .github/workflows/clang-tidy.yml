@@ -42,9 +42,13 @@ jobs:
           # build has nothing the matrix could restore, so it writes none.
           save-ccache: 'false'
 
-      # After the action above, which is where the apt index was last refreshed.
-      - name: Setup clang-tidy
-        run: sudo apt-get install -y clang-tidy
+      # The Homebrew LLVM used locally, so a local run predicts this one; apt's clang-tidy
+      # is a second C++ toolchain and trailed it by two majors. Pinned by major, so a brew
+      # bump is a commit here rather than a silent change. Linuxbrew's llvm is not keg-only,
+      # so this also puts clang++ ahead of /usr/bin and the job compiles and lints with one
+      # toolchain. The action above already ran `brew update`.
+      - name: Setup LLVM
+        run: brew install llvm@23
 
       # The preset is report-only, so --fix is passed here, where a -D overrides the cache
       # variable: this is the one place that means to rewrite sources.

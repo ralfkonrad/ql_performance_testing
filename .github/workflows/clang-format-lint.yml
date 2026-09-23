@@ -30,15 +30,23 @@ jobs:
         with:
           submodules: "true"
 
-      - uses: DoozyX/clang-format-lint-action@bcb4eb2cb0d707ee4f3e5cc3b456eb075f12cf73 # v0.20
-        with:
-          # The action ships its own clang-format 5 to 20, so the runner image does not
-          # decide this and 20 is the ceiling until the action itself is bumped.
-          clangFormatVersion: 20
-          inplace: True
-          # Redundant past clang-format 18, which reads .clang-format-ignore itself, but
-          # this input holds whatever binary the action is pinned to.
-          exclude: './external'
+      # The Homebrew LLVM used locally and by the clang-tidy workflow. One binary for both,
+      # or a file formatted by one is reformatted by the other. Pinned by major, so a brew
+      # bump is a commit here rather than a silent change.
+      # Linuxbrew is on the image but not on PATH, and GITHUB_PATH reaches the steps after
+      # this one, never this one, so the install cannot share a step with it.
+      - name: Setup Linux variables
+        run: echo "/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin" >> $GITHUB_PATH
+
+      - name: Setup LLVM
+        run: |
+          brew update
+          brew install llvm@23
+
+      # The submodules are gitlinks, so `git ls-files` never descends into them and the
+      # exclusion is structural rather than a pattern to keep in step.
+      - name: Applying clang-format
+        run: git ls-files '*.cpp' '*.hpp' | xargs -r clang-format -i
 
       - uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
         with:
