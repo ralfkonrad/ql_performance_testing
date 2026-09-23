@@ -1,12 +1,15 @@
 name: "CodeQL"
 
 on:
-  # Dispatch only: autobuild repeats the whole Ubuntu build without a compiler cache, which
-  # is more runner time than a per-push or nightly scan of this tree is worth.
+  # Weekly, not per push or nightly: autobuild repeats the whole Ubuntu build without a
+  # compiler cache, and this tree changes far too slowly to scan it that often.
   # push: { }
   # pull_request: { }
-  # schedule:
-  #   - cron: '0 4 * * *'
+  schedule:
+    # Monday, after the nightly build and its cache prune, and an hour clear of the two lint
+    # workflows, so the week's three scheduled builds do not start on top of each other.
+    - cron: '23 4 * * 1'
+      timezone: Europe/Berlin
   workflow_dispatch: { }
 
 jobs:
