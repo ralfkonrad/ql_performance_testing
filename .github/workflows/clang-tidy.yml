@@ -10,10 +10,11 @@ on:
       timezone: Europe/Berlin
   workflow_dispatch: { }
 
-# `create-pull-request` pushes a branch and opens a pull request, and the repository's
-# default token is read-only. This block cannot grant the repository setting "Allow GitHub
-# Actions to create and approve pull requests"; while that is off the last step fails with
-# "GitHub Actions is not permitted to create or approve pull requests" regardless.
+# The repository's default workflow token is read-only, so this is what lets
+# `create-pull-request` push a branch and open a pull request from here. The repository
+# setting "Allow GitHub Actions to create and approve pull requests" is a separate switch
+# this block cannot grant; it is on, and were it off the last step would fail with "GitHub
+# Actions is not permitted to create or approve pull requests" whatever is written here.
 permissions:
   contents: write
   pull-requests: write
