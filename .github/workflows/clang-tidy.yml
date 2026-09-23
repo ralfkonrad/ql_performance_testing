@@ -58,6 +58,11 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           branch: clang-tidy-fixes-${{ github.ref_name }}
           base: ${{ github.ref_name }}
+          # The action stages everything it finds, and the job leaves a compiler cache and a
+          # build tree in the workspace. Only clang-tidy's own fixes belong in the pull request.
+          add-paths: |
+            benchmark/**
+            rke/**
           delete-branch: true
           commit-message: "Automated fixes by clang-tidy"
           title: "Automated fixes by clang-tidy"
