@@ -58,11 +58,12 @@ needs a `-D` that `cmake --workflow` refuses.
 
 From `CMakeLists.txt`:
 
-- `RKE_COMPILE_WARNING_AS_ERROR` — default `ON`. Reaches a target through
-  `rke_target_warnings()`, not through a directory-scoped flag.
+- `RKE_COMPILE_WARNING_AS_ERROR` — default `ON`. Read once by
+  `src/CMakeLists.txt`, which sets `CMAKE_COMPILE_WARNING_AS_ERROR` for every
+  target below it.
 - `RKE_USE_CLANG_TIDY` — default `OFF`. Set at configure time; the
-  `CMAKE_CXX_CLANG_TIDY` assignment sits after `add_subdirectory(external)`, so
-  only our own targets are analysed.
+  `CMAKE_CXX_CLANG_TIDY` assignment lives in `src/CMakeLists.txt`, so only our own
+  targets are analysed.
 - `RKE_CLANG_TIDY` — the binary, default `clang-tidy`.
 - `RKE_CLANG_TIDY_OPTIONS` — extra arguments, e.g. `--fix`.
 - `CMAKE_CXX_STANDARD` — default `17`, configure fails below it.
@@ -79,9 +80,9 @@ source tree.
 
 | Target                   | Kind                  | Lands at                             |
 | ------------------------ | --------------------- | ------------------------------------ |
-| `rke_ql_ext`             | static library        | `rke/ql/ext/librke_ql_ext.a`         |
-| `rke_ql_ext_testsuite`   | Boost.Test executable | `rke/testsuite/rke_ql_ext_testsuite` |
-| `ql_performance_testing` | google-benchmark exe  | `benchmark/ql_performance_testing`   |
+| `rke_ql_ext`             | static library        | `src/rke/ql/ext/librke_ql_ext.a`         |
+| `rke_ql_ext_testsuite`   | Boost.Test executable | `src/rke/testsuite/rke_ql_ext_testsuite` |
+| `ql_performance_testing` | google-benchmark exe  | `src/benchmark/ql_performance_testing`   |
 
 `cmake --build --preset release` also builds QuantLib and QuantLib's own test
 suite. To skip that, build one target: `--target rke_ql_ext_testsuite`.
@@ -104,7 +105,7 @@ ctest --preset release -R quantlib
 Boost.Test arguments go to the executable directly:
 
 ```bash
-BIN=build/release/rke/testsuite/rke_ql_ext_testsuite
+BIN=build/release/src/rke/testsuite/rke_ql_ext_testsuite
 
 # everything, with the per-case messages the CTest entry also asks for
 $BIN -l message
@@ -121,8 +122,8 @@ $BIN --list_content
 ```
 
 `RkeQLExtTestSuite` is the outer `BOOST_FIXTURE_TEST_SUITE` in
-`rke/testsuite/BonusClassicOption.cpp`, not the `BOOST_TEST_MODULE` name in
-`rke/testsuite/testsuite.cpp`.
+`src/rke/testsuite/BonusClassicOption.cpp`, not the `BOOST_TEST_MODULE` name in
+`src/rke/testsuite/testsuite.cpp`.
 
 ## 6. Linting Locally
 
@@ -210,6 +211,6 @@ scanning, filtered by branch, and in the `code-scanning/analyses` API.
 ## 8. Source of Truth
 
 When something above looks stale, verify against `CMakeLists.txt`,
-`CMakePresets.json`, `cmake/WarningLevels.cmake`, `rke/*/CMakeLists.txt`,
-`benchmark/CMakeLists.txt`, `.clang-format`, `.clang-tidy`,
+`CMakePresets.json`, `cmake/WarningLevels.cmake`, `src/rke/*/CMakeLists.txt`,
+`src/benchmark/CMakeLists.txt`, `.clang-format`, `.clang-tidy`,
 `.github/workflows/*.yml` and `.github/actions/setup/action.yml`.
