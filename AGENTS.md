@@ -12,9 +12,10 @@ itself. QuantLib and google-benchmark are git submodules under `external/`.
   tracks the `ralfkonrad/QuantLib` fork, `external/benchmark` tracks
   `google/benchmark`. Never edit a file there, never reformat one
   (`.clang-format-ignore` excludes `external/**`), and never move a submodule
-  pointer as a side effect of another change. `CMakeLists.txt` sets
-  `CMAKE_CXX_CLANG_TIDY` _after_ `add_subdirectory(external)` so that it cannot
-  reach the submodules; keep that order.
+  pointer as a side effect of another change. Nothing of ours is declared at the
+  top level beside them: warnings and `CMAKE_CXX_CLANG_TIDY` are set in
+  `src/CMakeLists.txt`, one directory tree away, so neither depends on where
+  `add_subdirectory(external)` sits.
 - **Warnings are build failures, and `src/` is where that is declared.**
   `src/CMakeLists.txt` sets `CMAKE_COMPILE_WARNING_AS_ERROR` from
   `RKE_COMPILE_WARNING_AS_ERROR` (default `ON`), which initialises the property on

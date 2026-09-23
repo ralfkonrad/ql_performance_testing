@@ -58,11 +58,12 @@ needs a `-D` that `cmake --workflow` refuses.
 
 From `CMakeLists.txt`:
 
-- `RKE_COMPILE_WARNING_AS_ERROR` — default `ON`. Reaches a target through
-  `rke_target_warnings()`, not through a directory-scoped flag.
+- `RKE_COMPILE_WARNING_AS_ERROR` — default `ON`. Read once by
+  `src/CMakeLists.txt`, which sets `CMAKE_COMPILE_WARNING_AS_ERROR` for every
+  target below it.
 - `RKE_USE_CLANG_TIDY` — default `OFF`. Set at configure time; the
-  `CMAKE_CXX_CLANG_TIDY` assignment sits after `add_subdirectory(external)`, so
-  only our own targets are analysed.
+  `CMAKE_CXX_CLANG_TIDY` assignment lives in `src/CMakeLists.txt`, so only our own
+  targets are analysed.
 - `RKE_CLANG_TIDY` — the binary, default `clang-tidy`.
 - `RKE_CLANG_TIDY_OPTIONS` — extra arguments, e.g. `--fix`.
 - `CMAKE_CXX_STANDARD` — default `17`, configure fails below it.
