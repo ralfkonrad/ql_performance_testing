@@ -45,13 +45,14 @@ jobs:
       - name: Setup clang-tidy
         run: sudo apt-get install -y clang-tidy
 
+      # The preset is report-only, so --fix is passed here, where a -D overrides the cache
+      # variable: this is the one place that means to rewrite sources.
       - name: Running clang-tidy
         run: |
-          cmake -S . -B ./build -G Ninja \
-            -DRKE_USE_CLANG_TIDY=ON -DRKE_CLANG_TIDY_OPTIONS=--fix \
-            -DCMAKE_BUILD_TYPE=Debug \
+          cmake --preset clang-tidy \
+            -DRKE_CLANG_TIDY_OPTIONS=--fix \
             -DCMAKE_CXX_COMPILER=clang++
-          cmake --build ./build -j 1 -v
+          cmake --build --preset clang-tidy -j 1 --verbose
 
       - uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
         with:
