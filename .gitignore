@@ -7,6 +7,9 @@
 # my favorite build directory
 build/
 
+# the compiler cache the CI setup action puts in the workspace
+.ccache/
+
 # cmake user defined presets
 CMakeUserPresets.json
 

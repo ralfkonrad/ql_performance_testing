@@ -1,12 +1,15 @@
 name: "CodeQL"
 
 on:
-  # Dispatch only: autobuild repeats the whole Ubuntu build without a compiler cache, which
-  # is more runner time than a per-push or nightly scan of this tree is worth.
+  # Weekly, not per push or nightly: autobuild repeats the whole Ubuntu build without a
+  # compiler cache, and this tree changes far too slowly to scan it that often.
   # push: { }
   # pull_request: { }
-  # schedule:
-  #   - cron: '0 4 * * *'
+  schedule:
+    # Monday, after the nightly build and its cache prune, and an hour clear of the two lint
+    # workflows, so the week's three scheduled builds do not start on top of each other.
+    - cron: '23 4 * * 1'
+      timezone: Europe/Berlin
   workflow_dispatch: { }
 
 jobs:
@@ -17,6 +20,12 @@ jobs:
     # Never run, so nothing is measured. Autobuild repeats the Ubuntu build, whose measured
     # maximum in the matrix is 34 min, uncached, and adds extraction and queries on top.
     timeout-minutes: 90
+
+    # ccache serves a hit without ever execing the compiler, and CodeQL extracts what the
+    # compiler is called on, so a hit would silently shrink the database. The setup action
+    # below always names ccache as the launcher; this leaves it a pass-through wrapper.
+    env:
+      CCACHE_DISABLE: '1'
 
     permissions:
       actions: read
@@ -36,6 +45,17 @@ jobs:
       with:
         submodules: "true"
 
+    # Autobuild configures this tree with CMake, which requires Boost; the runner image ships
+    # none. Same action as the build matrix, so it is the same Boost.
+    - name: Setup needed software
+      uses: ./.github/actions/setup
+      with:
+        os: ubuntu-26.04
+        # Autobuild builds with the image default, not with the matrix's clang leg.
+        cxx: g++
+        cxx-standard: 17
+        save-ccache: 'false'
+
     - name: Initialize CodeQL
       uses: github/codeql-action/init@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
       with:
@@ -45,7 +65,36 @@ jobs:
     - name: Autobuild
       uses: github/codeql-action/autobuild@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
 
+    # Held back from uploading, so that the step below can drop external/ first. The file is
+    # named after the language CodeQL resolved, and `cpp` is that name, not an alias for it.
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
       with:
+        upload: never
+        output: sarif-results
+
+    # The submodules are compiled because our targets link them, so they land in the database
+    # whatever we do; path filters are ignored for a built language. Dropping their results
+    # here is what keeps external/ out of the Security tab, as .clang-format-ignore does for
+    # formatting. Every result not matched by an exclusion pattern is kept.
+    - name: Drop the results in external/
+      uses: advanced-security/filter-sarif@2da736ff05ef065cb2894ac6892e47b5eac2c3c0 # v1.1
+      with:
+        patterns: |
+          -external/**
+        input: sarif-results/${{ matrix.language }}.sarif
+        output: sarif-results/${{ matrix.language }}.sarif
+
+    # What reached code scanning, kept with the run: the Actions page otherwise shows only
+    # that an upload happened, and the alerts live in the Security tab.
+    - name: Keep the filtered results with the run
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: codeql-sarif-${{ matrix.language }}
+        path: sarif-results/${{ matrix.language }}.sarif
+
+    - name: Upload the filtered results
+      uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+      with:
+        sarif_file: sarif-results/${{ matrix.language }}.sarif
         category: "/language:${{matrix.language}}"

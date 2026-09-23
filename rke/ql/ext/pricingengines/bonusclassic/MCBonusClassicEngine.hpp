@@ -122,7 +122,10 @@ namespace RKE::QL::External {
         auto residualTime = process_->time(arguments_.exercise->lastDate());
         if (timeStepsPerYear_ != QuantLib::Null<QuantLib::Size>()) {
             auto steps = static_cast<QuantLib::Size>(timeStepsPerYear_ * residualTime);
-            return QuantLib::TimeGrid(residualTime, std::max<QuantLib::Size>(steps, 1));
+            // QuantLib::TimeGrid has an initializer_list<Time> constructor, which a braced
+            // return selects over TimeGrid(Time, Size), narrowing steps to a Time.
+            return QuantLib::TimeGrid( // NOLINT(modernize-return-braced-init-list)
+                residualTime, std::max<QuantLib::Size>(steps, 1));
         }
         QL_FAIL("time steps not specified");
     }

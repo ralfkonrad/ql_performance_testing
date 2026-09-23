@@ -151,7 +151,7 @@ Everything is under `.github/workflows/`.
 | `cmake-and-ctest.yml`        | push to `master`, every pull request, nightly 00:33 Berlin, dispatch     | The only workflow that gates a pull request.        |
 | `clang-format-lint.yml`      | weekly, Mondays 02:23 Berlin, dispatch                                   | Opens a pull request with the fixes.                |
 | `clang-tidy.yml`             | weekly, Mondays 02:23 Berlin, dispatch                                   | Opens a pull request with the fixes.                |
-| `codeql.yml`                 | dispatch only                                                            | Autobuild repeats the whole Ubuntu build, uncached. |
+| `codeql.yml`                 | weekly, Mondays 04:23 Berlin, dispatch                                   | Autobuild repeats the whole Ubuntu build, uncached. |
 | `delete_workflow_caches.yml` | pull request closed, branch deleted, dispatch                            | Keeps the shared 10 GB cache quota clear.           |
 | `prune_ccache_entries.yml`   | nightly 03:33 Berlin, dispatch                                           | Thins `master`'s compiler caches; `dry-run` input.  |
 
@@ -177,10 +177,20 @@ they changed, which is why neither has a push or `pull_request` trigger. They
 run weekly on Monday at 02:23 Europe/Berlin — `schedule` takes an IANA
 `timezone`, so that hour holds across DST — and `create-pull-request` reuses one
 branch each, so a run updates its open pull request rather than opening another.
-**Ask before dispatching one**; never start a run on your own initiative. Both
-also need the repository setting "Allow GitHub Actions to create and approve pull
-requests", which no `permissions:` block can grant — while it is off, their last
-step fails however the workflow is triggered.
+**Ask before dispatching one**; never start a run on your own initiative. Both also
+need the repository setting "Allow GitHub Actions to create and approve pull
+requests", which is on and has to stay on: no `permissions:` block can grant it, and
+with it off their last step fails however the workflow is triggered.
+
+`codeql.yml` runs on Monday at 04:23 Berlin, past the nightly build and the ccache
+prune and clear of the 02:23 the two lint workflows share. Our targets link the
+submodules, so QuantLib and google-benchmark are compiled under the tracer and land
+in the database whatever we do, and GitHub's path filters are ignored for a language
+that is built; `filter-sarif` therefore drops every result under `external/` between
+`analyze` and `upload-sarif`, which is what keeps the Security tab to our own code.
+The run page shows only that an upload happened, so each run also attaches the
+filtered `cpp.sarif` as an artifact; the alerts themselves are under Security → Code
+scanning, filtered by branch, and in the `code-scanning/analyses` API.
 
 ## 8. Source of Truth
 
