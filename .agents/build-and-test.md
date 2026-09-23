@@ -188,6 +188,9 @@ submodules, so QuantLib and google-benchmark are compiled under the tracer and l
 in the database whatever we do, and GitHub's path filters are ignored for a language
 that is built; `filter-sarif` therefore drops every result under `external/` between
 `analyze` and `upload-sarif`, which is what keeps the Security tab to our own code.
+The run page shows only that an upload happened, so each run also attaches the
+filtered `cpp.sarif` as an artifact; the alerts themselves are under Security → Code
+scanning, filtered by branch, and in the `code-scanning/analyses` API.
 
 ## 8. Source of Truth
 
