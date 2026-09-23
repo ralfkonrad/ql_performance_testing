@@ -12,12 +12,12 @@ invocations, lint runs, and the CI map.
   CI installs it with Homebrew; on Windows the setup action installs the
   SourceForge MSVC binaries and exports `Boost_DIR`.
 - CMake 4.0 or newer — `CMakeLists.txt` sets that floor.
-- Ninja — both presets use it as the generator.
+- Ninja — every preset uses it as the generator.
 
 ## 2. Presets
 
-`CMakePresets.json` defines exactly two usable presets, `debug` and `release`.
-Both inherit a hidden `default` that sets
+`CMakePresets.json` defines three usable presets: `debug`, `release` and
+`clang-tidy`. All inherit a hidden `default` that sets
 
 - `RKE_COMPILE_WARNING_AS_ERROR=ON`
 - `QL_BUILD_TEST_SUITE=ON`
@@ -45,8 +45,14 @@ Add `-DCMAKE_CXX_STANDARD=20` (or `23`) to the configure step to reproduce the
 other CI legs. A workflow preset takes no such flag, so the standards other than
 the default need the three steps separately.
 
-Both presets set `CMAKE_EXPORT_COMPILE_COMMANDS`, so each binary dir carries the
+Every preset sets `CMAKE_EXPORT_COMPILE_COMMANDS`, so each binary dir carries the
 `compile_commands.json` clangd wants.
+
+`clang-tidy` inherits `debug` and adds `RKE_USE_CLANG_TIDY=ON`, in `build/clang-tidy`
+so that no ordinary debug tree carries `CMAKE_CXX_CLANG_TIDY`. It is report-only:
+`--fix` is passed on the command line, never stored in the preset. It has no test
+preset and no workflow preset, because linting runs no tests and the fixing form
+needs a `-D` that `cmake --workflow` refuses.
 
 ## 3. Options
 
@@ -120,19 +126,28 @@ $BIN --list_content
 
 ## 6. Linting Locally
 
-clang-tidy, the same way the workflow does it, on a separate build tree so the
-main one keeps its cached objects:
+clang-tidy through its own preset, which builds in `build/clang-tidy` so the main
+tree keeps its cached objects:
 
 ```bash
-cmake -S . -B ./build/tidy -G Ninja \
-    -DRKE_USE_CLANG_TIDY=ON -DRKE_CLANG_TIDY_OPTIONS=--fix \
-    -DCMAKE_BUILD_TYPE=Debug \
-    -DCMAKE_CXX_COMPILER=clang++
-cmake --build ./build/tidy -j 1 -v
+cmake --preset clang-tidy
+cmake --build --preset clang-tidy
+```
+
+To rewrite the sources, add `--fix` at configure time — the preset leaves it out so
+that no one gets it by accident:
+
+```bash
+cmake --preset clang-tidy -DRKE_CLANG_TIDY_OPTIONS=--fix
+cmake --build --preset clang-tidy -j 1
 ```
 
 `-j 1` is not a suggestion: `--fix` rewrites headers shared between translation
-units, and parallel jobs corrupt each other's edits.
+units, and parallel jobs corrupt each other's edits. It is the fixing run that
+needs it, which is why the preset does not set `jobs`.
+
+The workflow runs exactly this, plus `-DCMAKE_CXX_COMPILER=clang++`; the preset
+names no compiler, so it still configures under AppleClang and MSVC.
 
 clang-format is not wired into the build. Run it over the touched files only, and
 never over `external/` — `.clang-format-ignore` excludes it, and CI pins version
