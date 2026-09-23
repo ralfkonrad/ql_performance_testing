@@ -85,6 +85,14 @@ jobs:
         input: sarif-results/${{ matrix.language }}.sarif
         output: sarif-results/${{ matrix.language }}.sarif
 
+    # What reached code scanning, kept with the run: the Actions page otherwise shows only
+    # that an upload happened, and the alerts live in the Security tab.
+    - name: Keep the filtered results with the run
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: codeql-sarif-${{ matrix.language }}
+        path: sarif-results/${{ matrix.language }}.sarif
+
     - name: Upload the filtered results
       uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
       with:
