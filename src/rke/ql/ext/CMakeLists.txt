@@ -22,10 +22,9 @@ target_sources(rke_ql_ext PUBLIC
         FILES ${RKE_QL_EXT_HEADER}
 )
 
-rke_target_warnings(rke_ql_ext)
-
 # PUBLIC: the headers name QuantLib types, so every consumer needs ql_library's include
 # directories and its Boost ones, both of which it exports itself.
-target_link_libraries(rke_ql_ext PUBLIC
-        ql_library
+target_link_libraries(rke_ql_ext
+        PUBLIC ql_library
+        PRIVATE rke::warnings
 )

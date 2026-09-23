@@ -8,7 +8,7 @@ cmake_minimum_required(VERSION 4.0)
 project(ql_performance_testing VERSION 0.0.1 LANGUAGES CXX)
 
 # Options
-# Read by rke_target_warnings(), which each of our targets calls for itself.
+# Read once at the own-code root, src/CMakeLists.txt, which is where the policy is applied.
 option(RKE_COMPILE_WARNING_AS_ERROR "Compile warnings as errors" ON)
 option(RKE_USE_CLANG_TIDY "Use clang-tidy when building" OFF)
 
@@ -18,8 +18,8 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 # Path for package-local cmake modules
 list(PREPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 
-# Defines rke_warnings and rke_target_warnings. Position no longer matters for safety: the
-# warnings apply to the targets that link them, not to everything declared afterwards.
+# Defines rke_warnings and its rke::warnings alias. Position does not matter: the flags reach
+# the targets that link them, not everything declared afterwards.
 include(WarningLevels)
 
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

@@ -17,6 +17,5 @@ target_link_libraries(
         ql_performance_testing PRIVATE
         rke_ql_ext
         benchmark::benchmark
+        rke::warnings
 )
-
-rke_target_warnings(ql_performance_testing)

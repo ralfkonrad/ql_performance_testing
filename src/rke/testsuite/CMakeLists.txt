@@ -16,9 +16,8 @@ set_source_files_properties(
 # no component of its own; the include directories arrive with ql_library.
 target_link_libraries(rke_ql_ext_testsuite PRIVATE
         rke_ql_ext
+        rke::warnings
 )
-
-rke_target_warnings(rke_ql_ext_testsuite)
 
 add_test(
         NAME rke_ql_ext_testsuite

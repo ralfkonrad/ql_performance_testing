@@ -15,13 +15,16 @@ itself. QuantLib and google-benchmark are git submodules under `external/`.
   pointer as a side effect of another change. `CMakeLists.txt` sets
   `CMAKE_CXX_CLANG_TIDY` _after_ `add_subdirectory(external)` so that it cannot
   reach the submodules; keep that order.
-- **Warnings are build failures, and a target opts in by name.**
-  `cmake/WarningLevels.cmake` defines `rke_target_warnings(<target>)`, which links
-  the `rke_warnings` interface library (`-Wall -Wextra -Wpedantic`, `-W4` under
-  MSVC) and sets `COMPILE_WARNING_AS_ERROR` from `RKE_COMPILE_WARNING_AS_ERROR`,
-  default `ON`. Call it for every target you add under `src/rke/` or `src/benchmark/`, or
-  it is built unwarned. Never make the flags directory-scoped again: that is what
-  used to put them one `add_subdirectory` away from the submodules.
+- **Warnings are build failures, and `src/` is where that is declared.**
+  `src/CMakeLists.txt` sets `CMAKE_COMPILE_WARNING_AS_ERROR` from
+  `RKE_COMPILE_WARNING_AS_ERROR` (default `ON`), which initialises the property on
+  every target created below it. That is safe there and nowhere above it: `external/`
+  is a sibling of `src/`, and a directory property only travels down. The flags
+  themselves stay per target — `cmake/WarningLevels.cmake` defines `rke::warnings`
+  (`-Wall -Wextra -Wpedantic`, `-W4` under MSVC) and every target under `src/` links
+  it, by the alias and never the bare `rke_warnings`. Do not move the policy to the
+  top level: that is what used to put the flags one `add_subdirectory` away from the
+  submodules.
 - **C++17 is the baseline, not a floor to build on.** `CMakeLists.txt` defaults
   `CMAKE_CXX_STANDARD` to 17 and fails below it. CI compiles each platform at 17,
   20 and 23, so a post-C++17 construct passes two thirds of the matrix and fails
@@ -177,7 +180,7 @@ Before finishing a change:
 - [ ] New behaviour has a test; new pricing code has both a regression lock and
       an independent check, as under "The Valuation Test Is a Regression Lock".
 - [ ] Every new `.cpp` and `.hpp` is listed in the owning `CMakeLists.txt`, and
-      every new target calls `rke_target_warnings`.
+      every new target links `rke::warnings`.
 - [ ] New benchmarks are registered in `src/benchmark/benchmark_main.cpp`.
 - [ ] Errors go through the `QL_*` macros, ownership through `ext::shared_ptr`.
 - [ ] Numerical tolerances are justified, and the conventions behind a price are
