@@ -29,10 +29,21 @@ jobs:
         with:
           submodules: "true"
 
-      - name: Setup
-        run: |
-          sudo apt update
-          sudo apt install -y clang-tidy ninja-build
+      # The action the build matrix uses, so clang-tidy analyses against the Boost the matrix
+      # compiles against instead of a second, apt-provided one. It also brings ninja.
+      - name: Setup needed software
+        uses: ./.github/actions/setup
+        with:
+          os: ubuntu-26.04
+          cxx: clang++
+          cxx-standard: 17
+          # Only master's matrix entries are restorable from every ref, and this job's Debug
+          # build has nothing the matrix could restore, so it writes none.
+          save-ccache: 'false'
+
+      # After the action above, which is where the apt index was last refreshed.
+      - name: Setup clang-tidy
+        run: sudo apt-get install -y clang-tidy
 
       - name: Running clang-tidy
         run: |
