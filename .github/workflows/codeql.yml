@@ -65,7 +65,28 @@ jobs:
     - name: Autobuild
       uses: github/codeql-action/autobuild@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
 
+    # Held back from uploading, so that the step below can drop external/ first. The file is
+    # named after the language CodeQL resolved, and `cpp` is that name, not an alias for it.
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
       with:
+        upload: never
+        output: sarif-results
+
+    # The submodules are compiled because our targets link them, so they land in the database
+    # whatever we do; path filters are ignored for a built language. Dropping their results
+    # here is what keeps external/ out of the Security tab, as .clang-format-ignore does for
+    # formatting. Every result not matched by an exclusion pattern is kept.
+    - name: Drop the results in external/
+      uses: advanced-security/filter-sarif@2da736ff05ef065cb2894ac6892e47b5eac2c3c0 # v1.1
+      with:
+        patterns: |
+          -external/**
+        input: sarif-results/${{ matrix.language }}.sarif
+        output: sarif-results/${{ matrix.language }}.sarif
+
+    - name: Upload the filtered results
+      uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+      with:
+        sarif_file: sarif-results/${{ matrix.language }}.sarif
         category: "/language:${{matrix.language}}"
