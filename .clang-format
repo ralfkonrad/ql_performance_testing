@@ -54,4 +54,9 @@ SortUsingDeclarations: false
 IndentCaseLabels: true
 IndentPPDirectives: AfterHash
 
+# const T&, not T const&: clang-tidy's misc-const-correctness inserts the qualifier on
+# the right, and FormatStyle above hands its fixes to clang-format, which moves it back.
+
+QualifierAlignment: Left
+
 ...
