@@ -26,58 +26,58 @@ namespace RKE::QL::External {
             return ext::make_shared<BlackConstantVol>(today, NullCalendar(), Handle<Quote>(vol),
                                                       dc);
         }
+
+        struct OptionData {
+            Real barrier = 90.0;
+            Real bonusLevel = 120.00;
+            Period ttm = Period(5, Months);
+        };
+
+        struct MarketData {
+            Real spot = 100.00;
+            Real riskfreeRate = 0.01;
+            Real dividendYield = 0.03;
+            Real volatility = 0.20;
+
+            ext::shared_ptr<GeneralizedBlackScholesProcess>
+            makeGeneralizedBlackScholesProcess(Date today) {
+                const auto dc = Actual360();
+                const auto spotQuote = ext::make_shared<SimpleQuote>(spot);
+
+                const auto qH_SME = ext::make_shared<SimpleQuote>(dividendYield);
+                const auto qTS = flatRate(today, qH_SME, dc);
+
+                const auto rH_SME = ext::make_shared<SimpleQuote>(riskfreeRate);
+                const auto rTS = flatRate(today, rH_SME, dc);
+
+                const auto volaQuote = ext::make_shared<SimpleQuote>(volatility);
+                const auto volTS = flatVol(today, volaQuote, dc);
+
+                return ext::make_shared<BlackScholesMertonProcess>(
+                    Handle<Quote>(spotQuote), Handle(qTS), Handle(rTS), Handle(volTS));
+            }
+        };
     }
 
-    struct OptionData {
-        Real barrier = 90.0;
-        Real bonusLevel = 120.00;
-        Period ttm = Period(5, Months);
-    };
-
-    struct MarketData {
-        Real spot = 100.00;
-        Real riskfreeRate = 0.01;
-        Real dividendYield = 0.03;
-        Real volatility = 0.20;
-
-        ext::shared_ptr<GeneralizedBlackScholesProcess>
-        makeGeneralizedBlackScholesProcess(Date today) {
-            auto dc = Actual360();
-            auto spotQuote = ext::make_shared<SimpleQuote>(spot);
-
-            auto qH_SME = ext::make_shared<SimpleQuote>(dividendYield);
-            auto qTS = flatRate(today, qH_SME, dc);
-
-            auto rH_SME = ext::make_shared<SimpleQuote>(riskfreeRate);
-            auto rTS = flatRate(today, rH_SME, dc);
-
-            auto volaQuote = ext::make_shared<SimpleQuote>(volatility);
-            auto volTS = flatVol(today, volaQuote, dc);
-
-            return ext::make_shared<BlackScholesMertonProcess>(
-                Handle<Quote>(spotQuote), Handle(qTS), Handle(rTS), Handle(volTS));
-        }
-    };
-
     void BM_BonusClassicOption(benchmark::State& state) {
-        auto option_data = OptionData();
+        const auto option_data = OptionData();
         auto market_data = MarketData();
 
-        auto today = Date(22, Jun, 2025);
+        const auto today = Date(22, Jun, 2025);
         Settings::instance().evaluationDate() = today;
 
-        auto exerciseDate = today + option_data.ttm;
+        const auto exerciseDate = today + option_data.ttm;
 
-        auto process = market_data.makeGeneralizedBlackScholesProcess(today);
-        auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
+        const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
+        const auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
             process, 100, 50'000, 50'001, Null<Real>(), true, true, 42);
 
-        auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
+        const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
             option_data.barrier, option_data.bonusLevel, exerciseDate);
 
         bonusClassicOption->setPricingEngine(mcEngine);
 
-        for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
+        for (const auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
             bonusClassicOption->recalculate();
             auto npv = bonusClassicOption->NPV();
             benchmark::DoNotOptimize(npv);
