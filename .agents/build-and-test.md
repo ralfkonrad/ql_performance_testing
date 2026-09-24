@@ -179,7 +179,13 @@ single status the branch ruleset requires; it runs `if: always()`, so a failing
 leg cannot slip through as a skipped check.
 
 Compiler caches (ccache, sccache on Windows) are keyed on
-os-arch-compiler-standard and are written back **only** from `master`. A topic
+os-arch-compiler-compilerversion-standard and are written back **only** from
+`master`. The version segment is a digest of what the compiler prints for
+itself, because both caches hash the compiler into every object key and every
+compiler here comes from the runner image: without it, an image that ships a new
+toolchain costs a leg its whole cache and then leaves two toolchains' objects in
+one entry. A retired toolchain's key simply stops being refreshed, which is what
+`prune_ccache_entries.yml` already collects after 30 days. A topic
 branch restores `master`'s entry but never writes one, so its build times are not
 comparable with master's.
 

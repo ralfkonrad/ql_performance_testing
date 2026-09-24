@@ -200,19 +200,55 @@ runs:
       with:
         arch: x64
 
+    - name: Determine the compiler cache key
+      id: cache-key
+      shell: bash
+      # After the Visual Studio shell above, which is what puts cl on PATH.
+      run: |
+        # Both caches hash the compiler into every object key, and on every platform here the
+        # compiler is the image's: MSVC from the Visual Studio it ships, g++ and clang++ from
+        # its apt set, clang++ from its Xcode. Keying on the image version would invalidate on
+        # each fortnightly respin; keying on what the compiler calls itself invalidates only
+        # when it actually changes.
+        if [ "$RUNNER_OS" = "Windows" ]; then
+          # cl takes no --version and exits non-zero on the banner alone.
+          version=$(cl 2>&1 | head -1 || true)
+        else
+          version=$(${{ inputs.cxx }} --version | head -1)
+        fi
+        # Empty would key every toolchain alike, which is the bug this segment exists to
+        # prevent, so fail here instead.
+        if [ -z "$version" ]; then
+          echo "::error::could not read a version from ${{ inputs.cxx }}"
+          exit 1
+        fi
+        echo "compiler: $version"
+        # sha256sum on Linux and in Git Bash, shasum on macOS.
+        if command -v sha256sum > /dev/null; then
+          digest=$(printf '%s' "$version" | sha256sum)
+        else
+          digest=$(printf '%s' "$version" | shasum -a 256)
+        fi
+        base="${{ inputs.os }}-${{ runner.arch }}-${{ inputs.cxx }}-cc${digest:0:12}"
+        echo "key=$base-std-${{ inputs.cxx-standard }}" >> $GITHUB_OUTPUT
+        echo "prefix=$base-std" >> $GITHUB_OUTPUT
+
     - name: Setup CCache
       # Pinned to v1.2.24, not the floating v1.2: that still resolves to v1.2.20, which
       # declares node20 and so has the runner annotate every job using it.
       uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d # v1.2.24
       with:
         # Segment order is what stops a rung prefixing a sibling variant's key: architecture
-        # before compiler before standard, so no g++ job can restore a clang++ entry.
-        key: ${{ inputs.os }}-${{ runner.arch }}-${{ inputs.cxx }}-std-${{ inputs.cxx-standard }}
-        # The one fallback left is the same compiler at another standard, written without a
-        # trailing dash because the action appends one to every restore key itself.
+        # before compiler before compiler version before standard, so no g++ job can restore
+        # a clang++ entry and no toolchain can restore another toolchain's.
+        key: ${{ steps.cache-key.outputs.key }}
+        # The one fallback left is the same compiler, same version, at another standard,
+        # written without a trailing dash because the action appends one to every restore key
+        # itself. It has to stay inside the version segment: falling back across toolchains is
+        # what leaves an entry holding two of them.
         restore-keys: |
-          ${{ inputs.os }}-${{ runner.arch }}-${{ inputs.cxx }}-std-${{ inputs.cxx-standard }}
-          ${{ inputs.os }}-${{ runner.arch }}-${{ inputs.cxx }}-std
+          ${{ steps.cache-key.outputs.key }}
+          ${{ steps.cache-key.outputs.prefix }}
         variant: ${{ steps.ccache-variant.outputs.variant }}
         # The last character is the unit, and sccache silently falls back to its own 10GB
         # default for a size it cannot parse: `M`, never `MB`. Windows entries are the largest.
