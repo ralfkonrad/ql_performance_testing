@@ -20,45 +20,50 @@ using namespace QuantLib;
 // Barrier monitoring dates of the MC engine are its time grid points.
 constexpr Size mcTimeStepsPerYear = 100;
 
-struct OptionData {
-    Real barrier = 90.0;
-    Real bonusLevel = 120.00;
-    Period ttm = Period(5, Months);
-};
+namespace {
+    struct OptionData {
+        Real barrier = 90.0;
+        Real bonusLevel = 120.00;
+        Period ttm = Period(5, Months);
+    };
 
-struct MarketData {
-    Real spot = 100.00;
-    Real riskfreeRate = 0.01;
-    Real dividendYield = 0.03;
-    Real volatility = 0.20;
+    struct MarketData {
+        Real spot = 100.00;
+        Real riskfreeRate = 0.01;
+        Real dividendYield = 0.03;
+        Real volatility = 0.20;
 
-    ext::shared_ptr<GeneralizedBlackScholesProcess> makeGeneralizedBlackScholesProcess(Date today) {
-        auto dc = Actual360();
-        auto spotQuote = ext::make_shared<SimpleQuote>(spot);
+        ext::shared_ptr<GeneralizedBlackScholesProcess>
+        makeGeneralizedBlackScholesProcess(Date today) {
+            const auto dc = Actual360();
+            const auto spotQuote = ext::make_shared<SimpleQuote>(spot);
 
-        auto qH_SME = ext::make_shared<SimpleQuote>(dividendYield);
-        auto qTS = flatRate(today, qH_SME, dc);
+            const auto qH_SME = ext::make_shared<SimpleQuote>(dividendYield);
+            const auto qTS = flatRate(today, qH_SME, dc);
 
-        auto rH_SME = ext::make_shared<SimpleQuote>(riskfreeRate);
-        auto rTS = flatRate(today, rH_SME, dc);
+            const auto rH_SME = ext::make_shared<SimpleQuote>(riskfreeRate);
+            const auto rTS = flatRate(today, rH_SME, dc);
 
-        auto volaQuote = ext::make_shared<SimpleQuote>(volatility);
-        auto volTS = flatVol(today, volaQuote, dc);
+            const auto volaQuote = ext::make_shared<SimpleQuote>(volatility);
+            const auto volTS = flatVol(today, volaQuote, dc);
 
-        return ext::make_shared<BlackScholesMertonProcess>(Handle<Quote>(spotQuote), Handle(qTS),
-                                                           Handle(rTS), Handle(volTS));
-    }
-};
+            return ext::make_shared<BlackScholesMertonProcess>(
+                Handle<Quote>(spotQuote), Handle(qTS), Handle(rTS), Handle(volTS));
+        }
+    };
+
+}
 
 BOOST_FIXTURE_TEST_SUITE(RkeQLExtTestSuite, TestSuiteFixture)
 
 BOOST_AUTO_TEST_SUITE(BonusClassicOptionTests)
 
-BOOST_AUTO_TEST_CASE(testBonusClassicPayoff) {
+BOOST_AUTO_TEST_CASE(
+    testBonusClassicPayoff) { // NOLINT(misc-use-internal-linkage): the struct is the macro's
     BOOST_TEST_MESSAGE("BonusClassicPayoff test");
 
-    auto data = OptionData();
-    auto payoff = BonusClassicPayoff(data.barrier, data.bonusLevel);
+    const auto data = OptionData();
+    const auto payoff = BonusClassicPayoff(data.barrier, data.bonusLevel);
 
     BOOST_CHECK_EQUAL(payoff(80.00), 80.00);
     BOOST_CHECK_EQUAL(payoff(data.barrier), data.barrier);
@@ -66,17 +71,18 @@ BOOST_AUTO_TEST_CASE(testBonusClassicPayoff) {
     BOOST_CHECK_EQUAL(payoff(125.00), 125.00);
 }
 
-BOOST_AUTO_TEST_CASE(testBonusClassicOption) {
+BOOST_AUTO_TEST_CASE(
+    testBonusClassicOption) { // NOLINT(misc-use-internal-linkage): the struct is the macro's
     BOOST_TEST_MESSAGE("BonusClassicOption test");
 
-    auto data = OptionData();
+    const auto data = OptionData();
 
-    auto today = Date(22, Jun, 2025);
+    const auto today = Date(22, Jun, 2025);
     Settings::instance().evaluationDate() = today;
 
-    auto exerciseDate = today + data.ttm;
+    const auto exerciseDate = today + data.ttm;
 
-    auto bonusClassicOption =
+    const auto bonusClassicOption =
         ext::make_shared<BonusClassicOption>(data.barrier, data.bonusLevel, exerciseDate);
 
     BOOST_CHECK_EQUAL(bonusClassicOption->exercise()->type(), Exercise::European);
@@ -85,26 +91,27 @@ BOOST_AUTO_TEST_CASE(testBonusClassicOption) {
     BOOST_CHECK_EQUAL(bonusClassicOption->bonusLevel(), data.bonusLevel);
 }
 
-BOOST_AUTO_TEST_CASE(testBonusClassicOptionValuation) {
+BOOST_AUTO_TEST_CASE(testBonusClassicOptionValuation) { // NOLINT(misc-use-internal-linkage): the
+                                                        // struct is the macro's
     BOOST_TEST_MESSAGE("BonusClassicOption valuation test");
 
-    auto option_data = OptionData();
+    const auto option_data = OptionData();
     auto market_data = MarketData();
 
-    auto today = Date(22, Jun, 2025);
+    const auto today = Date(22, Jun, 2025);
     Settings::instance().evaluationDate() = today;
 
-    auto exerciseDate = today + option_data.ttm;
+    const auto exerciseDate = today + option_data.ttm;
 
-    auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
+    const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
         option_data.barrier, option_data.bonusLevel, exerciseDate);
 
-    auto process = market_data.makeGeneralizedBlackScholesProcess(today);
-    auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
+    const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
+    const auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
         process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), true, true, 42);
 
     bonusClassicOption->setPricingEngine(mcEngine);
-    auto npv = bonusClassicOption->NPV();
+    const auto npv = bonusClassicOption->NPV();
 
     // Regression lock. The low-discrepancy sequence is deterministic for a fixed seed
     // and time grid, so this pins the engine to its own output; it is not an
@@ -112,25 +119,26 @@ BOOST_AUTO_TEST_CASE(testBonusClassicOptionValuation) {
     BOOST_CHECK_CLOSE_FRACTION(106.96041418042263, npv, 1e-8);
 }
 
-BOOST_AUTO_TEST_CASE(testBonusClassicOptionReplication) {
+BOOST_AUTO_TEST_CASE(testBonusClassicOptionReplication) { // NOLINT(misc-use-internal-linkage): the
+                                                          // struct is the macro's
     BOOST_TEST_MESSAGE("BonusClassicOption replication test");
 
-    auto option_data = OptionData();
+    const auto option_data = OptionData();
     auto market_data = MarketData();
 
-    auto today = Date(22, Jun, 2025);
+    const auto today = Date(22, Jun, 2025);
     Settings::instance().evaluationDate() = today;
 
-    auto exerciseDate = today + option_data.ttm;
+    const auto exerciseDate = today + option_data.ttm;
 
-    auto process = market_data.makeGeneralizedBlackScholesProcess(today);
+    const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
 
-    auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
+    const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
         option_data.barrier, option_data.bonusLevel, exerciseDate);
-    auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
+    const auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
         process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), true, true, 42);
     bonusClassicOption->setPricingEngine(mcEngine);
-    auto npv = bonusClassicOption->NPV();
+    const auto npv = bonusClassicOption->NPV();
 
     // The pricer pays S_T once the barrier has been touched and max(S_T, bonusLevel)
     // otherwise, i.e. S_T + 1{never touched} * max(bonusLevel - S_T, 0): the asset
@@ -143,13 +151,13 @@ BOOST_AUTO_TEST_CASE(testBonusClassicOptionReplication) {
     // sqrt(dt)) with beta = -zeta(1/2) / sqrt(2 * pi).
     // Read from the engine's own grid, so the correction always uses the step the paths
     // were monitored on.
-    auto dt = mcEngine->timeGrid().dt(0);
+    const auto dt = mcEngine->timeGrid().dt(0);
     constexpr Real beta = 0.5826;
-    auto correctedBarrier =
+    const auto correctedBarrier =
         option_data.barrier * std::exp(-beta * market_data.volatility * std::sqrt(dt));
 
     // Receiving the asset at maturity is worth spot * exp(-q * T).
-    auto assetLeg = process->x0() * process->dividendYield()->discount(exerciseDate);
+    const auto assetLeg = process->x0() * process->dividendYield()->discount(exerciseDate);
 
     auto downOutPut =
         BarrierOption(Barrier::DownOut, correctedBarrier, 0.0,
@@ -157,7 +165,7 @@ BOOST_AUTO_TEST_CASE(testBonusClassicOptionReplication) {
                       ext::make_shared<EuropeanExercise>(exerciseDate));
     downOutPut.setPricingEngine(ext::make_shared<AnalyticBarrierEngine>(process));
 
-    auto replication = assetLeg + downOutPut.NPV();
+    const auto replication = assetLeg + downOutPut.NPV();
 
     // Measured residual 3.8e-4 relative; the correction is O(1 / sqrt(steps)) and the
     // grid has 42 steps. Both sides are deterministic, so this is model error, not noise.

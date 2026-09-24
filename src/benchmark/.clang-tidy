@@ -1,0 +1,11 @@
+---
+# Extends the root configuration rather than replacing it, so this directory runs every
+# check the library does except the two below.
+InheritParentConfig: true
+# The random number generators benchmarked here are file-scope fixtures, constructed once
+# and mutated by every iteration: they can be neither const nor function-local without
+# moving their construction into what is being measured.
+Checks: >
+    -bugprone-throwing-static-initialization,
+    -cppcoreguidelines-avoid-non-const-global-variables,
+...

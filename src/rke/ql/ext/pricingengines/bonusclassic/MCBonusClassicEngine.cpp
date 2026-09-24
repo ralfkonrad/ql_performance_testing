@@ -16,11 +16,11 @@ namespace RKE::QL::External {
     }
 
     Real BiasedBonusClassicPathPricer::operator()(const Path& path) const {
-        Size n = path.length();
+        const Size n = path.length();
         QL_REQUIRE(n > 1, "the path cannot be empty");
 
         for (Size i = 1; i < n; i++) {
-            auto assetPrice = path[i];
+            const auto assetPrice = path[i];
             if (assetPrice <= payoff_.barrier()) {
                 return path.back() * discountFactor_;
             }

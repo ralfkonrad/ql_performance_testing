@@ -96,11 +96,26 @@ Source of truth: `.clang-format`.
 
 ### 3.4 clang-tidy
 
-`.clang-tidy` enables `*` and then disables a short, explicit list. A check that
-fires and is not on that list is a real finding: fix it, or silence it with a
-targeted `// NOLINT(<check>)` carrying a reason. Adding a check to the disabled
-list is its own commit. Every entry in that list needs a trailing comma — the
-file says so, because clang-tidy splits on commas.
+`.clang-tidy` enables `*` and then disables an explicit list, grouped by why:
+families that cannot fire here or only duplicate another check, checks the
+QuantLib idiom forbids satisfying, checks that contradict one we keep, and style
+this project decided against. A check that fires and is not on that list is a
+real finding: fix it, or silence it with a targeted `// NOLINT(<check>)` carrying
+a reason. Adding a check to the disabled list is its own commit. Every entry in
+that list needs a trailing comma — the file says so, because clang-tidy splits on
+commas.
+
+Relax a check where the thing forcing it lives, not at the root.
+`src/benchmark/.clang-tidy` sets `InheritParentConfig: true` and drops only the
+two checks the benchmark fixtures force, so `src/rke/ql/ext` keeps running
+everything. A new directory that needs an exception gets its own file the same
+way.
+
+`CheckOptions` comes from QuantLib's `.clang-tidy`: without
+`modernize-make-shared.MakeSmartPtrFunction` the checks point at the `std::`
+spellings that "QuantLib Idioms" forbids. `FormatStyle: file` hands every applied
+fix to clang-format, which is what keeps `--fix` from leaving an inserted brace in
+column 0.
 
 ## 4. Build and Test — Quick Start
 

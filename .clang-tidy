@@ -2,21 +2,60 @@
 # Our own headers only: clang-tidy's default header filter is empty, which reports
 # diagnostics for each translation unit's main file and for no header at all.
 HeaderFilterRegex: '.*/src/.*'
-# Note: clang-tidy splits this list on commas, so every entry needs one.
+# Formats the code around an applied fix with .clang-format, which is what keeps a --fix
+# run from leaving an inserted brace in column 0 and a rewritten typedef over the column
+# limit. clang-tidy's default is 'none'.
+FormatStyle: file
+# From QuantLib's own .clang-tidy: our ownership is theirs, so the checks have to be told
+# what "make shared" means here or they point at the std:: spellings.
+CheckOptions:
+  - key:   cppcoreguidelines-special-member-functions.AllowSoleDefaultDtor
+    value: 1
+  - key:   modernize-make-shared.MakeSmartPtrFunction
+    value: ext::make_shared
+  - key:   modernize-make-shared.MakeSmartPtrFunctionHeader
+    value: <ql/shared_ptr.hpp>
+  - key:   modernize-use-default-member-init.UseAssignment
+    value: 1
+# Everything, minus four groups. Note: clang-tidy splits this list on commas, so every
+# entry needs one. A check that fires and is not here is a real finding.
+#
+# 1. Families that cannot fire on this tree, or only duplicate it.
+# 2. Checks the QuantLib idiom forbids satisfying: the engine pattern, its containers and
+#    its notation. See AGENTS.md, "QuantLib Idioms".
+# 3. Checks that contradict another check we keep.
+# 4. Style this project decided against.
 Checks: >
     *,
     -abseil-*,
     -altera-*,
+    -android-*,
+    -cert-*,
+    -darwin-*,
     -fuchsia-*,
+    -linuxkernel-*,
     -llvmlibc-*,
+    -mpi-*,
+    -objc-*,
+    -openmp-*,
+    -zircon-*,
+    -bugprone-easily-swappable-parameters,
     -cppcoreguidelines-avoid-magic-numbers,
+    -cppcoreguidelines-non-private-member-variables-in-classes,
+    -cppcoreguidelines-pro-bounds-avoid-unchecked-container-access,
+    -misc-include-cleaner,
+    -misc-multiple-inheritance,
+    -misc-non-private-member-variables-in-classes,
+    -misc-override-with-different-visibility,
+    -readability-identifier-length,
+    -readability-magic-numbers,
+    -google-readability-braces-around-statements,
+    -misc-use-anonymous-namespace,
+    -llvm-prefer-static-over-anonymous-namespace,
     -google-build-using-namespace,
     -google-readability-namespace-comments,
     -llvm-header-guard,
     -llvm-include-order,
     -llvm-namespace-comment,
-    -misc-include-cleaner,
-    -misc-non-private-member-variables-in-classes,
     -modernize-use-trailing-return-type,
-    -readability-identifier-length,
-    -readability-magic-numbers,
+...
