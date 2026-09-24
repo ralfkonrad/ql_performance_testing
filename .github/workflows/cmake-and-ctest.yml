@@ -111,7 +111,6 @@ jobs:
         env:
           CC: ${{ matrix.settings.cc }}
           CXX: ${{ matrix.settings.cxx }}
-          CMAKE_CONFIG_TYPE: Release
         # Folded, not literal: the configure command passes 100 columns on one line, and a
         # shell continuation would have to differ between bash and pwsh.
         run: >-
