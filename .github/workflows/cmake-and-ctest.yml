@@ -35,47 +35,52 @@ jobs:
         # not bump runner labels, so a newer image is a deliberate edit here.
         settings:
           [
-            { os: macos-26,       cc: clang,    cxx: clang++ },
+            { os: macos-26,           cc: clang,    cxx: clang++ },
 
-            # A public preview, and the only image carrying the CMake the floor needs, so
-            # the required gate rides a runner with no support commitment.
-            { os: ubuntu-26.04,   cc: clang,    cxx: clang++ },
-            { os: ubuntu-26.04,   cc: gcc,      cxx: g++ },
-            { os: windows-2025,   cc: cl,       cxx: cl }
+            # The only image carrying the CMake the floor needs, hence no older Ubuntu here.
+            { os: ubuntu-26.04,       cc: clang,    cxx: clang++ },
+            { os: ubuntu-26.04,       cc: gcc,      cxx: g++ },
 
-            # { os: macos-13,       cc: clang,    cxx: clang++ },
-            # { os: macos-14,       cc: clang,    cxx: clang++ },
-            # { os: macos-15,       cc: clang,    cxx: clang++ },
+            # Same image contents as the x64 pair above, Homebrew included, so the setup
+            # action needs no arm branch. `runner.arch` is already a segment of the ccache
+            # key, which is what keeps these entries off the x64 ones.
+            { os: ubuntu-26.04-arm,   cc: clang,    cxx: clang++ },
+            { os: ubuntu-26.04-arm,   cc: gcc,      cxx: g++ },
+            { os: windows-2025,       cc: cl,       cxx: cl }
+
+            # { os: macos-13,           cc: clang,    cxx: clang++ },
+            # { os: macos-14,           cc: clang,    cxx: clang++ },
+            # { os: macos-15,           cc: clang,    cxx: clang++ },
             #
             # The ubuntu-22.04 and ubuntu-24.04 images ship CMake 3.31.6, under the floor
             # CMakeLists.txt sets, so either group needs a CMake install step first.
-            # { os: ubuntu-22.04,   cc: clang-13, cxx: clang++-13 },
-            # { os: ubuntu-22.04,   cc: clang-14, cxx: clang++-14 },
-            # { os: ubuntu-22.04,   cc: clang-15, cxx: clang++-15 },
+            # { os: ubuntu-22.04,       cc: clang-13, cxx: clang++-13 },
+            # { os: ubuntu-22.04,       cc: clang-14, cxx: clang++-14 },
+            # { os: ubuntu-22.04,       cc: clang-15, cxx: clang++-15 },
             #
-            # { os: ubuntu-22.04,   cc: gcc-10,   cxx: g++-10 },
-            # { os: ubuntu-22.04,   cc: gcc-11,   cxx: g++-11 },
-            # { os: ubuntu-22.04,   cc: gcc-12,   cxx: g++-12 },
+            # { os: ubuntu-22.04,       cc: gcc-10,   cxx: g++-10 },
+            # { os: ubuntu-22.04,       cc: gcc-11,   cxx: g++-11 },
+            # { os: ubuntu-22.04,       cc: gcc-12,   cxx: g++-12 },
             #
-            # { os: ubuntu-24.04,   cc: clang-16, cxx: clang++-16 },
-            # { os: ubuntu-24.04,   cc: clang-17, cxx: clang++-17 },
-            # { os: ubuntu-24.04,   cc: clang-18, cxx: clang++-18 },
+            # { os: ubuntu-24.04,       cc: clang-16, cxx: clang++-16 },
+            # { os: ubuntu-24.04,       cc: clang-17, cxx: clang++-17 },
+            # { os: ubuntu-24.04,       cc: clang-18, cxx: clang++-18 },
             #
-            # { os: ubuntu-24.04,   cc: gcc-12,   cxx: g++-12 },
-            # { os: ubuntu-24.04,   cc: gcc-13,   cxx: g++-13 },
-            # { os: ubuntu-24.04,   cc: gcc-14,   cxx: g++-14 },
+            # { os: ubuntu-24.04,       cc: gcc-12,   cxx: g++-12 },
+            # { os: ubuntu-24.04,       cc: gcc-13,   cxx: g++-13 },
+            # { os: ubuntu-24.04,       cc: gcc-14,   cxx: g++-14 },
             #
-            # { os: ubuntu-26.04,   cc: clang-20, cxx: clang++-20 },
-            # { os: ubuntu-26.04,   cc: clang-21, cxx: clang++-21 },
-            # { os: ubuntu-26.04,   cc: clang-22, cxx: clang++-22 },
+            # { os: ubuntu-26.04,       cc: clang-20, cxx: clang++-20 },
+            # { os: ubuntu-26.04,       cc: clang-21, cxx: clang++-21 },
+            # { os: ubuntu-26.04,       cc: clang-22, cxx: clang++-22 },
             #
-            # { os: ubuntu-26.04,   cc: gcc-13,   cxx: g++-13 },
-            # { os: ubuntu-26.04,   cc: gcc-14,   cxx: g++-14 },
-            # { os: ubuntu-26.04,   cc: gcc-15,   cxx: g++-15 },
+            # { os: ubuntu-26.04,       cc: gcc-13,   cxx: g++-13 },
+            # { os: ubuntu-26.04,       cc: gcc-14,   cxx: g++-14 },
+            # { os: ubuntu-26.04,       cc: gcc-15,   cxx: g++-15 },
             #
-            # { os: windows-2019,   cc: cl,       cxx: cl },
-            # { os: windows-2022,   cc: cl,       cxx: cl },
-            # { os: windows-2025,   cc: cl,       cxx: cl }
+            # { os: windows-2019,       cc: cl,       cxx: cl },
+            # { os: windows-2022,       cc: cl,       cxx: cl },
+            # { os: windows-2025,       cc: cl,       cxx: cl }
           ]
         cxx-standard: [ 17, 20, 23 ]
         cmake-preset: [ release ]
@@ -106,7 +111,6 @@ jobs:
         env:
           CC: ${{ matrix.settings.cc }}
           CXX: ${{ matrix.settings.cxx }}
-          CMAKE_CONFIG_TYPE: Release
         # Folded, not literal: the configure command passes 100 columns on one line, and a
         # shell continuation would have to differ between bash and pwsh.
         run: >-
@@ -122,7 +126,7 @@ jobs:
           ctest --version
           ctest --preset ${{ matrix.cmake-preset }} --extra-verbose
 
-  # The single name the branch ruleset requires: the twelve generated matrix names would each
+  # The single name the branch ruleset requires: the eighteen generated matrix names would each
   # have to be mirrored there, and a removed leg would leave a context that never reports.
   ci-gate:
     needs: cmake-build-and-test
