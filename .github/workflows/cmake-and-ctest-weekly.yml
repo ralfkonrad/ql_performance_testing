@@ -1,0 +1,378 @@
+name: Weekly Extended Build Matrix
+
+# A hunt for failures the nightly matrix cannot see, not a second gate. It runs cold on images
+# and configurations nobody builds during the week, and it writes no compiler cache — see the
+# `save-ccache` comment on the first job.
+on:
+  # Sunday, clear of the nightly build at 00:33, the ccache prune at 03:33 and the Monday
+  # 02:23/04:23 lint and CodeQL slots. `schedule` takes an IANA timezone, so the hour holds
+  # across DST. GitHub disables a scheduled workflow after 60 days without repository activity.
+  schedule:
+    - cron: '23 1 * * 0'
+      timezone: Europe/Berlin
+  workflow_dispatch:
+    inputs:
+      group:
+        description: Which group of legs to run.
+        type: choice
+        required: false
+        default: all
+        options:
+          - all
+          - images
+          - compilers
+          - config
+
+# Same reasoning as the nightly workflow. The report job widens this for itself and nothing else.
+permissions:
+  contents: read
+
+# One run at a time, and never cancelled: a run that is half finished has already spent hours of
+# runner time, and there is no gate waiting on the result.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  # "Does it build and run on the images we do not use nightly?" Each image runs the compiler it
+  # ships, at the floor standard and the newest one; the nightly already crosses all three on the
+  # images it uses, so 20 would add nothing here.
+  images:
+    # `inputs` is empty on a schedule, and an empty string compares equal to the default. The
+    # other two jobs repeat this because the `env` context is not available in a job condition.
+    if: inputs.group == '' || inputs.group == 'all' || inputs.group == 'images'
+
+    strategy:
+      fail-fast: false
+      matrix:
+        settings:
+          [
+            # The four images the nightly matrix also uses, as controls. A weekly leg differs
+            # from its nightly counterpart by running cold and by running QuantLib's own test
+            # suite, so when another leg on the same OS fails, the control says whether the
+            # cause is the image or one of those two differences.
+            { os: ubuntu-26.04,       cc: gcc,      cxx: g++ },
+            { os: ubuntu-26.04-arm,   cc: gcc,      cxx: g++ },
+            { os: macos-26,           cc: clang,    cxx: clang++ },
+            { os: windows-2025,       cc: cl,       cxx: cl },
+
+            # The images the nightly matrix does not use. Each ships its own default toolchain
+            # and its own Homebrew Boost, which is where this group earns its runtime.
+            { os: ubuntu-24.04,       cc: gcc,      cxx: g++ },
+            { os: ubuntu-24.04-arm,   cc: gcc,      cxx: g++ },
+            { os: ubuntu-22.04,       cc: gcc,      cxx: g++ },
+            { os: macos-15,           cc: clang,    cxx: clang++ },
+            { os: macos-26-intel,     cc: clang,    cxx: clang++ },
+            { os: windows-2022,       cc: cl,       cxx: cl }
+
+            # windows-11-arm is deliberately absent. The setup action installs Boost on Windows
+            # from the SourceForge MSVC binaries, which exist for 32 and 64 bit x86 only, so an
+            # arm64 leg needs a Boost built from source before the label is worth adding.
+          ]
+        cxx-standard: [ 17, 23 ]
+
+    runs-on: ${{ matrix.settings.os }}
+
+    # Cold builds throughout, so the nightly's measured 25/34/83 min maxima do not apply: those
+    # are warm-cache numbers. Still a hang catcher rather than a budget.
+    timeout-minutes: ${{ (startsWith(matrix.settings.os, 'windows') && 210) || 120 }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: "true"
+
+      - name: Setup needed software
+        uses: ./.github/actions/setup
+        with:
+          os: ${{ matrix.settings.os }}
+          cxx: ${{ matrix.settings.cxx }}
+          cxx-standard: ${{ matrix.cxx-standard }}
+          # Never, on any leg of this workflow. A scheduled run is on refs/heads/master, so the
+          # nightly's gate would evaluate true here and write an entry per leg: the 10GB quota
+          # would evict the nightly's entries, and these would never be collected, because
+          # prune_ccache_entries.yml retires a key only after 30 days without a refresh and this
+          # workflow refreshes every 7.
+          save-ccache: 'false'
+
+      - name: Configure CMake and Build
+        env:
+          CC: ${{ matrix.settings.cc }}
+          CXX: ${{ matrix.settings.cxx }}
+        run: >-
+          cmake --version
+
+          cmake --preset release -DCMAKE_CXX_STANDARD=${{ matrix.cxx-standard }} -L
+
+          cmake --build --preset release --verbose
+
+      - name: CTest
+        run: ctest --preset release --extra-verbose
+
+      # Built by every preset and run nowhere else in CI. A compiler or a standard library that
+      # miscompiles QuantLib shows up here long before it shows up in our own eight test cases.
+      - name: CTest, QuantLib's own suite
+        run: ctest --preset release -R quantlib
+
+  # A compile-time question, so it is answered with the cheapest build that can answer it:
+  # QL_BUILD_TEST_SUITE=OFF drops what dominates the compile time, and only the newest standard
+  # is used, because that is where a construct a compiler has not caught up with breaks.
+  compilers:
+    if: inputs.group == '' || inputs.group == 'all' || inputs.group == 'compilers'
+
+    strategy:
+      fail-fast: false
+      matrix:
+        settings:
+          [
+            { cc: gcc-13,    cxx: g++-13,      package: g++-13 },
+            { cc: gcc-14,    cxx: g++-14,      package: g++-14 },
+            { cc: gcc-15,    cxx: g++-15,      package: g++-15 },
+
+            { cc: clang-19,  cxx: clang++-19,  package: clang-19 },
+            { cc: clang-20,  cxx: clang++-20,  package: clang-20 },
+            { cc: clang-21,  cxx: clang++-21,  package: clang-21 },
+            { cc: clang-22,  cxx: clang++-22,  package: clang-22 }
+          ]
+
+    runs-on: ubuntu-26.04
+
+    timeout-minutes: 120
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: "true"
+
+      - name: Setup needed software
+        uses: ./.github/actions/setup
+        with:
+          os: ubuntu-26.04
+          cxx: ${{ matrix.settings.cxx }}
+          cxx-standard: 23
+          cxx-apt-package: ${{ matrix.settings.package }}
+          # See the images job.
+          save-ccache: 'false'
+
+      - name: Configure CMake and Build
+        env:
+          CC: ${{ matrix.settings.cc }}
+          CXX: ${{ matrix.settings.cxx }}
+        run: >-
+          cmake --version
+
+          ${{ matrix.settings.cxx }} --version
+
+          cmake --preset release -DCMAKE_CXX_STANDARD=23 -DQL_BUILD_TEST_SUITE=OFF -L
+
+          cmake --build --preset release --verbose
+
+      - name: CTest
+        run: ctest --preset release --extra-verbose
+
+  # The nightly builds Release with QuantLib's defaults and nothing else. This group holds the
+  # compiler and the image fixed and varies what the nightly never touches, at the floor
+  # standard so that a failure is attributable to the configuration alone.
+  config:
+    if: inputs.group == '' || inputs.group == 'all' || inputs.group == 'config'
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # Block style, not the flow style the other two matrices use: a folded scalar cannot
+        # live inside `{ }`, and the flag lists here are too long for one line.
+        settings:
+          # QuantLib's own assertions, which a Release build compiles out.
+          - name: debug
+            cc: gcc
+            cxx: g++
+            preset: debug
+            flags: -DQL_EXTRA_SAFETY_CHECKS=ON
+
+          # clang rather than gcc: the sanitizer runtimes it ships are the better supported
+          # pair. -fno-sanitize-recover turns a UBSan report into a failed test rather than a
+          # line in a log nobody reads. The inner quotes survive the fold and are what keeps
+          # the flag list one CMake argument.
+          - name: sanitizers
+            cc: clang
+            cxx: clang++
+            preset: release
+            flags: >-
+              -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-sanitize-recover=all
+              -fno-omit-frame-pointer -g"
+              -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=address,undefined
+
+          # The standard library's own bounds and precondition checks, off by default in a
+          # Release build and worth a container access each.
+          - name: hardened-stdlib
+            cc: gcc
+            cxx: g++
+            preset: release
+            flags: -DCMAKE_CXX_FLAGS=-D_GLIBCXX_ASSERTIONS
+
+          # The QuantLib switches that change how singletons and observers behave. Pitfall 5.3
+          # in AGENTS.md is about exactly that wiring, and QL_THROW_IN_CYCLES turns a
+          # notification loop from a slow test into a failing one.
+          - name: ql-switches
+            cc: gcc
+            cxx: g++
+            preset: release
+            flags: >-
+              -DQL_ENABLE_SESSIONS=ON -DQL_ENABLE_THREAD_SAFE_OBSERVER_PATTERN=ON
+              -DQL_THROW_IN_CYCLES=ON -DQL_USE_INDEXED_COUPON=ON
+
+    runs-on: ubuntu-26.04
+
+    # The widest bound here, and the reason it is not the images job's 120: the debug and
+    # sanitizer legs run QuantLib's whole suite unoptimised or instrumented. Measure the first
+    # full run before trusting this number.
+    timeout-minutes: 300
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: "true"
+
+      - name: Setup needed software
+        uses: ./.github/actions/setup
+        with:
+          os: ubuntu-26.04
+          cxx: ${{ matrix.settings.cxx }}
+          cxx-standard: 17
+          # See the images job.
+          save-ccache: 'false'
+
+      - name: Configure CMake and Build
+        env:
+          CC: ${{ matrix.settings.cc }}
+          CXX: ${{ matrix.settings.cxx }}
+        run: >-
+          cmake --version
+
+          cmake --preset ${{ matrix.settings.preset }} ${{ matrix.settings.flags }} -L
+
+          cmake --build --preset ${{ matrix.settings.preset }} --verbose
+
+      - name: CTest
+        run: ctest --preset ${{ matrix.settings.preset }} --extra-verbose
+
+      - name: CTest, QuantLib's own suite
+        run: ctest --preset ${{ matrix.settings.preset }} -R quantlib
+
+  # A scheduled run nobody looks at is a run nobody has. This is the only job that needs a token
+  # wider than read, so the permission sits here rather than at the top of the file.
+  report:
+    needs: [ images, compilers, config ]
+    if: always()
+    runs-on: ubuntu-26.04
+
+    permissions:
+      # listJobsForWorkflowRun, to name the legs that failed.
+      actions: read
+      issues: write
+
+    timeout-minutes: 10
+
+    steps:
+      - name: Summarise, and open or close the tracking issue
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          RESULT_IMAGES: ${{ needs.images.result }}
+          RESULT_COMPILERS: ${{ needs.compilers.result }}
+          RESULT_CONFIG: ${{ needs.config.result }}
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const runUrl =
+              `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+
+            // One title, forever: a repeat failure updates this issue instead of opening a
+            // second one, the same way the lint workflows reuse one branch each.
+            const title = 'Weekly extended matrix is failing';
+
+            const groups = [
+              ['images', process.env.RESULT_IMAGES],
+              ['compilers', process.env.RESULT_COMPILERS],
+              ['config', process.env.RESULT_CONFIG],
+            ];
+
+            // A run the concurrency group or a human cancelled says nothing about the code, so
+            // it neither opens an issue nor closes one.
+            if (groups.some(([, result]) => result === 'cancelled')) {
+              core.info('A group was cancelled; leaving the tracking issue as it is.');
+              return;
+            }
+            const failed = groups.filter(([, result]) => result === 'failure');
+
+            // `filter: latest` so a re-run of one leg replaces its earlier attempt rather than
+            // being listed beside it.
+            const jobs = await github.paginate(
+              github.rest.actions.listJobsForWorkflowRun,
+              { owner, repo, run_id: context.runId, filter: 'latest', per_page: 100 });
+            const failedJobs = jobs
+              .filter((job) => job.conclusion === 'failure' || job.conclusion === 'timed_out')
+              .map((job) => `- [${job.name}](${job.html_url}) — ${job.conclusion}`);
+
+            core.summary.addHeading('Weekly extended matrix', 2);
+            core.summary.addTable([
+              [{ data: 'Group', header: true }, { data: 'Result', header: true }],
+              ...groups.map(([name, result]) => [name, result ?? 'skipped']),
+            ]);
+            if (failedJobs.length > 0) {
+              core.summary.addHeading('Failing legs', 3);
+              core.summary.addRaw(failedJobs.join('\n'), true);
+            }
+            core.summary.addLink('This run', runUrl);
+            await core.summary.write();
+
+            const open = await github.paginate(
+              github.rest.issues.listForRepo,
+              { owner, repo, state: 'open', per_page: 100 });
+            const tracking = open.find((issue) => issue.title === title && !issue.pull_request);
+
+            if (failed.length === 0) {
+              if (!tracking) {
+                core.info('Green, and no tracking issue is open.');
+                return;
+              }
+              // A dispatch of one group says nothing about the other two, so only a run that
+              // actually exercised all three may declare the matrix green again.
+              if (groups.some(([, result]) => result !== 'success')) {
+                core.info(`Green, but not every group ran; leaving #${tracking.number} open.`);
+                return;
+              }
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: tracking.number,
+                body: `Green again in [this run](${runUrl}). Closing.`,
+              });
+              await github.rest.issues.update(
+                { owner, repo, issue_number: tracking.number, state: 'closed' });
+              core.info(`Closed #${tracking.number}.`);
+              return;
+            }
+
+            const body = [
+              `The weekly extended matrix failed in [this run](${runUrl}).`,
+              '',
+              `Failing groups: ${failed.map(([name]) => name).join(', ')}.`,
+              '',
+              failedJobs.length > 0 ? failedJobs.join('\n') : '_No leg reported a conclusion._',
+              '',
+              'This issue is reused by every run and closes itself once a run is green.',
+            ].join('\n');
+
+            if (tracking) {
+              await github.rest.issues.update(
+                { owner, repo, issue_number: tracking.number, body });
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: tracking.number,
+                body: `Still failing in [this run](${runUrl}).`,
+              });
+              core.info(`Updated #${tracking.number}.`);
+            } else {
+              const created = await github.rest.issues.create({ owner, repo, title, body });
+              core.info(`Opened #${created.data.number}.`);
+            }
+
+            core.setFailed(`Failing group(s): ${failed.map(([name]) => name).join(', ')}.`);

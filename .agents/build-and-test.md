@@ -167,16 +167,18 @@ Everything is under `.github/workflows/`.
 | Workflow                     | Triggers                                                                 | Notes                                               |
 | ---------------------------- | ------------------------------------------------------------------------ | --------------------------------------------------- |
 | `cmake-and-ctest.yml`        | push to `master`, every pull request, nightly 00:33 Berlin, dispatch     | The only workflow that gates a pull request.        |
+| `cmake-and-ctest-weekly.yml` | weekly, Sundays 01:23 Berlin, dispatch                                   | Extended matrix. Gates nothing, writes no cache.    |
 | `clang-format-lint.yml`      | weekly, Mondays 02:23 Berlin, dispatch                                   | Opens a pull request with the fixes.                |
 | `clang-tidy.yml`             | weekly, Mondays 02:23 Berlin, dispatch                                   | Opens a pull request with the fixes.                |
 | `codeql.yml`                 | weekly, Mondays 04:23 Berlin, dispatch                                   | Autobuild repeats the whole Ubuntu build, uncached. |
 | `delete_workflow_caches.yml` | pull request closed, branch deleted, dispatch                            | Keeps the shared 10 GB cache quota clear.           |
 | `prune_ccache_entries.yml`   | nightly 03:33 Berlin, dispatch                                           | Thins `master`'s compiler caches; `dry-run` input.  |
 
-The matrix is macOS/clang, Ubuntu/clang, Ubuntu/gcc and Windows/MSVC, each at
-C++17, 20 and 23, release only — twelve legs. `ci-gate` collapses them into the
-single status the branch ruleset requires; it runs `if: always()`, so a failing
-leg cannot slip through as a skipped check.
+The nightly matrix is six runner/compiler rows — macOS/clang, Ubuntu x64 and
+Ubuntu arm64 each with clang and gcc, and Windows/MSVC — at C++17, 20 and 23,
+release only: eighteen legs. `ci-gate` collapses them into the single status the
+branch ruleset requires; it runs `if: always()`, so a failing leg cannot slip
+through as a skipped check.
 
 Compiler caches (ccache, sccache on Windows) are keyed on
 os-arch-compiler-compilerversion-standard and are written back **only** from
@@ -195,6 +197,36 @@ It also deletes the survivor once nothing has refreshed that key for 30 days: a
 key only stops being refreshed when the leg writing it is gone, and its entry
 then holds quota no build can restore from. Dispatch it with `dry-run` to see
 what it would remove.
+
+`cmake-and-ctest-weekly.yml` is the hunt for what eighteen warm legs cannot see.
+It runs Sunday at 01:23 Berlin in three groups. `images` builds ten runner
+images at C++17 and 23 with the compiler each one ships, four of them also
+nightly images and there as controls. `compilers` builds gcc 13–15 and clang
+19–22 on `ubuntu-26.04` at C++23 with `QL_BUILD_TEST_SUITE=OFF`, because that
+group asks whether the code compiles, and dropping QuantLib's suite is what
+makes it cheap. `config` builds four configurations the nightly holds fixed — a
+Debug build, ASan and UBSan, `_GLIBCXX_ASSERTIONS`, and QuantLib's session,
+observer and indexed-coupon switches. Every `images` and `config` leg also runs
+`ctest --preset release -R quantlib`, which nothing else in CI does.
+
+Dispatch it with the `group` input to run one of the three alone; that is the
+cheapest way to check a change to it. Two properties are load-bearing:
+
+- **It writes no compiler cache.** A scheduled run is on `refs/heads/master`, so
+  the nightly's `save-ccache` gate would evaluate true here, and thirty-one more
+  entries would both evict the nightly's against the 10 GB quota and outlive
+  `prune_ccache_entries.yml`, which retires a key only after 30 days without a
+  refresh. Every job passes `save-ccache: 'false'` literally.
+- **It gates nothing.** It has no `ci-gate` job and its own concurrency group. A
+  failing run opens one issue titled "Weekly extended matrix is failing",
+  updates it on the next failure, and closes it once a run with all three groups
+  green comes in.
+
+`windows-11-arm` is deliberately absent: the setup action installs Boost on
+Windows from the SourceForge MSVC binaries, which exist for x86 only. Two parts
+of the setup action exist for this workflow — the `cxx-apt-package` input, which
+installs a named gcc or clang before anything reads a compiler version, and a
+step that installs a newer CMake when an image ships below the 4.0 floor.
 
 `clang-format-lint.yml` and `clang-tidy.yml` open a pull request with whatever
 they changed, which is why neither has a push or `pull_request` trigger. They

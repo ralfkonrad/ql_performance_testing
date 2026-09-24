@@ -16,6 +16,14 @@ inputs:
     description: The c++ standard to use.
     required: true
 
+  cxx-apt-package:
+    description:
+      An apt package holding the compiler named by `cxx`, e.g. `g++-14` or `clang-21`,
+      installed before anything reads a compiler version. Empty, the default, uses whatever the
+      image ships. Linux only, because the other two images have no second toolchain to install.
+    required: false
+    default: ''
+
   save-ccache:
     description:
       Whether this job may write its compiler cache back. The caller decides, so that moving
@@ -56,6 +64,40 @@ runs:
         # to warn about and the formula index has to be fetched before it can be built.
         brew update
         brew install boost
+
+    - name: Install the requested compiler on Linux
+      if: runner.os == 'Linux' && inputs.cxx-apt-package != ''
+      shell: bash
+      run: |
+        package='${{ inputs.cxx-apt-package }}'
+
+        # The archive first: an image usually carries several majors of both families already,
+        # and a package that is there needs no third-party repository at all. The extra
+        # repositories below are the fallback, and each is added only for the family asking
+        # for it.
+        if ! apt-cache show "$package" > /dev/null 2>&1; then
+          case "$package" in
+            g++-*)
+              sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+              ;;
+            clang-*)
+              # llvm.sh takes the major alone and adds the apt.llvm.org suite for this release.
+              # It installs as well as adds, hence the early exit.
+              version="${package#clang-}"
+              wget -qO "$RUNNER_TEMP/llvm.sh" https://apt.llvm.org/llvm.sh
+              chmod +x "$RUNNER_TEMP/llvm.sh"
+              sudo "$RUNNER_TEMP/llvm.sh" "$version"
+              exit 0
+              ;;
+            *)
+              echo "::error::cxx-apt-package must name a g++-* or clang-* package, not $package"
+              exit 1
+              ;;
+          esac
+          sudo apt-get update
+        fi
+
+        sudo apt-get install -y "$package"
 
     - name: Setup build variables on macOS
       if: runner.os == 'macOS'
@@ -199,6 +241,41 @@ runs:
       if: runner.os == 'Windows'
       with:
         arch: x64
+
+    - name: Ensure CMake meets the floor
+      shell: bash
+      # After the per-OS setup above, which is what puts brew and choco within reach.
+      run: |
+        # CMakeLists.txt sets 4.0 and fails below it. Every image the nightly matrix uses ships
+        # past that; the older ones the weekly matrix adds do not all. Checked rather than
+        # installed unconditionally, so the common case stays free and a future image that
+        # regresses is repaired here instead of failing in the caller's configure with a
+        # message about policies.
+        floor=4.0
+        have=$(cmake --version | head -1 | awk '{ print $3 }')
+        echo "cmake: $have (floor $floor)"
+
+        if [ "$(printf '%s\n%s\n' "$floor" "$have" | sort -V | head -1)" = "$floor" ]; then
+          exit 0
+        fi
+
+        case "$RUNNER_OS" in
+          Linux | macOS)
+            # Same shape as the macOS setup above: `brew install` on a present-but-outdated
+            # formula warns and changes nothing, so ask which of the two this is.
+            if brew list --formula --versions cmake > /dev/null 2>&1; then
+              brew upgrade cmake
+            else
+              brew install cmake
+            fi
+            ;;
+          Windows)
+            # The installer touches PATH only when asked, and only for shells started after it,
+            # so the directory is exported here as well.
+            choco install -y cmake --installargs 'ADD_CMAKE_TO_PATH=System'
+            echo 'C:\Program Files\CMake\bin' >> "$GITHUB_PATH"
+            ;;
+        esac
 
     - name: Determine the compiler cache key
       id: cache-key
