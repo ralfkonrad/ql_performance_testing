@@ -1,9 +1,6 @@
 name: Build and Test with CMake and CTest
 
 on:
-  # `pull_request` already builds every branch, so an unscoped `push` built each commit of an
-  # open pull request twice, against the single 10GB cache quota. The cost of scoping it to
-  # master is that a branch without a pull request runs nothing until one is opened.
   push:
     branches:
       - master
@@ -13,14 +10,9 @@ on:
       timezone: Europe/Berlin
   workflow_dispatch: { }
 
-# Declared read-only so that flipping the repository default to read-write does not hand a
-# write token to cmake, brew, apt, choco and the third-party actions this matrix runs.
 permissions:
   contents: read
 
-# master must never be cancelled: its compiler caches are the only ones every other ref can
-# restore from. `github.ref` is `refs/pull/<n>/merge` on a pull request, so the two never
-# share a group.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
@@ -30,24 +22,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Pinned, not `*-latest`: the ccache key is built from this label, so an image
-        # migration would swap the toolchain while leaving the key untouched. Dependabot does
-        # not bump runner labels, so a newer image is a deliberate edit here.
-        #
-        # Deliberately short. The older images, the other architectures and the individual gcc
-        # and clang majors are `cmake-and-ctest-weekly.yml`, which runs cold and writes no
-        # cache; adding one here costs a cache key and a slot in every pull request.
         settings:
           [
             { os: macos-26,           cc: clang,    cxx: clang++ },
 
-            # The only image carrying the CMake the floor needs, hence no older Ubuntu here.
             { os: ubuntu-26.04,       cc: clang,    cxx: clang++ },
             { os: ubuntu-26.04,       cc: gcc,      cxx: g++ },
 
-            # Same image contents as the x64 pair above, Homebrew included, so the setup
-            # action needs no arm branch. `runner.arch` is already a segment of the ccache
-            # key, which is what keeps these entries off the x64 ones.
             { os: ubuntu-26.04-arm,   cc: clang,    cxx: clang++ },
             { os: ubuntu-26.04-arm,   cc: gcc,      cxx: g++ },
             { os: windows-2025,       cc: cl,       cxx: cl }
@@ -57,8 +38,6 @@ jobs:
 
     runs-on: ${{ matrix.settings.os }}
 
-    # A hang catcher, not a budget. Measured maxima are 25 min on macOS, 34 on Ubuntu and 83
-    # on Windows, hence the separate Windows bound; both sit far below GitHub's 6h default.
     timeout-minutes: ${{ (startsWith(matrix.settings.os, 'windows') && 120) || 60 }}
 
     steps:
@@ -73,16 +52,12 @@ jobs:
           os: ${{ matrix.settings.os }}
           cxx: ${{ matrix.settings.cxx }}
           cxx-standard: ${{ matrix.cxx-standard }}
-          # Only master's entries are restorable from every other ref, so a topic branch that
-          # writes one just fills the quota. The gate sits here, next to the triggers it reads.
           save-ccache: ${{ github.ref == 'refs/heads/master' }}
 
       - name: Configure CMake and Build
         env:
           CC: ${{ matrix.settings.cc }}
           CXX: ${{ matrix.settings.cxx }}
-        # Folded, not literal: the configure command passes 100 columns on one line, and a
-        # shell continuation would have to differ between bash and pwsh.
         run: >-
           cmake --version
 
@@ -96,21 +71,15 @@ jobs:
           ctest --version
           ctest --preset ${{ matrix.cmake-preset }} --extra-verbose
 
-  # The single name the branch ruleset requires: the eighteen generated matrix names would each
-  # have to be mirrored there, and a removed leg would leave a context that never reports.
   ci-gate:
     needs: cmake-build-and-test
-    # Without this a failing leg skips the job, and a skipped required check counts as neutral.
     if: always()
     runs-on: ubuntu-26.04
 
-    # No checkout, no build, one comparison.
     timeout-minutes: 5
 
     steps:
       - name: Check the result of the matrix
-        # `result` is `success` only when every leg was; a run the concurrency group cancelled
-        # reports `cancelled` here and blocks, which is correct.
         env:
           RESULT: ${{ needs.cmake-build-and-test.result }}
         run: |

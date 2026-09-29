@@ -1,8 +1,6 @@
 name: Prune Superseded ccache Entries
 
 on:
-  # After the nightly build at 00:33, which is bounded at 120 min. Every master run writes a
-  # new timestamped entry per leg, so without this they pile up until the quota evicts them.
   schedule:
     - cron: '33 3 * * *'
       timezone: Europe/Berlin
@@ -38,20 +36,12 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
 
-            // Only master writes ccache entries, and only its entries are restorable from
-            // every other ref.
             const caches = await github.paginate(
               github.rest.actions.getActionsCacheList,
               { owner, repo, ref: 'refs/heads/master', per_page: 100 });
 
-            // hendrikmuhs/ccache-action appends an ISO timestamp to the key it is given, so
-            // each run writes a new entry rather than updating one. Anything without that
-            // suffix is somebody else's cache and is left alone.
             const stamped = /-\d{4}-\d{2}-\d{2}T[\d:.]+Z?$/;
 
-            // Every master run rewrites every live key, so a key whose newest entry is this
-            // stale is one nothing asks for any more — a retired runner label, compiler or
-            // standard. Its survivor holds quota that no build can ever restore from.
             const retiredAfterDays = 30;
             const retiredBefore = Date.now() - retiredAfterDays * 24 * 60 * 60 * 1000;
 
@@ -90,8 +80,6 @@ jobs:
                 deleted += 1;
                 core.info(`Deleted ${cache.id} ${cache.key} (${size} MB)`);
               } catch (error) {
-                // Only a concurrent deletion is tolerable, so that a revoked token cannot
-                // report a green cleanup that deleted nothing.
                 if (error.status !== 404) {
                   throw error;
                 }

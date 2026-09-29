@@ -1,23 +1,14 @@
-# CMake 4 is the floor: it turns every policy through 4.0 NEW without restating them one at
-# a time, CMP0167 above all, which retires the FindBoost module for the upstream
-# BoostConfig.cmake. Every image the matrix runs on ships 4.4.3.
 cmake_minimum_required(VERSION 4.0)
 
-# LANGUAGES CXX: both submodules declare CXX only, so nothing here needs a C compiler and
-# probing for one only slows configure down.
 project(ql_performance_testing VERSION 0.0.1 LANGUAGES CXX)
 
-# Read once at the own-code root, src/CMakeLists.txt, which is where the policy is applied.
 option(RKE_COMPILE_WARNING_AS_ERROR "Compile warnings as errors" ON)
 option(RKE_USE_CLANG_TIDY "Use clang-tidy when building" OFF)
 
-# Honoured because CMP0091 is NEW, which the floor above guarantees.
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 list(PREPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 
-# Defines rke_warnings and its rke::warnings alias. Position does not matter: the flags reach
-# the targets that link them, not everything declared afterwards.
 include(WarningLevels)
 
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -41,12 +32,8 @@ endif ()
 
 find_package(Boost CONFIG REQUIRED)
 
-# Calls enable_testing() itself, under BUILD_TESTING.
 include(CTest)
 
-# SYSTEM: both submodules export their own include directories, and the directory property
-# demotes those to -isystem for every target created under it. Nothing here has to name a
-# path inside external/ itself.
 add_subdirectory(external SYSTEM)
 
 add_subdirectory(src)

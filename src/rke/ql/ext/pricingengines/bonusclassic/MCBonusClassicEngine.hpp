@@ -30,8 +30,6 @@ namespace RKE::QL::External {
 
         void calculate() const override;
         QuantLib::ext::shared_ptr<path_pricer_type> pathPricer() const override;
-        // Public so that a caller can read the grid the price was sampled on instead of
-        // rebuilding it; valid once the instrument has passed its arguments to the engine.
         QuantLib::TimeGrid timeGrid() const override;
 
       private:
@@ -104,8 +102,6 @@ namespace RKE::QL::External {
         const auto grid = timeGrid();
         const auto discountFactor = process_->riskFreeRate()->discount(grid.back());
 
-        // From the payoff, not from arguments_: the two carry the same barrier and bonus
-        // level, and only this way does the object checked above price the paths.
         return QuantLib::ext::shared_ptr<path_pricer_type>(
             new BiasedBonusClassicPathPricer(*payoff, discountFactor));
     }

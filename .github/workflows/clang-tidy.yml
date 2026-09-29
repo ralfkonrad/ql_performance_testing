@@ -1,18 +1,11 @@
 name: Apply clang-tidy fixes
 
 on:
-  # Weekly, not per push: every run opens a pull request, and create-pull-request reuses one
-  # branch, so each run updates that pull request instead of opening another.
   schedule:
     - cron: '23 2 * * 1'
       timezone: Europe/Berlin
   workflow_dispatch: { }
 
-# The repository's default workflow token is read-only, so this is what lets
-# `create-pull-request` push a branch and open a pull request from here. The repository
-# setting "Allow GitHub Actions to create and approve pull requests" is a separate switch
-# this block cannot grant; it is on, and were it off the last step would fail with "GitHub
-# Actions is not permitted to create or approve pull requests" whatever is written here.
 permissions:
   contents: write
   pull-requests: write
@@ -26,29 +19,17 @@ jobs:
         with:
           submodules: "true"
 
-      # The action the build matrix uses, so clang-tidy analyses against the Boost the matrix
-      # compiles against instead of a second, apt-provided one. It also brings ninja.
       - name: Setup needed software
         uses: ./.github/actions/setup
         with:
           os: ubuntu-26.04
           cxx: clang++
           cxx-standard: 17
-          # Only master's matrix entries are restorable from every ref, and this job's Debug
-          # build has nothing the matrix could restore, so it writes none.
           save-ccache: 'false'
 
-      # The Homebrew LLVM used locally, so a local run predicts this one; apt's clang-tidy
-      # is a second C++ toolchain and trailed it by two majors. Pinned by major, so a brew
-      # bump is a commit here rather than a silent change. Linuxbrew's llvm is not keg-only,
-      # so this also puts clang++ ahead of /usr/bin and the job compiles and lints with one
-      # toolchain. The action above already ran `brew update`.
       - name: Setup LLVM
         run: brew install llvm@23
 
-      # The preset is report-only, so --fix is passed here, where a -D overrides the cache
-      # variable: this is the one place that means to rewrite sources. The compiler is the
-      # preset's, so that a local run of it configures the tree this one does.
       - name: Running clang-tidy
         run: |
           cmake --preset clang-tidy -DRKE_CLANG_TIDY_OPTIONS=--fix
@@ -59,8 +40,6 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           branch: clang-tidy-fixes-${{ github.ref_name }}
           base: ${{ github.ref_name }}
-          # The action stages everything it finds, and the job leaves a compiler cache and a
-          # build tree in the workspace. Only clang-tidy's own fixes belong in the pull request.
           add-paths: src/**
           delete-branch: true
           commit-message: "Automated fixes by clang-tidy"
