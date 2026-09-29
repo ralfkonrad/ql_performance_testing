@@ -2,12 +2,6 @@
 Language: Cpp
 Standard: c++17
 
-
-# The following is close to the style we've been using all these years
-# without formalizing it.  Formatting won't be enforced, but this file
-# can help if you want to use the general feel of the library.
-
-
 BasedOnStyle: LLVM
 
 IndentWidth: 4
@@ -22,8 +16,6 @@ AlwaysBreakTemplateDeclarations: true
 
 DerivePointerAlignment: false
 PointerAlignment: Left
-
-# QuantLib headers first, then Boost, then std
 
 SortIncludes: true
 IncludeBlocks: Merge

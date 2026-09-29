@@ -44,7 +44,6 @@ namespace RKE::QL::External {
         QuantLib::ext::shared_ptr<BonusClassicPayoff> bonusClassicPayoff_;
     };
 
-    //! %Arguments for barrier option calculation
     class BonusClassicOption::arguments : public OneAssetOption::arguments {
       public:
         arguments();
@@ -53,7 +52,6 @@ namespace RKE::QL::External {
         void validate() const override;
     };
 
-    //! %Barrier-option %engine base class
     class BonusClassicOption::engine : public QuantLib::GenericEngine<arguments, results> {
       protected:
         bool triggered(QuantLib::Real underlying) const;

@@ -223,9 +223,6 @@ jobs:
 
     runs-on: ubuntu-26.04
 
-    # The widest bound here, and the reason it is not the images job's 120: the debug and
-    # sanitizer legs run QuantLib's whole suite unoptimised or instrumented. Measure the first
-    # full run before trusting this number.
     timeout-minutes: 300
 
     steps:

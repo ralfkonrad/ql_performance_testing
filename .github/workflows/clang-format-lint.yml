@@ -19,8 +19,6 @@ permissions:
 jobs:
   clang-format:
     runs-on: ubuntu-26.04
-    # Never run, so nothing is measured; clang-format over this tree is minutes and the
-    # QuantLib submodule checkout is the only part that can drag.
     timeout-minutes: 20
 
     steps:
