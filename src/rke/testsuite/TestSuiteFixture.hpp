@@ -22,7 +22,6 @@ namespace RKE::QL::External {
         }
 
       private:
-        // Restore settings after each test.
         QuantLib::SavedSettings restore;
     };
 }

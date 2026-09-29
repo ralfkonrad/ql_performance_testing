@@ -58,6 +58,6 @@ namespace RKE::QL::External {
       protected:
         bool triggered(QuantLib::Real underlying) const;
     };
-} // namespace RKE::QL::External
+}
 
 #endif // BONUSCLASSICOPTION_HPP

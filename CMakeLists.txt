@@ -7,7 +7,6 @@ cmake_minimum_required(VERSION 4.0)
 # probing for one only slows configure down.
 project(ql_performance_testing VERSION 0.0.1 LANGUAGES CXX)
 
-# Options
 # Read once at the own-code root, src/CMakeLists.txt, which is where the policy is applied.
 option(RKE_COMPILE_WARNING_AS_ERROR "Compile warnings as errors" ON)
 option(RKE_USE_CLANG_TIDY "Use clang-tidy when building" OFF)
@@ -15,7 +14,6 @@ option(RKE_USE_CLANG_TIDY "Use clang-tidy when building" OFF)
 # Honoured because CMP0091 is NEW, which the floor above guarantees.
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
-# Path for package-local cmake modules
 list(PREPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 
 # Defines rke_warnings and its rke::warnings alias. Position does not matter: the flags reach
@@ -33,12 +31,10 @@ if (CMAKE_CXX_STANDARD LESS 17)
     message(FATAL_ERROR "Please specify CMAKE_CXX_STANDARD of 17 or higher")
 endif ()
 
-# Boost static libs ON for MSVC
 if (NOT DEFINED Boost_USE_STATIC_LIBS)
     set(Boost_USE_STATIC_LIBS ${MSVC})
 endif ()
 
-# Boost static runtime ON for MSVC
 if (NOT DEFINED Boost_USE_STATIC_RUNTIME)
     set(Boost_USE_STATIC_RUNTIME ${MSVC})
 endif ()

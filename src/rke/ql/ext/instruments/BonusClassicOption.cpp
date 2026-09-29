@@ -56,4 +56,4 @@ namespace RKE::QL::External {
         QL_REQUIRE(arguments_.barrier != Null<Real>(), "no barrier given");
         return underlying <= arguments_.barrier;
     }
-} // namespace RKE::QL::External
+}

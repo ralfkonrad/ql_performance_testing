@@ -35,7 +35,6 @@ namespace RKE::QL::External {
         QuantLib::TimeGrid timeGrid() const override;
 
       private:
-        // McSimulation implementation
         QuantLib::ext::shared_ptr<path_generator_type> pathGenerator() const override {
             const QuantLib::TimeGrid grid = timeGrid();
             const typename RNG::rsg_type gen = RNG::make_sequence_generator(grid.size() - 1, seed_);
@@ -43,7 +42,6 @@ namespace RKE::QL::External {
                                                                    brownianBridge_);
         }
 
-        // data members
         QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process_;
         QuantLib::Size timeStepsPerYear_;
         QuantLib::Size requiredSamples_;
@@ -65,7 +63,6 @@ namespace RKE::QL::External {
     };
 
 
-    // template definitions
     template <class RNG, class S>
     MCBonusClassicEngine<RNG, S>::MCBonusClassicEngine(
         QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process,

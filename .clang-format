@@ -8,8 +8,6 @@ Standard: c++17
 # can help if you want to use the general feel of the library.
 
 
-# General appearance:
-
 BasedOnStyle: LLVM
 
 IndentWidth: 4
@@ -18,13 +16,9 @@ NamespaceIndentation: All
 MaxEmptyLinesToKeep: 2
 FixNamespaceComments: false
 
-# Function declarations:
-
 BinPackParameters: false
 AllowShortFunctionsOnASingleLine: Inline
 AlwaysBreakTemplateDeclarations: true
-
-# T& x, not T &x:
 
 DerivePointerAlignment: false
 PointerAlignment: Left
@@ -44,8 +38,6 @@ IncludeCategories:
     Priority: 5
   - Regex: '^<'
     Priority: 6
-
-# Other:
 
 AlignEscapedNewlines: Left
 BreakBeforeTernaryOperators: false
