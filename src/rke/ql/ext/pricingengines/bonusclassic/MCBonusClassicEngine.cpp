@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025 Ralf Konrad Eckel
+// SPDX-License-Identifier: MIT
+
 #include "MCBonusClassicEngine.hpp"
 #include <utility>
 

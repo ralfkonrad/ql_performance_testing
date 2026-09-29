@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 Ralf Konrad Eckel
+# SPDX-License-Identifier: MIT
+
 add_executable(rke_ql_ext_testsuite
         testsuite.cpp
         BonusClassicOption.cpp

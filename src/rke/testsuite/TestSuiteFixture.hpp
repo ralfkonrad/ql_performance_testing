@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025 Ralf Konrad Eckel
+// SPDX-License-Identifier: MIT
+
 #ifndef TESTSUITEFIXTURE_HPP
 #define TESTSUITEFIXTURE_HPP
 

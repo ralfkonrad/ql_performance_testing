@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025 Ralf Konrad Eckel
+// SPDX-License-Identifier: MIT
+
 
 #define BOOST_TEST_MODULE RkeQlTests
 

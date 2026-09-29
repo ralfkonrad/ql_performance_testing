@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023 Ralf Konrad Eckel
+# SPDX-License-Identifier: MIT
+
 add_library(rke_warnings INTERFACE)
 
 add_library(rke::warnings ALIAS rke_warnings)

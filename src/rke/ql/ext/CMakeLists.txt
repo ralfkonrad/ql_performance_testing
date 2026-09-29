@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 Ralf Konrad Eckel
+# SPDX-License-Identifier: MIT
+
 set(RKE_QL_EXT_SOURCES
         instruments/BonusClassicOption.cpp
         pricingengines/bonusclassic/MCBonusClassicEngine.cpp

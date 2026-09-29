@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025 Ralf Konrad Eckel
+// SPDX-License-Identifier: MIT
+
 #include "BenchmarkBonusClassicOption.hpp"
 #include "ql_calendar_testing.hpp"
 #include "ql_xoshiro256starstarrng_benchmarking.hpp"

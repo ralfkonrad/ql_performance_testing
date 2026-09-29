@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023 Ralf Konrad Eckel
+# SPDX-License-Identifier: MIT
+
 set(CMAKE_COMPILE_WARNING_AS_ERROR ${RKE_COMPILE_WARNING_AS_ERROR})
 
 if (RKE_USE_CLANG_TIDY)

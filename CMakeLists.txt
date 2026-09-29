@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023 Ralf Konrad Eckel
+# SPDX-License-Identifier: MIT
+
 cmake_minimum_required(VERSION 4.0)
 
 project(ql_performance_testing VERSION 0.0.1 LANGUAGES CXX)

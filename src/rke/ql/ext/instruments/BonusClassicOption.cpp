@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025 Ralf Konrad Eckel
+// SPDX-License-Identifier: MIT
+
 #include <rke/ql/ext/instruments/BonusClassicOption.hpp>
 
 using namespace QuantLib;
