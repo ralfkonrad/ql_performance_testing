@@ -1,3 +1,8 @@
+<!--
+SPDX-FileCopyrightText: 2026 Ralf Konrad Eckel
+SPDX-License-Identifier: MIT
+-->
+
 # `.agents/` — On-Demand Guides for AI Agents
 
 [`AGENTS.md`](../AGENTS.md) at the repository root is loaded into an agent's

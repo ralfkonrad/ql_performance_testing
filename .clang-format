@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023 Ralf Konrad Eckel
+# SPDX-License-Identifier: MIT
+
 ---
 Language: Cpp
 Standard: c++17

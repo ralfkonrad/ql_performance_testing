@@ -1,3 +1,8 @@
+<!--
+SPDX-FileCopyrightText: 2026 Ralf Konrad Eckel
+SPDX-License-Identifier: MIT
+-->
+
 # AGENTS.md — AI Agent Guide for `ql_performance_testing`
 
 > How AI coding agents should work in this repository.
