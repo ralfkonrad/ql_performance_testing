@@ -3,8 +3,6 @@ name: Apply clang-format fixes
 on:
   # Weekly, not per push: every run opens a pull request, and create-pull-request reuses one
   # branch, so each run updates that pull request instead of opening another.
-  # push: { }
-  # pull_request: { }
   schedule:
     - cron: '23 2 * * 1'
       timezone: Europe/Berlin

@@ -3,8 +3,6 @@ name: "CodeQL"
 on:
   # Weekly, not per push or nightly: autobuild repeats the whole Ubuntu build without a
   # compiler cache, and this tree changes far too slowly to scan it that often.
-  # push: { }
-  # pull_request: { }
   schedule:
     # Monday, after the nightly build and its cache prune, and an hour clear of the two lint
     # workflows, so the week's three scheduled builds do not start on top of each other.
