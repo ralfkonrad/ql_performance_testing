@@ -1,7 +1,3 @@
-//
-// Created by ralf.eckel on 25.06.2025.
-//
-
 #include "BenchmarkBonusClassicOption.hpp"
 #include <rke/ql/ext/instruments/BonusClassicOption.hpp>
 #include <rke/ql/ext/pricingengines/bonusclassic/MCBonusClassicEngine.hpp>

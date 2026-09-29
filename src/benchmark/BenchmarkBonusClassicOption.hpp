@@ -1,7 +1,3 @@
-//
-// Created by ralf.eckel on 25.06.2025.
-//
-
 #ifndef BENCHMARKBONUSCLASSICOPTION_HPP
 #define BENCHMARKBONUSCLASSICOPTION_HPP
 

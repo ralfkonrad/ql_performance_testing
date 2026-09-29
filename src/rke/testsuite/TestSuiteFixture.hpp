@@ -1,7 +1,3 @@
-//
-// Created by ralf.eckel on 22.06.2025.
-//
-
 #ifndef TESTSUITEFIXTURE_HPP
 #define TESTSUITEFIXTURE_HPP
 

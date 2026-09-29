@@ -1,7 +1,3 @@
-//
-// Created by ralf.eckel on 20.03.2023.
-//
-
 #include "ql_calendar_testing.hpp"
 #include <ql/time/calendars/target.hpp>
 #include <vector>

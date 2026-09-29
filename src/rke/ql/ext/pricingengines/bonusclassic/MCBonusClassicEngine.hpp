@@ -1,7 +1,3 @@
-//
-// Created by ralf.eckel on 23.06.2025.
-//
-
 #ifndef MCBONUSCLASSICENGINE_HPP
 #define MCBONUSCLASSICENGINE_HPP
 

@@ -1,7 +1,3 @@
-//
-// Created by ralf.eckel on 08.08.2023.
-//
-
 #include "ql_xoshiro256starstarrng_benchmarking.hpp"
 #include <ql/math/distributions/normaldistribution.hpp>
 #include <ql/math/randomnumbers/boxmullergaussianrng.hpp>

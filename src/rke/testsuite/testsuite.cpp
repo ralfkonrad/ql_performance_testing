@@ -1,7 +1,3 @@
-//
-// Created by ralf.eckel on 21.06.2025.
-//
-
 
 #define BOOST_TEST_MODULE RkeQlTests
 
