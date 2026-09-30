@@ -24,11 +24,15 @@ permissions:
   contents: read
 
 concurrency:
+  # The ref is left out on purpose: every run of this workflow serialises instead of racing,
+  # and cancel-in-progress: false keeps a dispatched run from killing the scheduled one.
   group: ${{ github.workflow }}
   cancel-in-progress: false
 
 jobs:
   images:
+    # A scheduled run carries no inputs context at all, so `default: all` applies to
+    # workflow_dispatch only and this empty test is what lets the cron run the group.
     if: inputs.group == '' || inputs.group == 'all' || inputs.group == 'images'
 
     strategy:
@@ -66,6 +70,8 @@ jobs:
           os: ${{ matrix.settings.os }}
           cxx: ${{ matrix.settings.cxx }}
           cxx-standard: ${{ matrix.cxx-standard }}
+          # Literal on purpose: a scheduled run sits on master, so the nightly's ref-based gate
+          # would be true here and these legs would evict its entries from the shared quota.
           save-ccache: 'false'
 
       - name: Configure CMake and Build
@@ -83,6 +89,8 @@ jobs:
         run: ctest --preset release --extra-verbose
 
       - name: CTest, QuantLib's own suite
+        # A command-line -R overrides the preset's ^rke_ include filter; this workflow is the
+        # only place in CI that runs QuantLib's own suite.
         run: ctest --preset release -R quantlib
 
   compilers:
@@ -125,6 +133,8 @@ jobs:
         env:
           CC: ${{ matrix.settings.cc }}
           CXX: ${{ matrix.settings.cxx }}
+        # QL_BUILD_TEST_SUITE=OFF is what makes this many legs affordable; the group only asks
+        # whether the code compiles.
         run: >-
           cmake --version
 
@@ -212,6 +222,8 @@ jobs:
     if: always()
     runs-on: ubuntu-26.04
 
+    # Scoped to this job because only it needs issues: write; actions: read is for the
+    # listJobsForWorkflowRun call in the script below.
     permissions:
       actions: read
       issues: write

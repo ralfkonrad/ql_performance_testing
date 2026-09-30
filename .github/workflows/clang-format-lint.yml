@@ -23,6 +23,8 @@ jobs:
         with:
           submodules: "true"
 
+      # Skips ./.github/actions/setup on purpose: this needs clang-format only, no Boost, ninja,
+      # compiler or cache entry. Its own step because GITHUB_PATH only reaches later steps.
       - name: Setup Linux variables
         run: echo "/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin" >> $GITHUB_PATH
 
@@ -32,6 +34,8 @@ jobs:
           brew install llvm@23
 
       - name: Applying clang-format
+        # git ls-files keeps the run out of the submodules, which it does not descend into; without
+        # -r an empty match still runs clang-format once, and `-i` on stdin fails the step.
         run: git ls-files '*.cpp' '*.hpp' | xargs -r clang-format -i
 
       - uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1

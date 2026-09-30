@@ -4,6 +4,8 @@
 name: Delete Workflow Caches
 
 on:
+  # A fork's pull_request token is read-only by default and would not hold actions: write; the
+  # usual pull_request_target hazard needs a checkout of PR code, and this job checks out none.
   pull_request_target:
     types: [ closed ]
   delete: { }
@@ -31,6 +33,8 @@ jobs:
 
     timeout-minutes: 10
 
+    # The ref is attacker-chosen branch text, so it reaches the script through process.env
+    # instead of being interpolated into the script body.
     env:
       CACHE_REF: >-
         ${{ (github.event_name == 'delete' && format('refs/heads/{0}', github.event.ref))

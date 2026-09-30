@@ -41,10 +41,15 @@ jobs:
 
             const caches = await github.paginate(
               github.rest.actions.getActionsCacheList,
+              // Only master writes entries; pull-request and topic-branch caches are
+              // delete_workflow_caches.yml's job.
               { owner, repo, ref: 'refs/heads/master', per_page: 100 });
 
+            // Matches the ISO-8601 timestamp ccache-action appends to every key it saves.
             const stamped = /-\d{4}-\d{2}-\d{2}T[\d:.]+Z?$/;
 
+            // Deletes the last survivor too: a key stops being refreshed once the leg that wrote
+            // it is gone, and its entry then holds quota nothing can restore from.
             const retiredAfterDays = 30;
             const retiredBefore = Date.now() - retiredAfterDays * 24 * 60 * 60 * 1000;
 

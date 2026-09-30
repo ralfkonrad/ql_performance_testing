@@ -47,6 +47,7 @@ runs:
         echo "CMAKE_CXX_COMPILER_LAUNCHER=$variant" >> $GITHUB_ENV
         echo "variant=$variant" >> $GITHUB_OUTPUT
 
+    # A GITHUB_PATH write reaches only later steps, so brew cannot be added and used in one step.
     - name: Setup Linux variables
       if: runner.os == 'Linux'
       shell: bash
@@ -79,6 +80,8 @@ runs:
               wget -qO "$RUNNER_TEMP/llvm.sh" https://apt.llvm.org/llvm.sh
               chmod +x "$RUNNER_TEMP/llvm.sh"
               sudo "$RUNNER_TEMP/llvm.sh" "$version"
+              # llvm.sh already installed the compiler, so leave the whole step here; the
+              # g++ arm instead falls through to the shared apt-get install below.
               exit 0
               ;;
             *)
@@ -153,6 +156,8 @@ runs:
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ steps.windows-variables.outputs.installer-path }}
+        # The digest covers the download URI, so a Boost or MSVC toolset bump changes the key and
+        # a stale installer can never be served.
         key: boost-installer-${{ steps.windows-variables.outputs.uri-digest }}
 
     - name: Download Boost on Windows
@@ -207,6 +212,8 @@ runs:
 
         choco install -y ninja
 
+    # Must precede the compiler-version step below: `cl` only resolves once this injects the
+    # MSVC environment.
     - name: Set up Visual Studio shell on Windows
       uses: TheMrMilchmann/setup-msvc-dev@368ef7d1ee4d1171b31d4a7f67f4d954f903f5a9 # v4.1.0
       if: runner.os == 'Windows'
@@ -216,6 +223,8 @@ runs:
     - name: Ensure CMake meets the floor
       shell: bash
       run: |
+        # 4.0 is what the root CMakeLists.txt demands; only the weekly workflow's older
+        # images, e.g. ubuntu-22.04 with CMake 3.x, need the upgrade below.
         floor=4.0
         have=$(cmake --version | head -1 | awk '{ print $3 }')
         echo "cmake: $have (floor $floor)"
@@ -257,6 +266,8 @@ runs:
         else
           digest=$(printf '%s' "$version" | shasum -a 256)
         fi
+        # ccache and sccache hash the compiler into every object key; without the digest a
+        # runner-image toolchain bump would pile two toolchains into one cache entry.
         base="${{ inputs.os }}-${{ runner.arch }}-${{ inputs.cxx }}-cc${digest:0:12}"
         echo "key=$base-std-${{ inputs.cxx-standard }}" >> $GITHUB_OUTPUT
         echo "prefix=$base-std" >> $GITHUB_OUTPUT
@@ -265,10 +276,16 @@ runs:
       uses: hendrikmuhs/ccache-action@f09c25b45002a07be2955cbe52e8cee55643f89d # v1.2.24
       with:
         key: ${{ steps.cache-key.outputs.key }}
+        # ccache-action appends a timestamp on save, so the literal key never matches on restore:
+        # repeating it as the first restore key is what lets prefix matching hit it.
+        # The shorter prefix drops the standard segment, so a newly added C++ standard starts
+        # from a sibling leg's cache instead of cold.
         restore-keys: |
           ${{ steps.cache-key.outputs.key }}
           ${{ steps.cache-key.outputs.prefix }}
         variant: ${{ steps.ccache-variant.outputs.variant }}
+        # Sized against the repository-wide 10 GB cache quota shared by every leg, not by what
+        # the compiler would like.
         max-size: ${{ ( (runner.os == 'Windows') && '400M' ) || '250M' }}
         evict-old-files: 7d
         save: ${{ inputs.save-ccache }}

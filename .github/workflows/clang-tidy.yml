@@ -3,12 +3,16 @@
 
 name: Apply clang-tidy fixes
 
+# No push or pull_request on purpose: the run rewrites sources and opens a pull request, so a
+# PR trigger would stack pull requests on pull requests.
 on:
   schedule:
     - cron: '23 2 * * 1'
       timezone: Europe/Berlin
   workflow_dispatch: { }
 
+# Necessary but not sufficient: opening the pull request also needs the repository setting
+# "Allow GitHub Actions to create and approve pull requests", which no permissions block grants.
 permissions:
   contents: write
   pull-requests: write
@@ -35,14 +39,21 @@ jobs:
 
       - name: Running clang-tidy
         run: |
+          # --fix is passed here and deliberately never stored in the preset, so no local
+          # `cmake --preset clang-tidy` rewrites sources by accident.
           cmake --preset clang-tidy -DRKE_CLANG_TIDY_OPTIONS=--fix
+          # -j 1 is not tuning: --fix rewrites headers shared between translation units, and
+          # parallel jobs corrupt each other's edits.
           cmake --build --preset clang-tidy -j 1 --verbose
 
       - uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          # Deriving the branch from the base makes a re-run update the one open pull request
+          # instead of opening a new one each time.
           branch: clang-tidy-fixes-${{ github.ref_name }}
           base: ${{ github.ref_name }}
+          # Fences the commit to our own sources, because --fix rewrites any header it reaches.
           add-paths: src/**
           delete-branch: true
           commit-message: "Automated fixes by clang-tidy"

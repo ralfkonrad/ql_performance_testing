@@ -18,6 +18,7 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
+  # master runs are exempt: they are the only runs that write the cache the others restore.
   cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 jobs:
@@ -55,6 +56,8 @@ jobs:
           os: ${{ matrix.settings.os }}
           cxx: ${{ matrix.settings.cxx }}
           cxx-standard: ${{ matrix.cxx-standard }}
+          # A cache saved on another ref is readable only from that branch, so writing it
+          # anywhere but master is pure quota cost.
           save-ccache: ${{ github.ref == 'refs/heads/master' }}
 
       - name: Configure CMake and Build
@@ -76,6 +79,8 @@ jobs:
 
   ci-gate:
     needs: cmake-build-and-test
+    # Without this a failing leg would reach the branch ruleset as a neutral skipped check;
+    # always() also disarms the needs failure, so the step below re-asserts the result.
     if: always()
     runs-on: ubuntu-26.04
 

@@ -19,6 +19,8 @@ jobs:
     timeout-minutes: 10
 
     steps:
+      # The only checkout in the repository without submodules: true, on purpose — an empty
+      # external/ is what guarantees the tool never writes headers into the submodules.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Linux variables
