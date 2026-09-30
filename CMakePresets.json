@@ -29,6 +29,13 @@
       }
     },
     {
+      "name": "profile",
+      "inherits": "release",
+      "cacheVariables": {
+        "RKE_PROFILING": "ON"
+      }
+    },
+    {
       "name": "clang-tidy",
       "inherits": "debug",
       "cacheVariables": {
@@ -52,6 +59,11 @@
     {
       "name": "release",
       "configurePreset": "release",
+      "inherits": "default"
+    },
+    {
+      "name": "profile",
+      "configurePreset": "profile",
       "inherits": "default"
     },
     {
@@ -83,6 +95,11 @@
       "name": "release",
       "configurePreset": "release",
       "inherits": "default"
+    },
+    {
+      "name": "profile",
+      "configurePreset": "profile",
+      "inherits": "default"
     }
   ],
   "workflowPresets": [
@@ -100,6 +117,14 @@
         { "type": "configure", "name": "release" },
         { "type": "build", "name": "release" },
         { "type": "test", "name": "release" }
+      ]
+    },
+    {
+      "name": "profile",
+      "steps": [
+        { "type": "configure", "name": "profile" },
+        { "type": "build", "name": "profile" },
+        { "type": "test", "name": "profile" }
       ]
     }
   ]
