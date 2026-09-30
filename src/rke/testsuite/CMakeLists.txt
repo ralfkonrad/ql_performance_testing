@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 Ralf Konrad Eckel
+# SPDX-License-Identifier: MIT
+
 add_executable(rke_ql_ext_testsuite
         testsuite.cpp
         BonusClassicOption.cpp
@@ -6,20 +9,20 @@ add_executable(rke_ql_ext_testsuite
         ${PROJECT_SOURCE_DIR}/external/QuantLib/test-suite/utilities.hpp
 )
 
-# Upstream sources compiled into our target: never lint or auto-fix them.
+# Required for every upstream source compiled into one of our targets.
 set_source_files_properties(
         ${PROJECT_SOURCE_DIR}/external/QuantLib/test-suite/utilities.cpp
         PROPERTIES SKIP_LINTING TRUE
 )
 
-# Boost.Test is header-only here, through <boost/test/included/unit_test.hpp>, so it needs
-# no component of its own; the include directories arrive with ql_library.
 target_link_libraries(rke_ql_ext_testsuite PRIVATE
         rke_ql_ext
         rke::warnings
 )
 
 add_test(
+        # The rke_ prefix is what the test presets filter on; rename it and
+        # `ctest --preset release` runs nothing.
         NAME rke_ql_ext_testsuite
         COMMAND rke_ql_ext_testsuite -l message
 )

@@ -1,3 +1,8 @@
+<!--
+SPDX-FileCopyrightText: 2023 Ralf Konrad Eckel
+SPDX-License-Identifier: MIT
+-->
+
 # ql_performance_testing
 
 A QuantLib playground: `src/rke/ql/ext` is a small extension library — currently a

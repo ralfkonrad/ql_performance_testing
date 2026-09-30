@@ -1,6 +1,5 @@
-//
-// Created by ralf.eckel on 23.06.2025.
-//
+// SPDX-FileCopyrightText: 2025 Ralf Konrad Eckel
+// SPDX-License-Identifier: MIT
 
 #ifndef MCBONUSCLASSICENGINE_HPP
 #define MCBONUSCLASSICENGINE_HPP
@@ -34,12 +33,9 @@ namespace RKE::QL::External {
 
         void calculate() const override;
         QuantLib::ext::shared_ptr<path_pricer_type> pathPricer() const override;
-        // Public so that a caller can read the grid the price was sampled on instead of
-        // rebuilding it; valid once the instrument has passed its arguments to the engine.
         QuantLib::TimeGrid timeGrid() const override;
 
       private:
-        // McSimulation implementation
         QuantLib::ext::shared_ptr<path_generator_type> pathGenerator() const override {
             const QuantLib::TimeGrid grid = timeGrid();
             const typename RNG::rsg_type gen = RNG::make_sequence_generator(grid.size() - 1, seed_);
@@ -47,7 +43,6 @@ namespace RKE::QL::External {
                                                                    brownianBridge_);
         }
 
-        // data members
         QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process_;
         QuantLib::Size timeStepsPerYear_;
         QuantLib::Size requiredSamples_;
@@ -69,7 +64,6 @@ namespace RKE::QL::External {
     };
 
 
-    // template definitions
     template <class RNG, class S>
     MCBonusClassicEngine<RNG, S>::MCBonusClassicEngine(
         QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process,
@@ -77,6 +71,8 @@ namespace RKE::QL::External {
         QuantLib::Size requiredSamples,
         QuantLib::Size maxSamples,
         QuantLib::Real requiredTolerance,
+        // Mirrors MCBarrierEngine's signature; this engine stores no flag and implements
+        // the biased pricer only.
         bool isBiased,
         bool brownianBridge,
         QuantLib::BigNatural seed)
@@ -85,6 +81,7 @@ namespace RKE::QL::External {
       requiredSamples_(requiredSamples), maxSamples_(maxSamples),
       requiredTolerance_(requiredTolerance), brownianBridge_(brownianBridge), seed_(seed) {
         QL_REQUIRE(isBiased, "only biased path pricer are supported");
+        // Without this, NPV() keeps returning the first price.
         registerWith(process_);
     }
 
@@ -92,10 +89,13 @@ namespace RKE::QL::External {
     void MCBonusClassicEngine<RNG, S>::calculate() const {
         const auto spot = process_->x0();
         QL_REQUIRE(spot > 0.0, "negative or null underlying given");
+        // The path pricer never inspects path[0], so an already-triggered spot is rejected here.
         QL_REQUIRE(!triggered(spot), "barrier touched");
         QuantLib::McSimulation<QuantLib::SingleVariate, RNG, S>::calculate(
             requiredTolerance_, requiredSamples_, maxSamples_);
         results_.value = this->mcModel_->sampleAccumulator().mean();
+        // LowDiscrepancy sets allowsErrorEstimate = 0, and both callers instantiate the engine
+        // with it.
         if constexpr (RNG::allowsErrorEstimate) {
             results_.errorEstimate = this->mcModel_->sampleAccumulator().errorEstimate();
         }
@@ -109,10 +109,10 @@ namespace RKE::QL::External {
         QL_REQUIRE(payoff, "non-plain payoff given");
 
         const auto grid = timeGrid();
+        // The biased pricer pays only at maturity; MCBarrierEngine needs a vector of discount
+        // factors only for its rebate.
         const auto discountFactor = process_->riskFreeRate()->discount(grid.back());
 
-        // From the payoff, not from arguments_: the two carry the same barrier and bonus
-        // level, and only this way does the object checked above price the paths.
         return QuantLib::ext::shared_ptr<path_pricer_type>(
             new BiasedBonusClassicPathPricer(*payoff, discountFactor));
     }
@@ -122,6 +122,8 @@ namespace RKE::QL::External {
     QuantLib::TimeGrid MCBonusClassicEngine<RNG, S>::timeGrid() const {
         const auto residualTime = process_->time(arguments_.exercise->lastDate());
         if (timeStepsPerYear_ != QuantLib::Null<QuantLib::Size>()) {
+            // A short residual time truncates steps to 0, and TimeGrid(end, 0) divides by zero;
+            // hence the std::max below.
             const auto steps = static_cast<QuantLib::Size>(timeStepsPerYear_ * residualTime);
             // QuantLib::TimeGrid has an initializer_list<Time> constructor, which a braced
             // return selects over TimeGrid(Time, Size), narrowing steps to a Time.

@@ -1,14 +1,9 @@
+# SPDX-FileCopyrightText: 2023 Ralf Konrad Eckel
+# SPDX-License-Identifier: MIT
+
 ---
 Language: Cpp
 Standard: c++17
-
-
-# The following is close to the style we've been using all these years
-# without formalizing it.  Formatting won't be enforced, but this file
-# can help if you want to use the general feel of the library.
-
-
-# General appearance:
 
 BasedOnStyle: LLVM
 
@@ -16,20 +11,16 @@ IndentWidth: 4
 ColumnLimit: 100
 NamespaceIndentation: All
 MaxEmptyLinesToKeep: 2
+# Mirror of -google-readability-namespace-comments and -llvm-namespace-comment
+# in .clang-tidy.
 FixNamespaceComments: false
-
-# Function declarations:
 
 BinPackParameters: false
 AllowShortFunctionsOnASingleLine: Inline
 AlwaysBreakTemplateDeclarations: true
 
-# T& x, not T &x:
-
 DerivePointerAlignment: false
 PointerAlignment: Left
-
-# QuantLib headers first, then Boost, then std
 
 SortIncludes: true
 IncludeBlocks: Merge
@@ -45,17 +36,12 @@ IncludeCategories:
   - Regex: '^<'
     Priority: 6
 
-# Other:
-
 AlignEscapedNewlines: Left
 BreakBeforeTernaryOperators: false
 ConstructorInitializerIndentWidth: 0
 SortUsingDeclarations: false
 IndentCaseLabels: true
 IndentPPDirectives: AfterHash
-
-# const T&, not T const&: clang-tidy's misc-const-correctness inserts the qualifier on
-# the right, and FormatStyle above hands its fixes to clang-format, which moves it back.
 
 QualifierAlignment: Left
 

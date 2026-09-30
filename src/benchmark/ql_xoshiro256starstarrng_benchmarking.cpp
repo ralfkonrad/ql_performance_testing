@@ -1,6 +1,5 @@
-//
-// Created by ralf.eckel on 08.08.2023.
-//
+// SPDX-FileCopyrightText: 2023 Ralf Konrad Eckel
+// SPDX-License-Identifier: MIT
 
 #include "ql_xoshiro256starstarrng_benchmarking.hpp"
 #include <ql/math/distributions/normaldistribution.hpp>
@@ -11,6 +10,8 @@
 #include <ql/math/randomnumbers/xoshiro256starstaruniformrng.hpp>
 #include <ql/math/randomnumbers/zigguratgaussianrng.hpp>
 
+// File scope so each iteration advances one continuous stream; a generator constructed inside
+// the loop would time construction and re-measure the same first draw.
 static auto xoshiro256StarStar = QuantLib::Xoshiro256StarStarUniformRng();
 static auto xoshiro256StarStarBoxMullerGaussian =
     QuantLib::BoxMullerGaussianRng(xoshiro256StarStar);

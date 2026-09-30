@@ -1,3 +1,8 @@
+<!--
+SPDX-FileCopyrightText: 2026 Ralf Konrad Eckel
+SPDX-License-Identifier: MIT
+-->
+
 # Build and Test
 
 Companion to [`AGENTS.md`](../AGENTS.md), which carries only the four commands

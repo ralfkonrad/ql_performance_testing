@@ -1,6 +1,5 @@
-//
-// Created by ralf.eckel on 22.06.2025.
-//
+// SPDX-FileCopyrightText: 2025 Ralf Konrad Eckel
+// SPDX-License-Identifier: MIT
 
 #ifndef TESTSUITEFIXTURE_HPP
 #define TESTSUITEFIXTURE_HPP
@@ -17,16 +16,15 @@ namespace RKE::QL::External {
         TestSuiteFixture() = default;
 
         ~TestSuiteFixture() {
-            // Tests must clean up the fixings they set; this also guarantees that every
-            // test case contains at least one assertion. IndexManager exposes the names it
-            // holds and nothing below them, and it inserts a name on a read as well, so a
-            // case that only reads a fixing has to clear it too.
+            // The clear runs even when the check fails. The check is on the names IndexManager
+            // holds, because getHistory() inserts an empty entry although it is const.
             BOOST_CHECK(QuantLib::IndexManager::instance().histories().empty());
             QuantLib::IndexManager::instance().clearHistories();
         }
 
       private:
-        // Restore settings after each test.
+        // Held for its destructor, which is why a test case assigns
+        // Settings::instance().evaluationDate() directly and adds no second SavedSettings.
         QuantLib::SavedSettings restore;
     };
 }

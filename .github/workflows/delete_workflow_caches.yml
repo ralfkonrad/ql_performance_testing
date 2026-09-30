@@ -1,12 +1,11 @@
+# SPDX-FileCopyrightText: 2026 Ralf Konrad Eckel
+# SPDX-License-Identifier: MIT
+
 name: Delete Workflow Caches
 
 on:
-  # GitHub never reclaims the caches of a closed pull request or a deleted branch, and the
-  # repository shares one 10GB quota; once it is full the master entries get evicted too.
-  #
-  # `pull_request_target`, not `pull_request`: a fork pull request's token is read-only
-  # whatever the `permissions` block says, so every deletion would 403 into a green job.
-  # Nothing from the pull request is checked out or run here, only the cache API is called.
+  # A fork's pull_request token is read-only by default and would not hold actions: write; the
+  # usual pull_request_target hazard needs a checkout of PR code, and this job checks out none.
   pull_request_target:
     types: [ closed ]
   delete: { }
@@ -20,7 +19,6 @@ on:
 permissions:
   actions: write
 
-# Keyed on the ref, so closing two pull requests in a row does not drop the first cleanup.
 concurrency:
   group: >-
     ${{ github.workflow }}-${{ (github.event_name == 'delete' && github.event.ref)
@@ -30,14 +28,13 @@ concurrency:
 
 jobs:
   delete-workflow-caches:
-    # A deleted tag has no caches of its own.
     if: github.event_name != 'delete' || github.event.ref_type == 'branch'
     runs-on: ubuntu-26.04
 
     timeout-minutes: 10
 
-    # `&&` binds tighter than `||`, so each event picks its own branch; a manual run falls
-    # through to the input, which the script below requires to name a ref or say ALL.
+    # The ref is attacker-chosen branch text, so it reaches the script through process.env
+    # instead of being interpolated into the script body.
     env:
       CACHE_REF: >-
         ${{ (github.event_name == 'delete' && format('refs/heads/{0}', github.event.ref))
@@ -52,16 +49,12 @@ jobs:
           script: |
             let ref = (process.env.CACHE_REF || '').trim();
             if (!ref) {
-              // `required: true` is satisfied by the empty string the form is pre-filled
-              // with, and empty would mean every cache of the repository, master's included.
               core.setFailed('Name a ref whose caches to delete, or ALL for every one.');
               return;
             }
             if (ref === 'ALL') {
               ref = '';
             } else if (!ref.startsWith('refs/')) {
-              // The caches API matches a fully qualified ref only; an unqualified one is
-              // not rejected, it just matches nothing.
               core.info(`Qualifying '${ref}' as 'refs/heads/${ref}'.`);
               ref = `refs/heads/${ref}`;
             }
@@ -75,9 +68,6 @@ jobs:
               params.ref = ref;
             }
 
-            // No map function: paginate already replaces response.data with the inner
-            // actions_caches array, so reading .actions_caches off it yields undefined
-            // once per page and the loop below then dereferences undefined.id.
             const caches = await github.paginate(
               github.rest.actions.getActionsCacheList, params);
             core.info(`Found ${caches.length} cache(s).`);
@@ -90,8 +80,6 @@ jobs:
                 deleted += 1;
                 core.info(`Deleted ${cache.id} ${cache.ref} ${cache.key}`);
               } catch (error) {
-                // Only a concurrent deletion is tolerable, so that a revoked token cannot
-                // report a green cleanup that deleted nothing.
                 if (error.status !== 404) {
                   throw error;
                 }

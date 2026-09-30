@@ -1,6 +1,5 @@
-//
-// Created by ralf.eckel on 22.06.2025.
-//
+// SPDX-FileCopyrightText: 2025 Ralf Konrad Eckel
+// SPDX-License-Identifier: MIT
 
 #ifndef ERROR_HPP
 #define ERROR_HPP

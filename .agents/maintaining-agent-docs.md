@@ -1,3 +1,8 @@
+<!--
+SPDX-FileCopyrightText: 2026 Ralf Konrad Eckel
+SPDX-License-Identifier: MIT
+-->
+
 # Maintaining the Agent Guides
 
 Companion to [`AGENTS.md`](../AGENTS.md). Read this when you are editing

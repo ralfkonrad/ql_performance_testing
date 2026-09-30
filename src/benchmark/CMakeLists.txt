@@ -1,8 +1,13 @@
+# SPDX-FileCopyrightText: 2025 Ralf Konrad Eckel
+# SPDX-License-Identifier: MIT
+
 add_executable(
         ql_performance_testing
 
         benchmark_main.cpp
 
+        # A new BM_* function runs only once BENCHMARK(...) registers it in
+        # benchmark_main.cpp; adding the file pair here is not enough.
         BenchmarkBonusClassicOption.cpp
         BenchmarkBonusClassicOption.hpp
 

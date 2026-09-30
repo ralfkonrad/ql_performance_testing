@@ -1,21 +1,21 @@
+# SPDX-FileCopyrightText: 2024 Ralf Konrad Eckel
+# SPDX-License-Identifier: MIT
+
 version: 2
 updates:
-
-  # `directories` takes globs, so one entry covers every workflow and every composite
-  # action: an action used in two of them yields one pull request, not two, and a new
-  # composite action needs no change here.
+  # No "gitsubmodule" ecosystem on purpose: external/QuantLib tracks our own fork, and both
+  # submodule pointers are moved by hand rather than by a bot.
   - package-ecosystem: "github-actions"
     directories:
       - "/"
+      # The composite action is a second manifest location: the "/" entry alone
+      # never sees the actions pinned inside it.
       - "/.github/actions/**"
     schedule:
       interval: "daily"
       time: "01:46"
       timezone: "Europe/Berlin"
     groups:
-      # Minor and patch share a pull request; a major stays alone so it can be reverted
-      # alone. That needs Dependabot to read the version from the `# vX.Y.Z` beside each
-      # pinned SHA, which is unverified; if a major is ever swept in, split this by pattern.
       actions-minor-and-patch:
         update-types:
           - "minor"

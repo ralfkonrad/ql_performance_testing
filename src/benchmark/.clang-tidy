@@ -1,10 +1,10 @@
+# SPDX-FileCopyrightText: 2026 Ralf Konrad Eckel
+# SPDX-License-Identifier: MIT
+
 ---
-# Extends the root configuration rather than replacing it, so this directory runs every
-# check the library does except the two below.
+# Without this the file replaces the root config and this directory runs no checks
+# at all; the exception stays scoped here rather than relaxed at the root.
 InheritParentConfig: true
-# The random number generators benchmarked here are file-scope fixtures, constructed once
-# and mutated by every iteration: they can be neither const nor function-local without
-# moving their construction into what is being measured.
 Checks: >
     -bugprone-throwing-static-initialization,
     -cppcoreguidelines-avoid-non-const-global-variables,

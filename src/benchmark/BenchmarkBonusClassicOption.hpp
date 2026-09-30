@@ -1,6 +1,5 @@
-//
-// Created by ralf.eckel on 25.06.2025.
-//
+// SPDX-FileCopyrightText: 2025 Ralf Konrad Eckel
+// SPDX-License-Identifier: MIT
 
 #ifndef BENCHMARKBONUSCLASSICOPTION_HPP
 #define BENCHMARKBONUSCLASSICOPTION_HPP

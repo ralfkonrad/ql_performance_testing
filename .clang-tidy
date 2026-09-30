@@ -1,13 +1,14 @@
+# SPDX-FileCopyrightText: 2023 Ralf Konrad Eckel
+# SPDX-License-Identifier: MIT
+
 ---
-# Our own headers only: clang-tidy's default header filter is empty, which reports
-# diagnostics for each translation unit's main file and for no header at all.
+# Limits header diagnostics to src/; an upstream .cpp compiled into one of our
+# targets needs SKIP_LINTING instead.
 HeaderFilterRegex: '.*/src/.*'
-# Formats the code around an applied fix with .clang-format, which is what keeps a --fix
-# run from leaving an inserted brace in column 0 and a rewritten typedef over the column
-# limit. clang-tidy's default is 'none'.
+# Hands every applied --fix to clang-format.
 FormatStyle: file
-# From QuantLib's own .clang-tidy: our ownership is theirs, so the checks have to be told
-# what "make shared" means here or they point at the std:: spellings.
+# Taken from QuantLib's own .clang-tidy; without them the checks point at the
+# std:: spellings this project forbids.
 CheckOptions:
   - key:   cppcoreguidelines-special-member-functions.AllowSoleDefaultDtor
     value: 1
@@ -17,14 +18,9 @@ CheckOptions:
     value: <ql/shared_ptr.hpp>
   - key:   modernize-use-default-member-init.UseAssignment
     value: 1
-# Everything, minus four groups. Note: clang-tidy splits this list on commas, so every
-# entry needs one. A check that fires and is not here is a real finding.
-#
-# 1. Families that cannot fire on this tree, or only duplicate it.
-# 2. Checks the QuantLib idiom forbids satisfying: the engine pattern, its containers and
-#    its notation. See AGENTS.md, "QuantLib Idioms".
-# 3. Checks that contradict another check we keep.
-# 4. Style this project decided against.
+# Every entry needs its trailing comma: the folded block is split on commas.
+# The two namespace-comment checks below pair with FixNamespaceComments: false
+# in .clang-format; the two files change together.
 Checks: >
     *,
     -abseil-*,

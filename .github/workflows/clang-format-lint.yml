@@ -1,19 +1,14 @@
+# SPDX-FileCopyrightText: 2024 Ralf Konrad Eckel
+# SPDX-License-Identifier: MIT
+
 name: Apply clang-format fixes
 
 on:
-  # Weekly, not per push: every run opens a pull request, and create-pull-request reuses one
-  # branch, so each run updates that pull request instead of opening another.
-  # push: { }
-  # pull_request: { }
   schedule:
     - cron: '23 2 * * 1'
       timezone: Europe/Berlin
   workflow_dispatch: { }
 
-# `create-pull-request` pushes a branch and opens a pull request, and the repository's
-# default token is read-only. This block cannot grant the repository setting "Allow GitHub
-# Actions to create and approve pull requests"; while that is off the last step fails with
-# "GitHub Actions is not permitted to create or approve pull requests" regardless.
 permissions:
   contents: write
   pull-requests: write
@@ -21,8 +16,6 @@ permissions:
 jobs:
   clang-format:
     runs-on: ubuntu-26.04
-    # Never run, so nothing is measured; clang-format over this tree is minutes and the
-    # QuantLib submodule checkout is the only part that can drag.
     timeout-minutes: 20
 
     steps:
@@ -30,11 +23,8 @@ jobs:
         with:
           submodules: "true"
 
-      # The Homebrew LLVM used locally and by the clang-tidy workflow. One binary for both,
-      # or a file formatted by one is reformatted by the other. Pinned by major, so a brew
-      # bump is a commit here rather than a silent change.
-      # Linuxbrew is on the image but not on PATH, and GITHUB_PATH reaches the steps after
-      # this one, never this one, so the install cannot share a step with it.
+      # Skips ./.github/actions/setup on purpose: this needs clang-format only, no Boost, ninja,
+      # compiler or cache entry. Its own step because GITHUB_PATH only reaches later steps.
       - name: Setup Linux variables
         run: echo "/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin" >> $GITHUB_PATH
 
@@ -43,9 +33,9 @@ jobs:
           brew update
           brew install llvm@23
 
-      # The submodules are gitlinks, so `git ls-files` never descends into them and the
-      # exclusion is structural rather than a pattern to keep in step.
       - name: Applying clang-format
+        # git ls-files keeps the run out of the submodules, which it does not descend into; without
+        # -r an empty match still runs clang-format once, and `-i` on stdin fails the step.
         run: git ls-files '*.cpp' '*.hpp' | xargs -r clang-format -i
 
       - uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1

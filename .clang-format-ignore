@@ -1,2 +1,6 @@
-#  we do not want to format our external git submodules
+# SPDX-FileCopyrightText: 2024 Ralf Konrad Eckel
+# SPDX-License-Identifier: MIT
+
+# The only thing stopping a local `clang-format -i` from rewriting both submodules;
+# CI escapes the problem by feeding clang-format from git ls-files.
 external/**

@@ -1,3 +1,8 @@
+<!--
+SPDX-FileCopyrightText: 2026 Ralf Konrad Eckel
+SPDX-License-Identifier: MIT
+-->
+
 # Extending `src/rke/ql/ext`
 
 Read this when adding an instrument, payoff, pricing engine, or test under
