@@ -2,8 +2,13 @@
 # SPDX-License-Identifier: MIT
 
 ---
+# Limits header diagnostics to src/; an upstream .cpp compiled into one of our
+# targets needs SKIP_LINTING instead.
 HeaderFilterRegex: '.*/src/.*'
+# Hands every applied --fix to clang-format.
 FormatStyle: file
+# Taken from QuantLib's own .clang-tidy; without them the checks point at the
+# std:: spellings this project forbids.
 CheckOptions:
   - key:   cppcoreguidelines-special-member-functions.AllowSoleDefaultDtor
     value: 1
@@ -13,6 +18,9 @@ CheckOptions:
     value: <ql/shared_ptr.hpp>
   - key:   modernize-use-default-member-init.UseAssignment
     value: 1
+# Every entry needs its trailing comma: the folded block is split on commas.
+# The two namespace-comment checks below pair with FixNamespaceComments: false
+# in .clang-format; the two files change together.
 Checks: >
     *,
     -abseil-*,

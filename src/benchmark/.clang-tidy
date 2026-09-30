@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: MIT
 
 ---
+# Without this the file replaces the root config and this directory runs no checks
+# at all; the exception stays scoped here rather than relaxed at the root.
 InheritParentConfig: true
 Checks: >
     -bugprone-throwing-static-initialization,

@@ -11,6 +11,8 @@ IndentWidth: 4
 ColumnLimit: 100
 NamespaceIndentation: All
 MaxEmptyLinesToKeep: 2
+# Mirror of -google-readability-namespace-comments and -llvm-namespace-comment
+# in .clang-tidy.
 FixNamespaceComments: false
 
 BinPackParameters: false

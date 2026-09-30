@@ -6,6 +6,8 @@ set(RKE_QL_EXT_SOURCES
         pricingengines/bonusclassic/MCBonusClassicEngine.cpp
 )
 
+# Headers are listed by hand, and an unlisted one still compiles, so an omission
+# is silent.
 set(RKE_QL_EXT_HEADER
         Error.hpp
         instruments/BonusClassicOption.hpp
@@ -18,6 +20,7 @@ add_library(rke_ql_ext STATIC
 
 target_sources(rke_ql_ext PUBLIC
         FILE_SET HEADERS
+        # This is what puts <rke/...> on every consumer's include path.
         BASE_DIRS "${PROJECT_SOURCE_DIR}/src"
         FILES ${RKE_QL_EXT_HEADER}
 )

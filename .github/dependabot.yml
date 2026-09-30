@@ -3,9 +3,13 @@
 
 version: 2
 updates:
+  # No "gitsubmodule" ecosystem on purpose: external/QuantLib tracks our own fork, and both
+  # submodule pointers are moved by hand rather than by a bot.
   - package-ecosystem: "github-actions"
     directories:
       - "/"
+      # The composite action is a second manifest location: the "/" entry alone
+      # never sees the actions pinned inside it.
       - "/.github/actions/**"
     schedule:
       interval: "daily"

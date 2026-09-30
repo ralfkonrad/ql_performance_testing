@@ -6,6 +6,8 @@ add_executable(
 
         benchmark_main.cpp
 
+        # A new BM_* function runs only once BENCHMARK(...) registers it in
+        # benchmark_main.cpp; adding the file pair here is not enough.
         BenchmarkBonusClassicOption.cpp
         BenchmarkBonusClassicOption.hpp
 

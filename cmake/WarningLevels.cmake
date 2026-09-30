@@ -3,6 +3,8 @@
 
 add_library(rke_warnings INTERFACE)
 
+# Consumers link the alias: an unknown `::` name is a configure error, while a
+# mistyped rke_warnings is taken for a plain library name and passed to the linker.
 add_library(rke::warnings ALIAS rke_warnings)
 
 if (MSVC)
