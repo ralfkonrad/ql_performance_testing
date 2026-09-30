@@ -15,6 +15,8 @@ using namespace QuantLib;
 
 namespace RKE::QL::External {
     namespace {
+        // Duplicates test-suite/utilities.hpp, which compiles into the test target only; the
+        // conventions are copied so the benchmark prices the instrument the tests check.
         ext::shared_ptr<YieldTermStructure>
         flatRate(const Date& today, const ext::shared_ptr<Quote>& forward, const DayCounter& dc) {
             return ext::make_shared<FlatForward>(today, Handle<Quote>(forward), dc);
@@ -77,6 +79,8 @@ namespace RKE::QL::External {
         bonusClassicOption->setPricingEngine(mcEngine);
 
         for (const auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
+            // recalculate() is the measurement: NPV() alone returns the cached value, so the
+            // loop would time one pricing and the rest cache reads.
             bonusClassicOption->recalculate();
             auto npv = bonusClassicOption->NPV();
             benchmark::DoNotOptimize(npv);

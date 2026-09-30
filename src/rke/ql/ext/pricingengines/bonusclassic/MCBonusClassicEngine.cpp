@@ -18,6 +18,7 @@ namespace RKE::QL::External {
         const Size n = path.length();
         QL_REQUIRE(n > 1, "the path cannot be empty");
 
+        // t=0 is not a monitoring date and is checked once in the engine's calculate().
         for (Size i = 1; i < n; i++) {
             const auto assetPrice = path[i];
             if (assetPrice <= payoff_.barrier()) {

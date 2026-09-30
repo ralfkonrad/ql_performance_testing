@@ -6,10 +6,13 @@
 using namespace QuantLib;
 
 namespace RKE::QL::External {
+    // Option::Call is a placeholder: the product has no option type, and
+    // StrikedTypePayoff::strike_ is used to hold the barrier.
     BonusClassicPayoff::BonusClassicPayoff(Real barrier, Real bonusLevel)
     : StrikedTypePayoff(Option::Call, barrier), bonusLevel_(bonusLevel) {}
 
     Real BonusClassicPayoff::operator()(Real price) const {
+        // The barrier is inclusive; engine::triggered and the MC path pricer compare the same way.
         if (price <= barrier()) {
             return price;
         }

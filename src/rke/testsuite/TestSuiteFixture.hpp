@@ -16,11 +16,15 @@ namespace RKE::QL::External {
         TestSuiteFixture() = default;
 
         ~TestSuiteFixture() {
+            // The clear runs even when the check fails. The check is on the names IndexManager
+            // holds, because getHistory() inserts an empty entry although it is const.
             BOOST_CHECK(QuantLib::IndexManager::instance().histories().empty());
             QuantLib::IndexManager::instance().clearHistories();
         }
 
       private:
+        // Held for its destructor, which is why a test case assigns
+        // Settings::instance().evaluationDate() directly and adds no second SavedSettings.
         QuantLib::SavedSettings restore;
     };
 }

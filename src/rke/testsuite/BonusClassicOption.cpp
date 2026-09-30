@@ -65,6 +65,7 @@ BOOST_AUTO_TEST_CASE(
     const auto payoff = BonusClassicPayoff(data.barrier, data.bonusLevel);
 
     BOOST_CHECK_EQUAL(payoff(80.00), 80.00);
+    // Pins the boundary convention: at the barrier itself the bonus is already gone.
     BOOST_CHECK_EQUAL(payoff(data.barrier), data.barrier);
     BOOST_CHECK_EQUAL(payoff(100.00), data.bonusLevel);
     BOOST_CHECK_EQUAL(payoff(125.00), 125.00);
@@ -106,6 +107,9 @@ BOOST_AUTO_TEST_CASE(testBonusClassicOptionValuation) { // NOLINT(misc-use-inter
         option_data.barrier, option_data.bonusLevel, exerciseDate);
 
     const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
+    // The Null<Real>() tolerance is mandatory, not a default: with no error estimate under
+    // LowDiscrepancy, McSimulation::calculate takes the fixed-sample branch and maxSamples
+    // never applies.
     const auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
         process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), true, true, 42);
 
