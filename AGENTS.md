@@ -20,7 +20,10 @@ itself. QuantLib and google-benchmark are git submodules under `external/`.
   pointer as a side effect of another change. Nothing of ours is declared at the
   top level beside them: warnings and `CMAKE_CXX_CLANG_TIDY` are set in
   `src/CMakeLists.txt`, one directory tree away, so neither depends on where
-  `add_subdirectory(external)` sits.
+  `add_subdirectory(external)` sits. The one exception is `cmake/Profiling.cmake`,
+  included before `external/` under `RKE_PROFILING`: its debug info and frame
+  pointers are useless unless QuantLib gets them too. Keep it to flags a profiler
+  needs, and off by default.
 - **Warnings are build failures, and `src/` is where that is declared.**
   `src/CMakeLists.txt` sets `CMAKE_COMPILE_WARNING_AS_ERROR` from
   `RKE_COMPILE_WARNING_AS_ERROR` (default `ON`), which initialises the property on
@@ -56,7 +59,7 @@ task calls for it:
 | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
 | [`.agents/build-and-test.md`](.agents/build-and-test.md)                 | You need build options, targets, single test invocations, local clang-tidy/clang-format runs, or the CI workflow map. |
 | [`.agents/extending-rke-ql-ext.md`](.agents/extending-rke-ql-ext.md)     | You add an instrument, payoff, pricing engine, or test to `src/rke/`.                                                     |
-| [`.agents/benchmarking.md`](.agents/benchmarking.md)                     | You add, change, or run a benchmark.                                                                                  |
+| [`.agents/benchmarking.md`](.agents/benchmarking.md)                     | You add, change, run or profile a benchmark.                                                                          |
 | [`.agents/maintaining-agent-docs.md`](.agents/maintaining-agent-docs.md) | You edit this file or anything in `.agents/`.                                                                         |
 
 ## 3. Coding Conventions

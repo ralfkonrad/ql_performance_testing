@@ -21,8 +21,8 @@ invocations, lint runs, and the CI map.
 
 ## 2. Presets
 
-`CMakePresets.json` defines three usable presets: `debug`, `release` and
-`clang-tidy`. All inherit a hidden `default` that sets
+`CMakePresets.json` defines four usable presets: `debug`, `release`, `profile`
+and `clang-tidy`. All inherit a hidden `default` that sets
 
 - `RKE_COMPILE_WARNING_AS_ERROR=ON`
 - `QL_BUILD_TEST_SUITE=ON`
@@ -61,6 +61,10 @@ configured the tree and the default here is g++. It is report-only:
 preset and no workflow preset, because linting runs no tests and the fixing form
 needs a `-D` that `cmake --workflow` refuses.
 
+`profile` inherits `release` and adds `RKE_PROFILING=ON`, in `build/profile`: same
+optimisation, plus the debug info and frame pointers a profiler needs. Its recipes are
+in [`benchmarking.md`](benchmarking.md).
+
 ## 3. Options
 
 From `CMakeLists.txt`:
@@ -71,6 +75,8 @@ From `CMakeLists.txt`:
 - `RKE_USE_CLANG_TIDY` — default `OFF`. Set at configure time; the
   `CMAKE_CXX_CLANG_TIDY` assignment lives in `src/CMakeLists.txt`, so only our own
   targets are analysed.
+- `RKE_PROFILING` — default `OFF`. Read by `cmake/Profiling.cmake`, which the top
+  level includes before `external/` so QuantLib is built with the same flags.
 - `RKE_CLANG_TIDY` — the binary, default `clang-tidy`.
 - `RKE_CLANG_TIDY_OPTIONS` — extra arguments, e.g. `--fix`.
 - `CMAKE_CXX_STANDARD` — default `17`, configure fails below it.

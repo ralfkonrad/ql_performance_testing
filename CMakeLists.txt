@@ -7,6 +7,7 @@ project(ql_performance_testing VERSION 0.0.1 LANGUAGES CXX)
 
 option(RKE_COMPILE_WARNING_AS_ERROR "Compile warnings as errors" ON)
 option(RKE_USE_CLANG_TIDY "Use clang-tidy when building" OFF)
+option(RKE_PROFILING "Add debug info and frame pointers for profiling" OFF)
 
 # Selects the static runtime (/MT); must stay in step with Boost_USE_STATIC_RUNTIME
 # further down, as the two disagreeing is an MSVC link failure.
@@ -39,6 +40,10 @@ endif ()
 find_package(Boost CONFIG REQUIRED)
 
 include(CTest)
+
+# The one setting of ours that must reach the submodules: a profile that stops at our
+# own frames cannot show where QuantLib spends its time.
+include(Profiling)
 
 # SYSTEM is what keeps -Wall -Wextra -Wpedantic and warnings-as-errors off the
 # submodule headers our translation units include.
