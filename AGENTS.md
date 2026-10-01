@@ -58,8 +58,9 @@ task calls for it:
 | Read this                                                                | When                                                                                                                  |
 | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
 | [`.agents/build-and-test.md`](.agents/build-and-test.md)                 | You need build options, targets, single test invocations, local clang-tidy/clang-format runs, or the CI workflow map. |
-| [`.agents/extending-rke-ql-ext.md`](.agents/extending-rke-ql-ext.md)     | You add an instrument, payoff, pricing engine, or test to `src/rke/`.                                                     |
-| [`.agents/benchmarking.md`](.agents/benchmarking.md)                     | You add, change, run or profile a benchmark.                                                                          |
+| [`.agents/extending-rke-ql-ext.md`](.agents/extending-rke-ql-ext.md)     | You add an instrument, payoff, pricing engine, or test to `src/rke/`.                                                 |
+| [`.agents/benchmarking.md`](.agents/benchmarking.md)                     | You add, change or run a benchmark.                                                                                   |
+| [`.agents/profiling.md`](.agents/profiling.md)                           | You profile an executable under `src/profile/`, or read a profile.                                                    |
 | [`.agents/maintaining-agent-docs.md`](.agents/maintaining-agent-docs.md) | You edit this file or anything in `.agents/`.                                                                         |
 
 ## 3. Coding Conventions

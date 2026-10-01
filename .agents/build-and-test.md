@@ -63,7 +63,7 @@ needs a `-D` that `cmake --workflow` refuses.
 
 `profile` inherits `release` and adds `RKE_PROFILING=ON`, in `build/profile`: same
 optimisation, plus the debug info and frame pointers a profiler needs. Its recipes are
-in [`benchmarking.md`](benchmarking.md).
+in [`profiling.md`](profiling.md).
 
 ## 3. Options
 
