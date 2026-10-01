@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2023 Ralf Konrad Eckel
 // SPDX-License-Identifier: MIT
 
-#include "ql_calendar_testing.hpp"
+#include "BenchmarkCalendar.hpp"
 #include <ql/time/calendars/target.hpp>
 #include <vector>
 

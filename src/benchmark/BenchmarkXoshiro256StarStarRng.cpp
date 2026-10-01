@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2023 Ralf Konrad Eckel
 // SPDX-License-Identifier: MIT
 
-#include "ql_xoshiro256starstarrng_benchmarking.hpp"
+#include "BenchmarkXoshiro256StarStarRng.hpp"
 #include <ql/math/distributions/normaldistribution.hpp>
 #include <ql/math/randomnumbers/boxmullergaussianrng.hpp>
 #include <ql/math/randomnumbers/centrallimitgaussianrng.hpp>

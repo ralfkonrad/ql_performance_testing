@@ -11,11 +11,11 @@ add_executable(
         BenchmarkBonusClassicOption.cpp
         BenchmarkBonusClassicOption.hpp
 
-        ql_calendar_testing.cpp
-        ql_calendar_testing.hpp
+        BenchmarkCalendar.cpp
+        BenchmarkCalendar.hpp
 
-        ql_xoshiro256starstarrng_benchmarking.cpp
-        ql_xoshiro256starstarrng_benchmarking.hpp
+        BenchmarkXoshiro256StarStarRng.cpp
+        BenchmarkXoshiro256StarStarRng.hpp
 )
 
 target_link_libraries(

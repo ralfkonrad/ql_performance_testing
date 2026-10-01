@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 #include "BenchmarkBonusClassicOption.hpp"
-#include "ql_calendar_testing.hpp"
+#include "BenchmarkCalendar.hpp"
 // Nothing from this header is registered; the comparisons are kept dormant, not left over.
-#include "ql_xoshiro256starstarrng_benchmarking.hpp"
+#include "BenchmarkXoshiro256StarStarRng.hpp"
 #include <benchmark/benchmark.h>
 
 BENCHMARK(RKE::Benchmark::BM_BonusClassicOption)
