@@ -63,7 +63,7 @@ needs a `-D` that `cmake --workflow` refuses.
 
 `profile` inherits `release` and adds `RKE_PROFILING=ON`, in `build/profile`: same
 optimisation, plus the debug info and frame pointers a profiler needs. Its recipes are
-in [`benchmarking.md`](benchmarking.md).
+in [`profiling.md`](profiling.md).
 
 ## 3. Options
 
@@ -164,8 +164,8 @@ The workflow runs exactly this, plus `-DCMAKE_CXX_COMPILER=clang++`; the preset
 names no compiler, so it still configures under AppleClang and MSVC.
 
 clang-format is not wired into the build. Run it over the touched files only, and
-never over `external/` — `.clang-format-ignore` excludes it, and CI pins version
-20, past the 18 that file needs:
+never over `external/` — `.clang-format-ignore` excludes it, and CI uses Homebrew's
+`llvm@23`, past the 18 that file needs:
 
 ```bash
 clang-format -i rke/ql/ext/instruments/BonusClassicOption.cpp
