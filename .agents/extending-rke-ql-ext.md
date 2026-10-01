@@ -5,9 +5,10 @@ SPDX-License-Identifier: MIT
 
 # Extending `src/rke/ql/ext`
 
-Read this when adding an instrument, payoff, pricing engine, or test under
-`src/rke/`. Every recipe ends the same way: list the new files in the owning
-`CMakeLists.txt`, and give the new number a reference.
+Read this when adding or documenting an instrument, payoff, pricing engine, or
+test under `src/rke/`. Every recipe ends the same way: list the new files in the
+owning `CMakeLists.txt`, document the header, and give the new number a
+reference.
 
 `BonusClassicOption` and `MCBonusClassicEngine` are the worked example for all of
 it; copy their shape rather than inventing a second one.
@@ -114,3 +115,40 @@ The tolerance of the second kind needs a comment saying where it comes from. The
 existing one records a measured residual of 3.8e-4 relative against a `1e-3`
 bound, and why the remainder is model error rather than Monte Carlo noise. "Close
 enough" is not a tolerance.
+
+## 6. Documentation Comments
+
+Headers carry QuantLib's Doxygen markup, so a reader moving between this tree and
+`external/QuantLib` sees one style. There is no Doxyfile: the comments are for
+people reading the header, and that is the bar they have to clear. Copy the shape
+of the headers in `src/rke/ql/ext/` and of their QuantLib counterparts
+(`barrieroption.hpp`, `mcbarrierengine.hpp`).
+
+- **Where.** Doc comments go in the header, above the declaration. `.cpp` files
+  and function bodies keep plain `//` comments that say _why_ the code does
+  something; leave those in place when adding docs.
+- **Class.** A `//!` one-line brief, then a `/*! ... */` block covering:
+  - the payoff or model, as a formula in `\f$ ... \f$` or `\f[ ... \f]`, with
+    its edge cases (an inclusive barrier, say);
+  - the conventions behind the price: the time measure and day counter, the
+    discount curve, how often a barrier is monitored;
+  - `\warning` for every limitation or unchecked input;
+  - `\ingroup` with QuantLib's group (`instruments`, `barrierengines`, ...);
+  - `\test` for each test that backs the class, naming its kind: a regression
+    lock or an independent check, as under "Two Kinds of Price Test".
+- **Members.** `//!` above an accessor whose meaning is not in its name. Where
+  an argument has a non-obvious meaning, such as a `Null<>()` that switches
+  behaviour, an ignored flag, or a unit, document it with a `\param` block
+  above the constructor. `\pre` for each precondition a `QL_REQUIRE` enforces.
+  Group overrides of a base interface under `//! \name ...` with `//@{` and
+  `//@}`.
+- **Macros.** `/*! \def NAME \brief ... */`.
+- **Read the code, not the product.** Describe what the implementation does,
+  from the payoff's `operator()`, the path pricer and the engine's `timeGrid()`.
+  Where it departs from the market product (discrete instead of continuous
+  monitoring, say), say so, not what a term sheet would say.
+- **Keep it in step.** A change to an engine's behaviour updates its doc block
+  in the same commit, just as it re-derives the regression lock.
+- **Wrap by hand at about 80 columns.** clang-format reflows a comment line that
+  passes 100 columns and leaves the rest of the paragraph ragged. Check the
+  comment again after formatting.
