@@ -51,8 +51,9 @@ from both the instrument's `engine` and
   its first price and never recomputes — see "Lazy Evaluation" in
   [`AGENTS.md`](../AGENTS.md).
 - `QL_REQUIRE` in the constructor for every combination the engine does not
-  implement, rather than silently pricing something else. The existing engine
-  rejects `isBiased == false` that way.
+  implement, rather than silently pricing something else. Where a flag selects
+  between implemented variants, `pathPricer()` picks the pricer from it, as the
+  existing engine does from `isBiased`, following `MCBarrierEngine`.
 - `calculate()`: validate the state (`spot > 0.0`, barrier not already
   triggered), delegate to `McSimulation::calculate()` with the tolerance, sample
   count and sample cap, then set `results_.value` from the sample accumulator,
@@ -110,6 +111,9 @@ New pricing code needs both, and they are not interchangeable:
    assumption with the Broadie-Glasserman-Kou shift — Broadie, Glasserman and Kou
    (1997), _A continuity correction for discrete barrier options_, Mathematical
    Finance 7(4), 325-349.
+   `testBonusClassicOptionContinuousReplication` checks the continuously
+   monitored pricer the same way, at the barrier itself: both sides monitor
+   continuously, so no shift applies.
 
 The tolerance of the second kind needs a comment saying where it comes from. The
 existing one records a measured residual of 3.8e-4 relative against a `1e-3`
