@@ -9,7 +9,7 @@
 #include <boost/test/unit_test.hpp>
 
 
-namespace RKE::QL::Ext {
+namespace RKE::TestSuite {
 
     class TestSuiteFixture { // NOLINT(cppcoreguidelines-special-member-functions)
       public:

@@ -14,7 +14,7 @@ A benchmark is a free function taking `benchmark::State&`, declared in a header
 and defined in the matching `.cpp`:
 
 ```cpp
-namespace RKE::QL::Ext {
+namespace RKE::Benchmark {
     void BM_YourThing(benchmark::State& state);
 }
 ```
@@ -26,7 +26,7 @@ Three places have to agree, or the benchmark builds and never runs:
 3. A `BENCHMARK(...)` registration in that same file.
 
 ```cpp
-BENCHMARK(RKE::QL::Ext::BM_YourThing)
+BENCHMARK(RKE::Benchmark::BM_YourThing)
     ->Name("YourThing")
     ->Unit(benchmark::kMillisecond)
     ->Iterations(100);
@@ -38,7 +38,7 @@ predictable, at the cost of any variance estimate — ask for
 `--benchmark_repetitions` when you need one.
 
 The `ql_*` files in `src/benchmark/` predate the namespace and register at global
-scope. Leave them as they are; new files use `RKE::QL::Ext`.
+scope. Leave them as they are; new files use `RKE::Benchmark`.
 
 ## 2. The Two Things That Silently Measure Nothing
 

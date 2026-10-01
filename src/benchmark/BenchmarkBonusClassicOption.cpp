@@ -11,9 +11,10 @@
 #include <ql/time/calendars/nullcalendar.hpp>
 #include <ql/time/daycounters/actual360.hpp>
 
+using namespace RKE::QL::Ext;
 using namespace QuantLib;
 
-namespace RKE::QL::Ext {
+namespace RKE::Benchmark {
     namespace {
         // Duplicates test-suite/utilities.hpp, which compiles into the test target only; the
         // conventions are copied so the benchmark prices the instrument the tests check.

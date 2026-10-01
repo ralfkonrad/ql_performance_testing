@@ -14,6 +14,7 @@
 #include <test-suite/utilities.hpp>
 
 using namespace RKE::QL::Ext;
+using namespace RKE::TestSuite;
 using namespace QuantLib;
 
 // Barrier monitoring dates of the MC engine are its time grid points.

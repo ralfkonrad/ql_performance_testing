@@ -83,8 +83,11 @@ Source of truth: `.clang-format`.
 
 ### 3.2 Naming and Namespaces
 
-- Our code lives in `namespace RKE::QL::Ext`. The two older `ql_*`
-  benchmark translation units are at global scope; leave them there.
+- One namespace per directory under the `RKE` root: the library in
+  `RKE::QL::Ext`, benchmarks in `RKE::Benchmark`, the test-suite fixture in
+  `RKE::TestSuite`. Nothing outside `src/rke/ql/ext` goes into `RKE::QL::Ext`.
+  The two older `ql_*` benchmark translation units are at global scope; leave
+  them there.
 - Headers qualify `QuantLib::` in full. Implementation files put
   `using namespace QuantLib;` after the includes — which is why
   `google-build-using-namespace` is off in `.clang-tidy`.
