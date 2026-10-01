@@ -91,11 +91,11 @@ subdirectory.
 Paths are relative to the preset's binary dir, `build/release`, which mirrors the
 source tree.
 
-| Target                   | Kind                  | Lands at                             |
-| ------------------------ | --------------------- | ------------------------------------ |
-| `rke_ql_ext`             | static library        | `src/rke/ql/ext/librke_ql_ext.a`         |
-| `rke_ql_ext_testsuite`   | Boost.Test executable | `src/rke/testsuite/rke_ql_ext_testsuite` |
-| `ql_performance_testing` | google-benchmark exe  | `src/benchmark/ql_performance_testing`   |
+| Target                   | Kind                  | Lands at                                   |
+| ------------------------ | --------------------- | ------------------------------------------ |
+| `rke_ql_ext`             | static library        | `src/rke/ql/ext/librke_ql_ext.a`           |
+| `rke_ql_ext_testsuite`   | Boost.Test executable | `src/rke/testsuite/rke_ql_ext_testsuite`   |
+| `ql_performance_testing` | google-benchmark exe  | `src/rke/benchmark/ql_performance_testing` |
 
 `cmake --build --preset release` also builds QuantLib and QuantLib's own test
 suite. To skip that, build one target: `--target rke_ql_ext_testsuite`.
@@ -262,6 +262,6 @@ scanning, filtered by branch, and in the `code-scanning/analyses` API.
 ## 8. Source of Truth
 
 When something above looks stale, verify against `CMakeLists.txt`,
-`CMakePresets.json`, `cmake/WarningLevels.cmake`, `src/rke/*/CMakeLists.txt`,
-`src/benchmark/CMakeLists.txt`, `.clang-format`, `.clang-tidy`,
+`CMakePresets.json`, `cmake/WarningLevels.cmake`, `src/CMakeLists.txt`,
+`src/rke/**/CMakeLists.txt`, `.clang-format`, `.clang-tidy`,
 `.github/workflows/*.yml` and `.github/actions/setup/action.yml`.

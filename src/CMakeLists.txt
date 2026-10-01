@@ -18,5 +18,3 @@ if (RKE_USE_CLANG_TIDY)
 endif ()
 
 add_subdirectory(rke)
-
-add_subdirectory(benchmark)

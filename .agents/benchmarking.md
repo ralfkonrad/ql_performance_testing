@@ -21,8 +21,8 @@ namespace RKE::Benchmark {
 
 Three places have to agree, or the benchmark builds and never runs:
 
-1. The `.cpp` and `.hpp` listed in `src/benchmark/CMakeLists.txt`.
-2. The header included in `src/benchmark/benchmark_main.cpp`.
+1. The `.cpp` and `.hpp` listed in `src/rke/benchmark/CMakeLists.txt`.
+2. The header included in `src/rke/benchmark/benchmark_main.cpp`.
 3. A `BENCHMARK(...)` registration in that same file, inside its
    `namespace RKE::Benchmark` block and above `BENCHMARK_MAIN()`.
 
@@ -68,7 +68,7 @@ inside. `BM_BonusClassicOption` is the pattern.
 
 ```bash
 cmake --build --preset release --target ql_performance_testing
-./build/release/src/benchmark/ql_performance_testing
+./build/release/src/rke/benchmark/ql_performance_testing
 ```
 
 Never quote a number from a `debug` build — google-benchmark prints a warning
@@ -78,14 +78,14 @@ Useful flags:
 
 ```bash
 # one benchmark, by the ->Name() given at registration
-./build/release/src/benchmark/ql_performance_testing --benchmark_filter=BonusClassicOption
+./build/release/src/rke/benchmark/ql_performance_testing --benchmark_filter=BonusClassicOption
 
 # variance across repetitions, with the aggregates only
-./build/release/src/benchmark/ql_performance_testing \
+./build/release/src/rke/benchmark/ql_performance_testing \
     --benchmark_repetitions=10 --benchmark_report_aggregates_only=true
 
 # machine-readable, for comparing two revisions
-./build/release/src/benchmark/ql_performance_testing \
+./build/release/src/rke/benchmark/ql_performance_testing \
     --benchmark_out=before.json --benchmark_out_format=json
 ```
 

@@ -46,7 +46,7 @@ itself. QuantLib and google-benchmark are git submodules under `external/`.
   `RKE_QL_EXT_HEADER` lists, the second reaching `rke_ql_ext` through
   `target_sources(... FILE_SET HEADERS)`, whose `BASE_DIRS` is `src/`, which is
   also what puts `<rke/...>` on the include path. `src/rke/testsuite/CMakeLists.txt` and
-  `src/benchmark/CMakeLists.txt` name every file. An unlisted header still compiles,
+  `src/rke/benchmark/CMakeLists.txt` name every file. An unlisted header still compiles,
   so nothing will tell you it is missing.
 - **An upstream source compiled into one of our targets must not be linted.**
   `src/rke/testsuite/CMakeLists.txt` pulls in
@@ -63,7 +63,7 @@ task calls for it:
 | [`.agents/build-and-test.md`](.agents/build-and-test.md)                 | You need build options, targets, single test invocations, local clang-tidy/clang-format runs, or the CI workflow map. |
 | [`.agents/extending-rke-ql-ext.md`](.agents/extending-rke-ql-ext.md)     | You add an instrument, payoff, pricing engine, or test to `src/rke/`.                                                 |
 | [`.agents/benchmarking.md`](.agents/benchmarking.md)                     | You add, change or run a benchmark.                                                                                   |
-| [`.agents/profiling.md`](.agents/profiling.md)                           | You profile an executable under `src/profile/`, or read a profile.                                                    |
+| [`.agents/profiling.md`](.agents/profiling.md)                           | You profile an executable under `src/rke/profile/`, or read a profile.                                                |
 | [`.agents/maintaining-agent-docs.md`](.agents/maintaining-agent-docs.md) | You edit this file or anything in `.agents/`.                                                                         |
 
 ## 3. Coding Conventions
@@ -94,8 +94,8 @@ Source of truth: `.clang-format`.
   `google-build-using-namespace` is off in `.clang-tidy`.
 - Types `PascalCase`, functions `lowerCamelCase`, data members with a trailing
   underscore, benchmark entry points `BM_PascalCase`.
-- File names in `src/rke/` and `src/benchmark/Benchmark*` are `PascalCase`, the
-  directories under them lowercase. Include guards are the bare file name
+- File names in `src/rke/` are `PascalCase`, apart from the entry points
+  `testsuite.cpp` and `benchmark_main.cpp`; the directories under it lowercase. Include guards are the bare file name
   uppercased (`BONUSCLASSICOPTION_HPP`), not a path; `llvm-header-guard` is off
   for that reason.
 - `[[nodiscard]]` on value accessors.
@@ -122,7 +122,7 @@ that list needs a trailing comma — the file says so, because clang-tidy splits
 commas.
 
 Relax a check where the thing forcing it lives, not at the root.
-`src/benchmark/.clang-tidy` sets `InheritParentConfig: true` and drops only the
+`src/rke/benchmark/.clang-tidy` sets `InheritParentConfig: true` and drops only the
 two checks the benchmark fixtures force, so `src/rke/ql/ext` keeps running
 everything. A new directory that needs an exception gets its own file the same
 way.
@@ -213,7 +213,7 @@ Before finishing a change:
       an independent check, as under "The Valuation Test Is a Regression Lock".
 - [ ] Every new `.cpp` and `.hpp` is listed in the owning `CMakeLists.txt`, and
       every new target links `rke::warnings`.
-- [ ] New benchmarks are registered in `src/benchmark/benchmark_main.cpp`.
+- [ ] New benchmarks are registered in `src/rke/benchmark/benchmark_main.cpp`.
 - [ ] Errors go through the `QL_*` macros, ownership through `ext::shared_ptr`.
 - [ ] Numerical tolerances are justified, and the conventions behind a price are
       stated, as under "Quant Claims Need Their Conventions Spelled Out".

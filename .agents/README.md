@@ -22,7 +22,7 @@ otherwise.
 | [`build-and-test.md`](build-and-test.md)                 | You are configuring a build, picking options, running a single test case, running clang-tidy or clang-format locally, or checking which workflow covers a change. |
 | [`extending-rke-ql-ext.md`](extending-rke-ql-ext.md)     | You are adding an instrument, payoff, pricing engine, or test under `src/rke/`.                                                                                   |
 | [`benchmarking.md`](benchmarking.md)                     | You are adding, changing or running a benchmark.                                                                                                                  |
-| [`profiling.md`](profiling.md)                           | You are profiling an executable under `src/profile/`, or reading a profile.                                                                                       |
+| [`profiling.md`](profiling.md)                           | You are profiling an executable under `src/rke/profile/`, or reading a profile.                                                                                   |
 | [`maintaining-agent-docs.md`](maintaining-agent-docs.md) | You are editing `AGENTS.md` or one of the files above.                                                                                                            |
 
 ## Why this directory
