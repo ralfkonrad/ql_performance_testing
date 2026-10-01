@@ -83,7 +83,7 @@ Source of truth: `.clang-format`.
 
 ### 3.2 Naming and Namespaces
 
-- Our code lives in `namespace RKE::QL::External`. The two older `ql_*`
+- Our code lives in `namespace RKE::QL::Ext`. The two older `ql_*`
   benchmark translation units are at global scope; leave them there.
 - Headers qualify `QuantLib::` in full. Implementation files put
   `using namespace QuantLib;` after the includes — which is why

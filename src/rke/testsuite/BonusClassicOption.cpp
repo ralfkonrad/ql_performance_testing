@@ -13,7 +13,7 @@
 #include <cmath>
 #include <test-suite/utilities.hpp>
 
-using namespace RKE::QL::External;
+using namespace RKE::QL::Ext;
 using namespace QuantLib;
 
 // Barrier monitoring dates of the MC engine are its time grid points.

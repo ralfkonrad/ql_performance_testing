@@ -8,7 +8,7 @@
 #include <ql/instruments/oneassetoption.hpp>
 #include <ql/instruments/payoffs.hpp>
 
-namespace RKE::QL::External {
+namespace RKE::QL::Ext {
     class BonusClassicPayoff : public QuantLib::StrikedTypePayoff {
       public:
         BonusClassicPayoff(QuantLib::Real barrier, QuantLib::Real bonusLevel);

@@ -6,7 +6,7 @@
 
 using namespace QuantLib;
 
-namespace RKE::QL::External {
+namespace RKE::QL::Ext {
     BiasedBonusClassicPathPricer::BiasedBonusClassicPathPricer(BonusClassicPayoff payoff,
                                                                DiscountFactor discountFactor)
     : payoff_(std::move(payoff)), discountFactor_(discountFactor) {

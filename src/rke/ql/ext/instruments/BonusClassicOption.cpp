@@ -5,7 +5,7 @@
 
 using namespace QuantLib;
 
-namespace RKE::QL::External {
+namespace RKE::QL::Ext {
     // Option::Call is a placeholder: the product has no option type, and
     // StrikedTypePayoff::strike_ is used to hold the barrier.
     BonusClassicPayoff::BonusClassicPayoff(Real barrier, Real bonusLevel)

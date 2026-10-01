@@ -13,7 +13,7 @@
 
 using namespace QuantLib;
 
-namespace RKE::QL::External {
+namespace RKE::QL::Ext {
     namespace {
         // Duplicates test-suite/utilities.hpp, which compiles into the test target only; the
         // conventions are copied so the benchmark prices the instrument the tests check.
