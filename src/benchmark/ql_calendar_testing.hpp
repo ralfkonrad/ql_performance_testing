@@ -6,7 +6,8 @@
 
 #include <benchmark/benchmark.h>
 
-// Global scope is legacy; new benchmarks go in RKE::Benchmark.
-void BM_TestCalendar(benchmark::State& state);
+namespace RKE::Benchmark {
+    void BM_TestCalendar(benchmark::State& state);
+}
 
 #endif // QL_PERFORMANCE_TESTING_QL_CALENDAR_TESTING_HPP

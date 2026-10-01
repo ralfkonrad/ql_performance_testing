@@ -15,6 +15,8 @@ BENCHMARK(RKE::Benchmark::BM_BonusClassicOption)
     // --benchmark_repetitions.
     ->Iterations(100);
 
-BENCHMARK(BM_TestCalendar)->Name("TARGET.isBusinessDay();")->Unit(benchmark::kMillisecond);
+BENCHMARK(RKE::Benchmark::BM_TestCalendar)
+    ->Name("TARGET.isBusinessDay();")
+    ->Unit(benchmark::kMillisecond);
 
 BENCHMARK_MAIN();

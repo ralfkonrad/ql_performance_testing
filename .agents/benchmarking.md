@@ -37,9 +37,6 @@ run is statistically stable. That keeps a pricing benchmark's wall time
 predictable, at the cost of any variance estimate — ask for
 `--benchmark_repetitions` when you need one.
 
-The `ql_*` files in `src/benchmark/` predate the namespace and register at global
-scope. Leave them as they are; new files use `RKE::Benchmark`.
-
 ## 2. The Two Things That Silently Measure Nothing
 
 **A lazy instrument.** `Instrument::NPV()` returns a cached value, so a loop that
