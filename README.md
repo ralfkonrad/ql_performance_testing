@@ -21,7 +21,7 @@ cd ql_performance_testing
 cmake --preset release          # or: debug
 cmake --build --preset release
 ctest --preset release
-./build/release/src/rke/benchmark/ql_performance_testing
+./build/release/src/rke/benchmark/rke_benchmark
 ```
 
 The test presets filter on `^rke_`, so `ctest` runs the extension tests only.

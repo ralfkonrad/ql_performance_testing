@@ -91,18 +91,18 @@ subdirectory.
 Paths are relative to the preset's binary dir, `build/release`, which mirrors the
 source tree.
 
-| Target                   | Kind                  | Lands at                                   |
-| ------------------------ | --------------------- | ------------------------------------------ |
-| `rke_ql_ext`             | static library        | `src/rke/ql/ext/librke_ql_ext.a`           |
-| `rke_ql_ext_testsuite`   | Boost.Test executable | `src/rke/testsuite/rke_ql_ext_testsuite`   |
-| `ql_performance_testing` | google-benchmark exe  | `src/rke/benchmark/ql_performance_testing` |
+| Target          | Kind                  | Lands at                          |
+| --------------- | --------------------- | --------------------------------- |
+| `rke_ql_ext`    | static library        | `src/rke/ql/ext/librke_ql_ext.a`  |
+| `rke_testsuite` | Boost.Test executable | `src/rke/testsuite/rke_testsuite` |
+| `rke_benchmark` | google-benchmark exe  | `src/rke/benchmark/rke_benchmark` |
 
 `cmake --build --preset release` also builds QuantLib and QuantLib's own test
-suite. To skip that, build one target: `--target rke_ql_ext_testsuite`.
+suite. To skip that, build one target: `--target rke_testsuite`.
 
 ## 5. Running Tests
 
-CTest knows two tests, `quantlib_test_suite` and `rke_ql_ext_testsuite`. The
+CTest knows two tests, `quantlib_test_suite` and `rke_testsuite`. The
 first is QuantLib's full suite and dominates the runtime, so the hidden
 `default` test preset carries `filter.include.name` `^rke_` and both visible
 presets inherit it:
@@ -118,7 +118,7 @@ ctest --preset release -R quantlib
 Boost.Test arguments go to the executable directly:
 
 ```bash
-BIN=build/release/src/rke/testsuite/rke_ql_ext_testsuite
+BIN=build/release/src/rke/testsuite/rke_testsuite
 
 # everything, with the per-case messages the CTest entry also asks for
 $BIN -l message

@@ -89,6 +89,9 @@ Source of truth: `.clang-format`.
   declares goes there, test cases and `BENCHMARK(...)` registrations included;
   only `main` stays global, which keeps `BENCHMARK_MAIN()` and `testsuite.cpp`
   outside. Nothing outside `src/rke/ql/ext` goes into `RKE::QL::Ext`.
+- CMake targets follow the same directories: `rke_ql_ext`, `rke_testsuite`,
+  `rke_benchmark`, `rke_profile_<workload>`. A CTest name is its target's name;
+  the `rke_` prefix is what the test presets filter on.
 - Headers qualify `QuantLib::` in full. Implementation files put
   `using namespace QuantLib;` after the includes — which is why
   `google-build-using-namespace` is off in `.clang-tidy`.

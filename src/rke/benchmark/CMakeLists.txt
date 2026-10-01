@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 add_executable(
-        ql_performance_testing
+        rke_benchmark
 
         benchmark_main.cpp
 
@@ -19,7 +19,7 @@ add_executable(
 )
 
 target_link_libraries(
-        ql_performance_testing PRIVATE
+        rke_benchmark PRIVATE
         rke_ql_ext
         benchmark::benchmark
         rke::warnings

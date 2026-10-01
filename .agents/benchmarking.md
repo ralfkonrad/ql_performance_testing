@@ -67,8 +67,8 @@ inside. `BM_BonusClassicOption` is the pattern.
 ## 4. Running
 
 ```bash
-cmake --build --preset release --target ql_performance_testing
-./build/release/src/rke/benchmark/ql_performance_testing
+cmake --build --preset release --target rke_benchmark
+./build/release/src/rke/benchmark/rke_benchmark
 ```
 
 Never quote a number from a `debug` build — google-benchmark prints a warning
@@ -78,14 +78,14 @@ Useful flags:
 
 ```bash
 # one benchmark, by the ->Name() given at registration
-./build/release/src/rke/benchmark/ql_performance_testing --benchmark_filter=BonusClassicOption
+./build/release/src/rke/benchmark/rke_benchmark --benchmark_filter=BonusClassicOption
 
 # variance across repetitions, with the aggregates only
-./build/release/src/rke/benchmark/ql_performance_testing \
+./build/release/src/rke/benchmark/rke_benchmark \
     --benchmark_repetitions=10 --benchmark_report_aggregates_only=true
 
 # machine-readable, for comparing two revisions
-./build/release/src/rke/benchmark/ql_performance_testing \
+./build/release/src/rke/benchmark/rke_benchmark \
     --benchmark_out=before.json --benchmark_out_format=json
 ```
 
