@@ -59,32 +59,42 @@ namespace RKE::Benchmark {
                     Handle<Quote>(spotQuote), Handle(qTS), Handle(rTS), Handle(volTS));
             }
         };
+
+        void benchmarkBonusClassicOption(benchmark::State& state, bool isBiased) {
+            const auto option_data = OptionData();
+            auto market_data = MarketData();
+
+            const auto today = Date(22, Jun, 2025);
+            Settings::instance().evaluationDate() = today;
+
+            const auto exerciseDate = today + option_data.ttm;
+
+            const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
+            const auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
+                process, 100, 50'000, 50'001, Null<Real>(), isBiased, true, 42);
+
+            const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
+                option_data.barrier, option_data.bonusLevel, exerciseDate);
+
+            bonusClassicOption->setPricingEngine(mcEngine);
+
+            for (const auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
+                // recalculate() is the measurement: NPV() alone returns the cached value, so the
+                // loop would time one pricing and the rest cache reads.
+                bonusClassicOption->recalculate();
+                auto npv = bonusClassicOption->NPV();
+                benchmark::DoNotOptimize(npv);
+            }
+        }
     }
 
     void BM_BonusClassicOption(benchmark::State& state) {
-        const auto option_data = OptionData();
-        auto market_data = MarketData();
+        benchmarkBonusClassicOption(state, true);
+    }
 
-        const auto today = Date(22, Jun, 2025);
-        Settings::instance().evaluationDate() = today;
-
-        const auto exerciseDate = today + option_data.ttm;
-
-        const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
-        const auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-            process, 100, 50'000, 50'001, Null<Real>(), true, true, 42);
-
-        const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
-            option_data.barrier, option_data.bonusLevel, exerciseDate);
-
-        bonusClassicOption->setPricingEngine(mcEngine);
-
-        for (const auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
-            // recalculate() is the measurement: NPV() alone returns the cached value, so the
-            // loop would time one pricing and the rest cache reads.
-            bonusClassicOption->recalculate();
-            auto npv = bonusClassicOption->NPV();
-            benchmark::DoNotOptimize(npv);
-        }
+    // The same pricing with the barrier monitored continuously, which adds a variance() call,
+    // a logarithm and an exponential per step of every surviving path.
+    void BM_BonusClassicOptionContinuous(benchmark::State& state) {
+        benchmarkBonusClassicOption(state, false);
     }
 }

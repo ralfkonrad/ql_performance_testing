@@ -176,6 +176,106 @@ namespace RKE::TestSuite {
         BOOST_CHECK_CLOSE_FRACTION(replication, npv, 1e-3);
     }
 
+    BOOST_AUTO_TEST_CASE(testBonusClassicOptionContinuousValuation) { // NOLINT(misc-use-internal-linkage):
+                                                                      // the struct is the macro's
+        BOOST_TEST_MESSAGE("BonusClassicOption continuous valuation test");
+
+        const auto option_data = OptionData();
+        auto market_data = MarketData();
+
+        const auto today = Date(22, Jun, 2025);
+        Settings::instance().evaluationDate() = today;
+
+        const auto exerciseDate = today + option_data.ttm;
+
+        const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
+            option_data.barrier, option_data.bonusLevel, exerciseDate);
+
+        const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
+        const auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
+            process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), false, true, 42);
+
+        bonusClassicOption->setPricingEngine(mcEngine);
+        const auto npv = bonusClassicOption->NPV();
+
+        // Regression lock, as in testBonusClassicOptionValuation: the engine's own output for
+        // a fixed seed and grid, not an externally validated price. See
+        // testBonusClassicOptionContinuousReplication for that.
+        BOOST_CHECK_CLOSE_FRACTION(105.88329042929441, npv, 1e-8);
+    }
+
+    BOOST_AUTO_TEST_CASE(testBonusClassicOptionContinuousReplication) { // NOLINT(misc-use-internal-linkage):
+                                                                        // the struct is the macro's
+        BOOST_TEST_MESSAGE("BonusClassicOption continuous replication test");
+
+        const auto option_data = OptionData();
+        auto market_data = MarketData();
+
+        const auto today = Date(22, Jun, 2025);
+        Settings::instance().evaluationDate() = today;
+
+        const auto exerciseDate = today + option_data.ttm;
+
+        const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
+
+        const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
+            option_data.barrier, option_data.bonusLevel, exerciseDate);
+        const auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
+            process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), false, true, 42);
+        bonusClassicOption->setPricingEngine(mcEngine);
+        const auto npv = bonusClassicOption->NPV();
+
+        // The same decomposition as testBonusClassicOptionReplication: the asset plus a
+        // down-and-out put struck at the bonus level. The engine now monitors continuously,
+        // as AnalyticBarrierEngine assumes, so the put takes the barrier itself and no
+        // Broadie-Glasserman-Kou shift applies.
+        const auto assetLeg = process->x0() * process->dividendYield()->discount(exerciseDate);
+
+        auto downOutPut =
+            BarrierOption(Barrier::DownOut, option_data.barrier, 0.0,
+                          ext::make_shared<PlainVanillaPayoff>(Option::Put, option_data.bonusLevel),
+                          ext::make_shared<EuropeanExercise>(exerciseDate));
+        downOutPut.setPricingEngine(ext::make_shared<AnalyticBarrierEngine>(process));
+
+        const auto replication = assetLeg + downOutPut.NPV();
+
+        // With flat r, q and sigma the bridge is exact, so the residual is sampling error
+        // alone: measured 6.5e-5 relative at 50,000 paths, 1.5e-5 at 200,000 and 2.3e-5 at
+        // 400,000. The bound leaves three times the 50,000-path residual.
+        BOOST_CHECK_CLOSE_FRACTION(replication, npv, 2e-4);
+    }
+
+    BOOST_AUTO_TEST_CASE(testBonusClassicOptionMonitoringOrder) { // NOLINT(misc-use-internal-linkage):
+                                                                  // the struct is the macro's
+        BOOST_TEST_MESSAGE("BonusClassicOption monitoring order test");
+
+        const auto option_data = OptionData();
+        auto market_data = MarketData();
+
+        const auto today = Date(22, Jun, 2025);
+        Settings::instance().evaluationDate() = today;
+
+        const auto exerciseDate = today + option_data.ttm;
+
+        const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
+
+        const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
+            option_data.barrier, option_data.bonusLevel, exerciseDate);
+
+        bonusClassicOption->setPricingEngine(ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
+            process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), true, true, 42));
+        const auto discrete = bonusClassicOption->NPV();
+
+        bonusClassicOption->setPricingEngine(ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
+            process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), false, true, 42));
+        const auto continuous = bonusClassicOption->NPV();
+
+        // Continuous monitoring sees every crossing the grid sees and more, and a knock-out
+        // only removes the bonus put, so on the same paths the continuous price is lower.
+        BOOST_TEST_MESSAGE("discrete " << discrete << ", continuous " << continuous);
+        BOOST_CHECK_LT(continuous, discrete);
+    }
+
     BOOST_AUTO_TEST_SUITE_END()
 
     BOOST_AUTO_TEST_SUITE_END()
