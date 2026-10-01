@@ -13,11 +13,14 @@ itself. QuantLib and google-benchmark are git submodules under `external/`.
 
 ## 1. Hard Constraints
 
-- **`external/` is two git submodules and is off limits.** `external/QuantLib`
-  tracks the `ralfkonrad/QuantLib` fork, `external/benchmark` tracks
-  `google/benchmark`. Never edit a file there, never reformat one
+- **Every directory under `external/` is a submodule and off limits.** Today
+  `external/QuantLib`, tracking the `ralfkonrad/QuantLib` fork, and
+  `external/benchmark`, tracking `google/benchmark`; a directory added there later
+  is read-only the same way. Never edit a file in one, never reformat one
   (`.clang-format-ignore` excludes `external/**`), and never move a submodule
-  pointer as a side effect of another change. Nothing of ours is declared at the
+  pointer as a side effect of another change. `external/CMakeLists.txt` is ours:
+  it adds the submodules and sets, before each `add_subdirectory`, the options
+  that submodule reads. Nothing of ours is declared at the
   top level beside them: warnings and `CMAKE_CXX_CLANG_TIDY` are set in
   `src/CMakeLists.txt`, one directory tree away, so neither depends on where
   `add_subdirectory(external)` sits. The one exception is `cmake/Profiling.cmake`,
