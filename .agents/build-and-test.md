@@ -102,13 +102,14 @@ suite. To skip that, build one target: `--target rke_testsuite`.
 
 ## 5. Running Tests
 
-CTest knows two tests, `quantlib_test_suite` and `rke_testsuite`. The
-first is QuantLib's full suite and dominates the runtime, so the hidden
+CTest knows three tests: `quantlib_test_suite`, `rke_testsuite`, and
+`rke_benchmark`, a one-iteration dry run of the benchmarks. The first is
+QuantLib's full suite and dominates the runtime, so the hidden
 `default` test preset carries `filter.include.name` `^rke_` and both visible
 presets inherit it:
 
 ```bash
-# the extension tests only
+# the extension tests and the benchmark dry run
 ctest --preset release
 
 # QuantLib's own suite: a command-line -R overrides the preset's filter
