@@ -98,11 +98,12 @@ executables, not this binary.
 ## 5. Commented-Out Registrations Are Deliberate
 
 `benchmark_main.cpp` keeps the `Xoshiro256StarStar` versus `MersenneTwister`
-comparisons commented out, and `cmake-and-ctest.yml` builds the executable
-without ever running it. Neither is an oversight: the RNG comparisons are
-re-enabled when that question comes up again, and there is no CI baseline to
-compare against. Do not "clean up" the commented block, and do not add a
-benchmark run to the matrix without being asked.
+comparisons commented out, and CI never times the executable: CTest runs it as
+`rke_benchmark` with `--benchmark_dry_run=true`, one iteration of each
+registration, which only proves it does not throw. Neither is an oversight: the
+RNG comparisons are re-enabled when that question comes up again, and there is
+no CI baseline to compare against. Do not "clean up" the commented block, and
+do not add a timed benchmark run to CI without being asked.
 
 Consequence: every benchmark number is a local measurement. When you quote one,
 name the machine, the compiler and the C++ standard it came from, and measure

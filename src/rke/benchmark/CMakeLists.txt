@@ -24,3 +24,10 @@ target_link_libraries(
         benchmark::benchmark
         rke::warnings
 )
+
+add_test(
+        # A smoke test, not a measurement: one iteration of each registered benchmark, so CI
+        # catches a benchmark that throws without timing anything on a shared runner.
+        NAME rke_benchmark
+        COMMAND rke_benchmark --benchmark_dry_run=true
+)
