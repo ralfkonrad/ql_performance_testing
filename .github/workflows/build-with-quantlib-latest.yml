@@ -1,0 +1,160 @@
+# SPDX-FileCopyrightText: 2026 Ralf Konrad Eckel
+# SPDX-License-Identifier: MIT
+
+name: Build with the latest QuantLib master
+
+on:
+  schedule:
+    - cron: '43 1 * * *'
+      timezone: Europe/Berlin
+  workflow_dispatch: { }
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-26.04
+
+    # The weekly's Linux figure: QuantLib's suite is compiled too, and a QuantLib master tree misses
+    # much of the nightly's cache that the setup action restores.
+    timeout-minutes: 120
+
+    outputs:
+      quantlib-sha: ${{ steps.quantlib.outputs.sha }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: "true"
+
+      - name: Checkout master of lballabio/QuantLib
+        id: quantlib
+        # Fetched from upstream rather than the fork the submodule tracks, and only checked out
+        # in the job: the committed pointer never moves, see .github/dependabot.yml.
+        working-directory: external/QuantLib
+        run: |
+          git fetch --depth=1 https://github.com/lballabio/QuantLib master
+          git checkout --detach FETCH_HEAD
+          sha="$(git rev-parse HEAD)"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Built against lballabio/QuantLib@$sha" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Setup needed software
+        uses: ./.github/actions/setup
+        with:
+          os: ubuntu-26.04
+          cxx: g++
+          cxx-standard: 17
+          # Literal on purpose: a scheduled run sits on master, and objects built from QuantLib
+          # master would only evict the nightly's entries from the shared quota.
+          save-ccache: 'false'
+
+      - name: Configure, build and test
+        env:
+          CC: gcc
+          CXX: g++
+        # The workflow preset takes no -D, so QuantLib's suite is compiled as well; its test
+        # preset still runs only ^rke_. C++17 is the CMakeLists.txt default.
+        run: |
+          cmake --version
+          cmake --workflow release
+
+  report:
+    needs: build
+    if: always()
+    runs-on: ubuntu-26.04
+
+    # Scoped to this job because only it needs issues: write; actions: read is for the
+    # listJobsForWorkflowRun call in the script below.
+    permissions:
+      actions: read
+      issues: write
+
+    timeout-minutes: 10
+
+    steps:
+      - name: Summarise, and open or close the tracking issue
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          RESULT: ${{ needs.build.result }}
+          QUANTLIB_SHA: ${{ needs.build.outputs.quantlib-sha }}
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const runUrl =
+              `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            const result = process.env.RESULT;
+            const sha = process.env.QUANTLIB_SHA;
+            const commitUrl = `https://github.com/lballabio/QuantLib/commit/${sha}`;
+            const commit = sha
+              ? `[lballabio/QuantLib@${sha.slice(0, 12)}](${commitUrl})`
+              : '_unknown, the checkout did not finish_';
+
+            const title = 'Build with the latest QuantLib master is failing';
+
+            core.summary.addHeading('Build with the latest QuantLib master', 2);
+            core.summary.addRaw(`Result: ${result}, against ${commit}.`, true);
+            core.summary.addLink('This run', runUrl);
+            await core.summary.write();
+
+            if (result === 'cancelled') {
+              core.info('The build was cancelled; leaving the tracking issue as it is.');
+              return;
+            }
+
+            const open = await github.paginate(
+              github.rest.issues.listForRepo,
+              { owner, repo, state: 'open', per_page: 100 });
+            const tracking = open.find((issue) => issue.title === title && !issue.pull_request);
+
+            if (result === 'success') {
+              if (!tracking) {
+                core.info('Green, and no tracking issue is open.');
+                return;
+              }
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: tracking.number,
+                body: `Green again against ${commit} in [this run](${runUrl}). Closing.`,
+              });
+              await github.rest.issues.update(
+                { owner, repo, issue_number: tracking.number, state: 'closed' });
+              core.info(`Closed #${tracking.number}.`);
+              return;
+            }
+
+            const jobs = await github.paginate(
+              github.rest.actions.listJobsForWorkflowRun,
+              { owner, repo, run_id: context.runId, filter: 'latest', per_page: 100 });
+            const failedJobs = jobs
+              .filter((job) => job.conclusion === 'failure' || job.conclusion === 'timed_out')
+              .map((job) => `- [${job.name}](${job.html_url}) — ${job.conclusion}`);
+
+            const body = [
+              `The build against ${commit} failed in [this run](${runUrl}).`,
+              '',
+              failedJobs.length > 0 ? failedJobs.join('\n') : '_No job reported a conclusion._',
+              '',
+              'The submodule pointer is unchanged; this is a heads-up for the next manual bump.',
+              'This issue is reused by every run and closes itself once a run is green.',
+            ].join('\n');
+
+            if (tracking) {
+              await github.rest.issues.update(
+                { owner, repo, issue_number: tracking.number, body });
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: tracking.number,
+                body: `Still failing against ${commit} in [this run](${runUrl}).`,
+              });
+              core.info(`Updated #${tracking.number}.`);
+            } else {
+              const created = await github.rest.issues.create({ owner, repo, title, body });
+              core.info(`Opened #${created.data.number}.`);
+            }
+
+            core.setFailed(`The build against ${sha || 'QuantLib master'} failed.`);
