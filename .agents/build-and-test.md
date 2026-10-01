@@ -164,8 +164,8 @@ The workflow runs exactly this, plus `-DCMAKE_CXX_COMPILER=clang++`; the preset
 names no compiler, so it still configures under AppleClang and MSVC.
 
 clang-format is not wired into the build. Run it over the touched files only, and
-never over `external/` — `.clang-format-ignore` excludes it, and CI pins version
-20, past the 18 that file needs:
+never over `external/` — `.clang-format-ignore` excludes it, and CI uses Homebrew's
+`llvm@23`, past the 18 that file needs:
 
 ```bash
 clang-format -i rke/ql/ext/instruments/BonusClassicOption.cpp

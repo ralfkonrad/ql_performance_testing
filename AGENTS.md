@@ -78,8 +78,8 @@ Source of truth: `.clang-format`.
   `<ql/...>` → `<boost/...>` → standard headers.
 - Formatting is **not** checked on pull requests — the workflow that applies
   clang-format runs weekly and on dispatch, never on a pull request. Run it
-  yourself; CI pins clang-format 20, so a newer local binary may still reformat
-  more than CI would.
+  yourself with clang-format 23: CI installs Homebrew's `llvm@23`, and another
+  major may format the same tree differently.
 
 ### 3.2 Naming and Namespaces
 
