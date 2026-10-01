@@ -11,4 +11,13 @@ if (MSVC)
   target_compile_options(rke_warnings INTERFACE -W4)
 else ()
   target_compile_options(rke_warnings INTERFACE -Wall -Wextra -Wpedantic)
+
+  # Clang 22 and later flag __COUNTER__, which every Boost.Test registration macro
+  # expands at our call site, as a C2y extension under -Wpedantic. The probe is on
+  # the positive spelling: GCC accepts any unknown -Wno-* flag silently.
+  include(CheckCXXCompilerFlag)
+  check_cxx_compiler_flag(-Wc2y-extensions RKE_HAS_WC2Y_EXTENSIONS)
+  if (RKE_HAS_WC2Y_EXTENSIONS)
+    target_compile_options(rke_warnings INTERFACE -Wno-c2y-extensions)
+  endif ()
 endif ()
