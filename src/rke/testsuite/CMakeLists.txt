@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2025 Ralf Konrad Eckel
 # SPDX-License-Identifier: MIT
 
-add_executable(rke_ql_ext_testsuite
+add_executable(rke_testsuite
         testsuite.cpp
         BonusClassicOption.cpp
         TestSuiteFixture.hpp
@@ -15,7 +15,7 @@ set_source_files_properties(
         PROPERTIES SKIP_LINTING TRUE
 )
 
-target_link_libraries(rke_ql_ext_testsuite PRIVATE
+target_link_libraries(rke_testsuite PRIVATE
         rke_ql_ext
         rke::warnings
 )
@@ -23,6 +23,6 @@ target_link_libraries(rke_ql_ext_testsuite PRIVATE
 add_test(
         # The rke_ prefix is what the test presets filter on; rename it and
         # `ctest --preset release` runs nothing.
-        NAME rke_ql_ext_testsuite
-        COMMAND rke_ql_ext_testsuite -l message
+        NAME rke_testsuite
+        COMMAND rke_testsuite -l message
 )

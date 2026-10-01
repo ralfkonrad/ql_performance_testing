@@ -78,8 +78,9 @@ mistake is invisible until someone looks for the file in an IDE.
 Add the `.cpp` to `src/rke/testsuite/CMakeLists.txt` and follow
 `src/rke/testsuite/BonusClassicOption.cpp`:
 
-- `BOOST_FIXTURE_TEST_SUITE(RkeQLExtTestSuite, TestSuiteFixture)` on the outside,
-  a `BOOST_AUTO_TEST_SUITE` per instrument inside, cases within that.
+- Everything inside `namespace RKE::TestSuite`, then
+  `BOOST_FIXTURE_TEST_SUITE(RkeQLExtTestSuite, TestSuiteFixture)`, a
+  `BOOST_AUTO_TEST_SUITE` per instrument inside it, cases within that.
 - The fixture already restores `Settings` and asserts that `IndexManager`
   histories are empty. Do not add a second `SavedSettings`; do clear any fixings
   the case sets.

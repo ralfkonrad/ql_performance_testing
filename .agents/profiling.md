@@ -6,8 +6,9 @@ SPDX-License-Identifier: MIT
 # Profiling
 
 Read this when profiling or reading a profile. Profiling runs the dedicated
-executables under `src/profile/`, one workload each, not the google-benchmark
-binary; timing is [`benchmarking.md`](benchmarking.md).
+executables under `src/rke/profile/`, one workload each, not the google-benchmark
+binary; timing is [`benchmarking.md`](benchmarking.md). Their code lives in
+`RKE::Profile`; only `main` stays global.
 
 ## 1. Build
 
@@ -18,7 +19,7 @@ not quoted.
 
 ```bash
 cmake --workflow profile
-PROG=./build/profile/src/profile/<executable>
+PROG=./build/profile/src/rke/profile/<executable>
 OUT=build/profile/prof/$(basename "$PROG") && mkdir -p "$OUT"
 ```
 

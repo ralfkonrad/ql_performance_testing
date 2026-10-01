@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 add_executable(
-        ql_performance_testing
+        rke_benchmark
 
         benchmark_main.cpp
 
@@ -11,15 +11,15 @@ add_executable(
         BenchmarkBonusClassicOption.cpp
         BenchmarkBonusClassicOption.hpp
 
-        ql_calendar_testing.cpp
-        ql_calendar_testing.hpp
+        BenchmarkCalendar.cpp
+        BenchmarkCalendar.hpp
 
-        ql_xoshiro256starstarrng_benchmarking.cpp
-        ql_xoshiro256starstarrng_benchmarking.hpp
+        BenchmarkXoshiro256StarStarRng.cpp
+        BenchmarkXoshiro256StarStarRng.hpp
 )
 
 target_link_libraries(
-        ql_performance_testing PRIVATE
+        rke_benchmark PRIVATE
         rke_ql_ext
         benchmark::benchmark
         rke::warnings

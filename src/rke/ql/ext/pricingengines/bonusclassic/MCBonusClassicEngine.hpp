@@ -9,7 +9,7 @@
 #include <ql/pricingengines/mcsimulation.hpp>
 #include <ql/processes/blackscholesprocess.hpp>
 
-namespace RKE::QL::External {
+namespace RKE::QL::Ext {
     template <class RNG = QuantLib::PseudoRandom, class S = QuantLib::Statistics>
     class MCBonusClassicEngine : public BonusClassicOption::engine,
                                  public QuantLib::McSimulation<QuantLib::SingleVariate, RNG, S> {

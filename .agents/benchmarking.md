@@ -14,31 +14,29 @@ A benchmark is a free function taking `benchmark::State&`, declared in a header
 and defined in the matching `.cpp`:
 
 ```cpp
-namespace RKE::QL::External {
+namespace RKE::Benchmark {
     void BM_YourThing(benchmark::State& state);
 }
 ```
 
 Three places have to agree, or the benchmark builds and never runs:
 
-1. The `.cpp` and `.hpp` listed in `src/benchmark/CMakeLists.txt`.
-2. The header included in `src/benchmark/benchmark_main.cpp`.
-3. A `BENCHMARK(...)` registration in that same file.
+1. The `.cpp` and `.hpp` listed in `src/rke/benchmark/CMakeLists.txt`.
+2. The header included in `src/rke/benchmark/benchmark_main.cpp`.
+3. A `BENCHMARK(...)` registration in that same file, inside its
+   `namespace RKE::Benchmark` block and above `BENCHMARK_MAIN()`.
 
 ```cpp
-BENCHMARK(RKE::QL::External::BM_YourThing)
-    ->Name("YourThing")
-    ->Unit(benchmark::kMillisecond)
-    ->Iterations(100);
+    BENCHMARK(BM_YourThing)
+        ->Name("YourThing")
+        ->Unit(benchmark::kMillisecond)
+        ->Iterations(100);
 ```
 
 `Iterations()` pins the count instead of letting google-benchmark scale until the
 run is statistically stable. That keeps a pricing benchmark's wall time
 predictable, at the cost of any variance estimate — ask for
 `--benchmark_repetitions` when you need one.
-
-The `ql_*` files in `src/benchmark/` predate the namespace and register at global
-scope. Leave them as they are; new files use `RKE::QL::External`.
 
 ## 2. The Two Things That Silently Measure Nothing
 
@@ -69,8 +67,8 @@ inside. `BM_BonusClassicOption` is the pattern.
 ## 4. Running
 
 ```bash
-cmake --build --preset release --target ql_performance_testing
-./build/release/src/benchmark/ql_performance_testing
+cmake --build --preset release --target rke_benchmark
+./build/release/src/rke/benchmark/rke_benchmark
 ```
 
 Never quote a number from a `debug` build — google-benchmark prints a warning
@@ -80,14 +78,14 @@ Useful flags:
 
 ```bash
 # one benchmark, by the ->Name() given at registration
-./build/release/src/benchmark/ql_performance_testing --benchmark_filter=BonusClassicOption
+./build/release/src/rke/benchmark/rke_benchmark --benchmark_filter=BonusClassicOption
 
 # variance across repetitions, with the aggregates only
-./build/release/src/benchmark/ql_performance_testing \
+./build/release/src/rke/benchmark/rke_benchmark \
     --benchmark_repetitions=10 --benchmark_report_aggregates_only=true
 
 # machine-readable, for comparing two revisions
-./build/release/src/benchmark/ql_performance_testing \
+./build/release/src/rke/benchmark/rke_benchmark \
     --benchmark_out=before.json --benchmark_out_format=json
 ```
 

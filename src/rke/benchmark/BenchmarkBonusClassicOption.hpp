@@ -6,7 +6,7 @@
 
 #include <benchmark/benchmark.h>
 
-namespace RKE::QL::External {
+namespace RKE::Benchmark {
     void BM_BonusClassicOption(benchmark::State& state);
 }
 
