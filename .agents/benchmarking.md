@@ -23,13 +23,14 @@ Three places have to agree, or the benchmark builds and never runs:
 
 1. The `.cpp` and `.hpp` listed in `src/benchmark/CMakeLists.txt`.
 2. The header included in `src/benchmark/benchmark_main.cpp`.
-3. A `BENCHMARK(...)` registration in that same file.
+3. A `BENCHMARK(...)` registration in that same file, inside its
+   `namespace RKE::Benchmark` block and above `BENCHMARK_MAIN()`.
 
 ```cpp
-BENCHMARK(RKE::Benchmark::BM_YourThing)
-    ->Name("YourThing")
-    ->Unit(benchmark::kMillisecond)
-    ->Iterations(100);
+    BENCHMARK(BM_YourThing)
+        ->Name("YourThing")
+        ->Unit(benchmark::kMillisecond)
+        ->Iterations(100);
 ```
 
 `Iterations()` pins the count instead of letting google-benchmark scale until the

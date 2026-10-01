@@ -7,16 +7,16 @@
 #include "BenchmarkXoshiro256StarStarRng.hpp"
 #include <benchmark/benchmark.h>
 
-BENCHMARK(RKE::Benchmark::BM_BonusClassicOption)
-    ->Name("BonusClassicOption")
-    ->Unit(benchmark::kMillisecond)
-    // Pins the count instead of letting google-benchmark scale to statistical stability,
-    // trading the variance estimate for a predictable wall time; measure variance with
-    // --benchmark_repetitions.
-    ->Iterations(100);
+namespace RKE::Benchmark {
+    BENCHMARK(BM_BonusClassicOption)
+        ->Name("BonusClassicOption")
+        ->Unit(benchmark::kMillisecond)
+        // Pins the count instead of letting google-benchmark scale to statistical stability,
+        // trading the variance estimate for a predictable wall time; measure variance with
+        // --benchmark_repetitions.
+        ->Iterations(100);
 
-BENCHMARK(RKE::Benchmark::BM_TestCalendar)
-    ->Name("TARGET.isBusinessDay();")
-    ->Unit(benchmark::kMillisecond);
+    BENCHMARK(BM_TestCalendar)->Name("TARGET.isBusinessDay();")->Unit(benchmark::kMillisecond);
+}
 
 BENCHMARK_MAIN();
