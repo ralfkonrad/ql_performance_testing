@@ -175,15 +175,16 @@ clang-format -i rke/ql/ext/instruments/BonusClassicOption.cpp
 
 Everything is under `.github/workflows/`.
 
-| Workflow                     | Triggers                                                                 | Notes                                               |
-| ---------------------------- | ------------------------------------------------------------------------ | --------------------------------------------------- |
-| `cmake-and-ctest.yml`        | push to `master`, every pull request, nightly 00:33 Berlin, dispatch     | The only workflow that gates a pull request.        |
-| `cmake-and-ctest-weekly.yml` | weekly, Sundays 01:23 Berlin, dispatch                                   | Extended matrix. Gates nothing, writes no cache.    |
-| `clang-format-lint.yml`      | weekly, Mondays 02:23 Berlin, dispatch                                   | Opens a pull request with the fixes.                |
-| `clang-tidy.yml`             | weekly, Mondays 02:23 Berlin, dispatch                                   | Opens a pull request with the fixes.                |
-| `codeql.yml`                 | weekly, Mondays 04:23 Berlin, dispatch                                   | Autobuild repeats the whole Ubuntu build, uncached. |
-| `delete_workflow_caches.yml` | pull request closed, branch deleted, dispatch                            | Keeps the shared 10 GB cache quota clear.           |
-| `prune_ccache_entries.yml`   | nightly 03:33 Berlin, dispatch                                           | Thins `master`'s compiler caches; `dry-run` input.  |
+| Workflow                         | Triggers                                                             | Notes                                                 |
+| -------------------------------- | -------------------------------------------------------------------- | ----------------------------------------------------- |
+| `cmake-and-ctest.yml`            | push to `master`, every pull request, nightly 00:33 Berlin, dispatch | The only workflow that gates a pull request.          |
+| `cmake-and-ctest-weekly.yml`     | weekly, Sundays 01:23 Berlin, dispatch                               | Extended matrix. Gates nothing, writes no cache.      |
+| `clang-format-lint.yml`          | weekly, Mondays 02:23 Berlin, dispatch                               | Opens a pull request with the fixes.                  |
+| `clang-tidy.yml`                 | weekly, Mondays 02:23 Berlin, dispatch                               | Opens a pull request with the fixes.                  |
+| `codeql.yml`                     | weekly, Mondays 04:23 Berlin, dispatch                               | Autobuild repeats the whole Ubuntu build, uncached.   |
+| `delete_workflow_caches.yml`     | pull request closed, branch deleted, dispatch                        | Keeps the shared 10 GB cache quota clear.             |
+| `prune_ccache_entries.yml`       | nightly 03:33 Berlin, dispatch                                       | Thins `master`'s compiler caches; `dry-run` input.    |
+| `build-with-quantlib-latest.yml` | nightly 01:43 Berlin, dispatch                                       | Ubuntu gcc C++17 against `lballabio/QuantLib` master. |
 
 The nightly matrix is six runner/compiler rows — macOS/clang, Ubuntu x64 and
 Ubuntu arm64 each with clang and gcc, and Windows/MSVC — at C++17, 20 and 23,
@@ -238,6 +239,15 @@ Windows from the SourceForge MSVC binaries, which exist for x86 only. Two parts
 of the setup action exist for this workflow — the `cxx-apt-package` input, which
 installs a named gcc or clang before anything reads a compiler version, and a
 step that installs a newer CMake when an image ships below the 4.0 floor.
+
+`build-with-quantlib-latest.yml` runs `cmake --workflow release` on one leg —
+`ubuntu-26.04`, gcc, C++17 — after checking out `lballabio/QuantLib` `master`
+inside the job. The checkout never reaches a commit: the submodule pointer is
+still moved by hand, and the fork the submodule tracks may not have that commit
+yet. It gates nothing and writes no cache. A failing run opens one issue titled
+"Build with the latest QuantLib master is failing", which names the upstream
+commit it built against, and closes the issue on the next green run. A red run
+is a heads-up for the next bump, not a defect on `master`.
 
 `clang-format-lint.yml` and `clang-tidy.yml` open a pull request with whatever
 they changed, which is why neither has a push or `pull_request` trigger. They
