@@ -7,7 +7,8 @@ SPDX-License-Identifier: MIT
 
 Read this when profiling or reading a profile. Profiling runs the dedicated
 executables under `src/rke/profile/`, one workload each, not the google-benchmark
-binary; timing is [`benchmarking.md`](benchmarking.md).
+binary; timing is [`benchmarking.md`](benchmarking.md). Their code lives in
+`RKE::Profile`; only `main` stays global.
 
 ## 1. Build
 
