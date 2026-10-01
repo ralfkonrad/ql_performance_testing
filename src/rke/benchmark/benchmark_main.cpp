@@ -16,6 +16,12 @@ namespace RKE::Benchmark {
         // --benchmark_repetitions.
         ->Iterations(100);
 
+    BENCHMARK(BM_BonusClassicOptionContinuous)
+        ->Name("BonusClassicOptionContinuous")
+        ->Unit(benchmark::kMillisecond)
+        // Pinned like BonusClassicOption, so the two times compare directly.
+        ->Iterations(100);
+
     BENCHMARK(BM_TestCalendar)->Name("TARGET.isBusinessDay();")->Unit(benchmark::kMillisecond);
 }
 

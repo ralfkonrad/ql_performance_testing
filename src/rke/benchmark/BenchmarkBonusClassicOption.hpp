@@ -8,6 +8,7 @@
 
 namespace RKE::Benchmark {
     void BM_BonusClassicOption(benchmark::State& state);
+    void BM_BonusClassicOptionContinuous(benchmark::State& state);
 }
 
 #endif // BENCHMARKBONUSCLASSICOPTION_HPP
