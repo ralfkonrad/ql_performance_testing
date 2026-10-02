@@ -176,8 +176,9 @@ namespace RKE::TestSuite {
         BOOST_CHECK_CLOSE_FRACTION(replication, npv, 1e-3);
     }
 
-    BOOST_AUTO_TEST_CASE(testBonusClassicOptionContinuousValuation) { // NOLINT(misc-use-internal-linkage):
-                                                                      // the struct is the macro's
+    BOOST_AUTO_TEST_CASE(
+        testBonusClassicOptionContinuousValuation) { // NOLINT(misc-use-internal-linkage):
+                                                     // the struct is the macro's
         BOOST_TEST_MESSAGE("BonusClassicOption continuous valuation test");
 
         const auto option_data = OptionData();
@@ -204,8 +205,9 @@ namespace RKE::TestSuite {
         BOOST_CHECK_CLOSE_FRACTION(105.88329042929441, npv, 1e-8);
     }
 
-    BOOST_AUTO_TEST_CASE(testBonusClassicOptionContinuousReplication) { // NOLINT(misc-use-internal-linkage):
-                                                                        // the struct is the macro's
+    BOOST_AUTO_TEST_CASE(
+        testBonusClassicOptionContinuousReplication) { // NOLINT(misc-use-internal-linkage):
+                                                       // the struct is the macro's
         BOOST_TEST_MESSAGE("BonusClassicOption continuous replication test");
 
         const auto option_data = OptionData();
@@ -245,8 +247,9 @@ namespace RKE::TestSuite {
         BOOST_CHECK_CLOSE_FRACTION(replication, npv, 2e-4);
     }
 
-    BOOST_AUTO_TEST_CASE(testBonusClassicOptionMonitoringOrder) { // NOLINT(misc-use-internal-linkage):
-                                                                  // the struct is the macro's
+    BOOST_AUTO_TEST_CASE(
+        testBonusClassicOptionMonitoringOrder) { // NOLINT(misc-use-internal-linkage):
+                                                 // the struct is the macro's
         BOOST_TEST_MESSAGE("BonusClassicOption monitoring order test");
 
         const auto option_data = OptionData();
