@@ -115,7 +115,7 @@ Source of truth: `.clang-format`.
 - Ownership through `QuantLib::ext::shared_ptr`, `ext::make_shared`,
   `ext::dynamic_pointer_cast`, not the `std::` spellings.
 - Errors through `QL_REQUIRE`, `QL_ENSURE`, `QL_FAIL`, `QL_ASSERT`, never a raw
-  `throw`. `NOT_IMPLEMENTED_FAILURE()` from `src/rke/ql/ext/Error.hpp` for an
+  `throw`. `NOT_IMPLEMENTED_FAILURE()` from `src/rke/ql/ext/Errors.hpp` for an
   override that is not implemented.
 - `Null<Real>()` and friends are the "not given" sentinel, checked in
   `arguments::validate()`.
