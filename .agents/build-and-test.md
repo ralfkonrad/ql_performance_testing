@@ -91,25 +91,29 @@ subdirectory.
 Paths are relative to the preset's binary dir, `build/release`, which mirrors the
 source tree.
 
-| Target          | Kind                  | Lands at                          |
-| --------------- | --------------------- | --------------------------------- |
-| `rke_ql_ext`    | static library        | `src/rke/ql/ext/librke_ql_ext.a`  |
-| `rke_testsuite` | Boost.Test executable | `src/rke/testsuite/rke_testsuite` |
-| `rke_benchmark` | google-benchmark exe  | `src/rke/benchmark/rke_benchmark` |
+| Target                     | Kind                  | Lands at                                                |
+| -------------------------- | --------------------- | ------------------------------------------------------- |
+| `rke_ql_ext`               | static library        | `src/rke/ql/ext/librke_ql_ext.a`                        |
+| `rke_common`               | static library        | `src/rke/common/librke_common.a`                        |
+| `rke_testsuite`            | Boost.Test executable | `src/rke/testsuite/rke_testsuite`                       |
+| `rke_benchmark_<workload>` | google-benchmark exe  | `src/rke/benchmark/<workload>/rke_benchmark_<workload>` |
+| `rke_profile_<workload>`   | profile executable    | `src/rke/profile/<workload>/rke_profile_<workload>`     |
 
 `cmake --build --preset release` also builds QuantLib and QuantLib's own test
 suite. To skip that, build one target: `--target rke_testsuite`.
 
 ## 5. Running Tests
 
-CTest knows three tests: `quantlib_test_suite`, `rke_testsuite`, and
-`rke_benchmark`, a one-iteration dry run of the benchmarks. The first is
-QuantLib's full suite and dominates the runtime, so the hidden
+CTest knows `quantlib_test_suite`, `rke_testsuite`, one
+`rke_benchmark_<workload>` per benchmark executable (a one-iteration dry run) and,
+per profile executable, one single-iteration smoke run per mode, such as
+`rke_profile_bonusclassicoption_discrete`.
+The first is QuantLib's full suite and dominates the runtime, so the hidden
 `default` test preset carries `filter.include.name` `^rke_` and both visible
 presets inherit it:
 
 ```bash
-# the extension tests and the benchmark dry run
+# the extension tests, the benchmark dry run and the profile smoke runs
 ctest --preset release
 
 # QuantLib's own suite: a command-line -R overrides the preset's filter

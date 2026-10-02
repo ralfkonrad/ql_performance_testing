@@ -1,11 +1,10 @@
-// SPDX-FileCopyrightText: 2025 Ralf Konrad Eckel
+// SPDX-FileCopyrightText: 2026 Ralf Konrad Eckel
 // SPDX-License-Identifier: MIT
 
-#include "BenchmarkBonusClassicOption.hpp"
-#include <rke/ql/ext/instruments/BonusClassicOption.hpp>
+#include "BonusClassicOptionSetup.hpp"
 #include <rke/ql/ext/pricingengines/bonusclassic/MCBonusClassicEngine.hpp>
-#include <ql/processes/blackscholesprocess.hpp>
 #include <ql/quotes/simplequote.hpp>
+#include <ql/settings.hpp>
 #include <ql/termstructures/volatility/equityfx/blackconstantvol.hpp>
 #include <ql/termstructures/yield/flatforward.hpp>
 #include <ql/time/calendars/nullcalendar.hpp>
@@ -14,10 +13,10 @@
 using namespace RKE::QL::Ext;
 using namespace QuantLib;
 
-namespace RKE::Benchmark {
+namespace RKE::Common {
     namespace {
         // Duplicates test-suite/utilities.hpp, which compiles into the test target only; the
-        // conventions are copied so the benchmark prices the instrument the tests check.
+        // conventions are copied so this prices the instrument the tests check.
         ext::shared_ptr<YieldTermStructure>
         flatRate(const Date& today, const ext::shared_ptr<Quote>& forward, const DayCounter& dc) {
             return ext::make_shared<FlatForward>(today, Handle<Quote>(forward), dc);
@@ -59,42 +58,29 @@ namespace RKE::Benchmark {
                     Handle<Quote>(spotQuote), Handle(qTS), Handle(rTS), Handle(volTS));
             }
         };
-
-        void benchmarkBonusClassicOption(benchmark::State& state, bool isBiased) {
-            const auto option_data = OptionData();
-            auto market_data = MarketData();
-
-            const auto today = Date(22, Jun, 2025);
-            Settings::instance().evaluationDate() = today;
-
-            const auto exerciseDate = today + option_data.ttm;
-
-            const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
-            const auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-                process, 100, 50'000, 50'001, Null<Real>(), isBiased, true, 42);
-
-            const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
-                option_data.barrier, option_data.bonusLevel, exerciseDate);
-
-            bonusClassicOption->setPricingEngine(mcEngine);
-
-            for (const auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
-                // recalculate() is the measurement: NPV() alone returns the cached value, so the
-                // loop would time one pricing and the rest cache reads.
-                bonusClassicOption->recalculate();
-                auto npv = bonusClassicOption->NPV();
-                benchmark::DoNotOptimize(npv);
-            }
-        }
     }
 
-    void BM_BonusClassicOption(benchmark::State& state) {
-        benchmarkBonusClassicOption(state, true);
-    }
+    BonusClassicOptionSetup makeBonusClassicOptionSetup(bool isBiased) {
+        const auto option_data = OptionData();
+        auto market_data = MarketData();
 
-    // The same pricing with the barrier monitored continuously, which adds a variance() call,
-    // a logarithm and an exponential per step of every surviving path.
-    void BM_BonusClassicOptionContinuous(benchmark::State& state) {
-        benchmarkBonusClassicOption(state, false);
+        const auto today = Date(22, Jun, 2025);
+        Settings::instance().evaluationDate() = today;
+
+        const auto exerciseDate = today + option_data.ttm;
+
+        const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
+        // The Null<Real>() tolerance is mandatory, not a default: with no error estimate under
+        // LowDiscrepancy, McSimulation::calculate takes the fixed-sample branch and maxSamples
+        // never applies.
+        const auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
+            process, 100, 50'000, 50'001, Null<Real>(), isBiased, true, 42);
+
+        const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
+            option_data.barrier, option_data.bonusLevel, exerciseDate);
+
+        bonusClassicOption->setPricingEngine(mcEngine);
+
+        return {process, mcEngine, bonusClassicOption};
     }
 }

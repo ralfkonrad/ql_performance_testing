@@ -3,6 +3,10 @@
 
 add_subdirectory(ql/ext)
 
+add_subdirectory(common)
+
 add_subdirectory(testsuite)
 
 add_subdirectory(benchmark)
+
+add_subdirectory(profile)

@@ -6,9 +6,15 @@ SPDX-License-Identifier: MIT
 # Profiling
 
 Read this when profiling or reading a profile. Profiling runs the dedicated
-executables under `src/rke/profile/`, one workload each, not the google-benchmark
-binary; timing is [`benchmarking.md`](benchmarking.md). Their code lives in
-`RKE::Profile`; only `main` stays global.
+executables under `src/rke/profile/`, not the google-benchmark binary; timing is
+[`benchmarking.md`](benchmarking.md).
+
+A workload gets its own directory, `src/rke/profile/<workload>/`, building
+`rke_profile_<workload>`, all of them in `RKE::Profile`; only `main` stays global.
+It builds the instrument, market and engine from `rke_common`, and calls the same
+per-iteration step as its benchmark, so a hotspot in a profile is a hotspot in the
+benchmark. Never give a profile its own copy of that setup. Keep setup out of the
+loop here too, or the profile shows construction rather than pricing.
 
 ## 1. Build
 
@@ -19,9 +25,15 @@ not quoted.
 
 ```bash
 cmake --workflow profile
-PROG=./build/profile/src/rke/profile/<executable>
+PROG=./build/profile/src/rke/profile/<workload>/rke_profile_<workload>
 OUT=build/profile/prof/$(basename "$PROG") && mkdir -p "$OUT"
 ```
+
+`rke_profile_bonusclassicoption` takes `[discrete|continuous] [iterations]`,
+defaulting to `discrete` and `10`. It prints the final NPV at full precision, which
+equals the test suite's regression lock for the chosen mode at any iteration count,
+since every iteration reprices the same low-discrepancy paths. The recipes below
+run it with the defaults; append arguments after `"$PROG"` for anything else.
 
 Every recipe ends in a text file, so an agent reads the result rather than a
 picture.
@@ -49,7 +61,8 @@ call path.
 ## 3. valgrind
 
 valgrind simulates the CPU and runs the whole executable that way, far slower
-than natively, so size the workload for it.
+than natively, so size the workload for it: callgrind counts instructions
+exactly, so one iteration (`"$PROG" discrete 1`) is enough.
 
 ```bash
 # exact instruction counts per function, inclusive of callees
