@@ -10,28 +10,33 @@ google-benchmark, built from the `external/benchmark` submodule.
 
 ## 1. Adding One
 
-A benchmark is a free function taking `benchmark::State&`, declared in a header
-and defined in the matching `.cpp`:
+Each workload is its own executable, `rke_benchmark_<workload>`, built in
+`src/rke/benchmark/<workload>/` from one file, `Benchmark<Workload>.cpp`. That file
+defines the benchmarks, registers each one directly below its function, and ends
+in `BENCHMARK_MAIN()`. Nothing else includes it, so there is no header, and the
+`BM_*` functions sit in an anonymous namespace inside `RKE::Benchmark`:
 
 ```cpp
 namespace RKE::Benchmark {
-    void BM_YourThing(benchmark::State& state);
+    namespace {
+        void BM_YourThing(benchmark::State& state) {
+            // setup, then the measured loop
+        }
+
+        BENCHMARK(BM_YourThing)
+            ->Name("YourThing")
+            ->Unit(benchmark::kMillisecond)
+            ->Iterations(100);
+    }
 }
+
+BENCHMARK_MAIN();
 ```
 
-Three places have to agree, or the benchmark builds and never runs:
-
-1. The `.cpp` and `.hpp` listed in `src/rke/benchmark/CMakeLists.txt`.
-2. The header included in `src/rke/benchmark/benchmark_main.cpp`.
-3. A `BENCHMARK(...)` registration in that same file, inside its
-   `namespace RKE::Benchmark` block and above `BENCHMARK_MAIN()`.
-
-```cpp
-    BENCHMARK(BM_YourThing)
-        ->Name("YourThing")
-        ->Unit(benchmark::kMillisecond)
-        ->Iterations(100);
-```
+A new workload gets a new directory, added to `src/rke/benchmark/CMakeLists.txt`,
+with a `CMakeLists.txt` that lists the file, links `benchmark::benchmark` and
+`rke::warnings`, and adds a dry-run CTest named after the target. A function
+without its `BENCHMARK(...)` builds and never runs.
 
 `Iterations()` pins the count instead of letting google-benchmark scale until the
 run is statistically stable. That keeps a pricing benchmark's wall time
@@ -64,11 +69,17 @@ Build the process, the term structures, the instrument and the engine before the
 loop, and set the evaluation date there too. Only the work being measured belongs
 inside. `BM_BonusClassicOption` is the pattern.
 
+When a workload is also profiled, its setup and loop body live in `rke_common`
+(`src/rke/common/`), and the benchmark calls them rather than holding a copy, so
+the profile executable measures exactly the same work. Changing that setup moves
+both. See [`profiling.md`](profiling.md).
+
 ## 4. Running
 
 ```bash
-cmake --build --preset release --target rke_benchmark
-./build/release/src/rke/benchmark/rke_benchmark
+cmake --build --preset release --target rke_benchmark_bonusclassicoption
+BIN=./build/release/src/rke/benchmark/bonusclassicoption/rke_benchmark_bonusclassicoption
+$BIN
 ```
 
 Never quote a number from a `debug` build — google-benchmark prints a warning
@@ -77,33 +88,39 @@ when its own library was built that way, but says nothing about yours.
 Useful flags:
 
 ```bash
-# one benchmark, by the ->Name() given at registration
-./build/release/src/rke/benchmark/rke_benchmark --benchmark_filter=BonusClassicOption
+# one benchmark: a regex over the ->Name() plus the suffix google-benchmark appends
+$BIN --benchmark_filter='^BonusClassicOption/'   # --benchmark_list_tests=true shows names
 
 # variance across repetitions, with the aggregates only
-./build/release/src/rke/benchmark/rke_benchmark \
-    --benchmark_repetitions=10 --benchmark_report_aggregates_only=true
+$BIN --benchmark_repetitions=10 --benchmark_report_aggregates_only=true
 
 # machine-readable, for comparing two revisions
-./build/release/src/rke/benchmark/rke_benchmark \
-    --benchmark_out=before.json --benchmark_out_format=json
+$BIN --benchmark_out=before.json --benchmark_out_format=json
 ```
 
+Spell flags out, or quote each one separately. zsh does not word-split an unquoted
+`$FLAGS`, so a flag string in one variable reaches the binary as one
+`--benchmark_filter` regex. That matches nothing, and the run writes an empty JSON
+and still exits 0.
+
 `external/benchmark/tools/compare.py` reads those JSON files and reports the
-delta between two runs. Use it rather than eyeballing two console outputs.
+delta between two runs. Use it rather than eyeballing two console outputs. It
+needs numpy and scipy, which no project environment provides:
+
+```bash
+uv run --no-project --with numpy --with scipy \
+    python external/benchmark/tools/compare.py benchmarks before.json after.json
+```
 
 Where the time goes is [`profiling.md`](profiling.md), which profiles dedicated
-executables, not this binary.
+executables, not these binaries.
 
-## 5. Commented-Out Registrations Are Deliberate
+## 5. CI Runs Them, Never Times Them
 
-`benchmark_main.cpp` keeps the `Xoshiro256StarStar` versus `MersenneTwister`
-comparisons commented out, and CI never times the executable: CTest runs it as
-`rke_benchmark` with `--benchmark_dry_run=true`, one iteration of each
-registration, which only proves it does not throw. Neither is an oversight: the
-RNG comparisons are re-enabled when that question comes up again, and there is
-no CI baseline to compare against. Do not "clean up" the commented block, and
-do not add a timed benchmark run to CI without being asked.
+CTest runs every `rke_benchmark_<workload>` with `--benchmark_dry_run=true`, one
+iteration of each registration, which only proves it does not throw. There is no
+CI baseline to compare against, so do not add a timed benchmark run to CI
+without being asked.
 
 Consequence: every benchmark number is a local measurement. When you quote one,
 name the machine, the compiler and the C++ standard it came from, and measure

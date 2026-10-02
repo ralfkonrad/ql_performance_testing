@@ -51,9 +51,11 @@ itself. QuantLib and google-benchmark are git submodules under `external/`.
   `src/rke/ql/ext/CMakeLists.txt` keeps separate `RKE_QL_EXT_SOURCES` and
   `RKE_QL_EXT_HEADER` lists, the second reaching `rke_ql_ext` through
   `target_sources(... FILE_SET HEADERS)`, whose `BASE_DIRS` is `src/`, which is
-  also what puts `<rke/...>` on the include path. `src/rke/testsuite/CMakeLists.txt` and
-  `src/rke/benchmark/CMakeLists.txt` name every file. An unlisted header still compiles,
-  so nothing will tell you it is missing.
+  also what puts `<rke/...>` on the include path. `src/rke/common/CMakeLists.txt` does
+  the same for `rke_common`. `src/rke/testsuite/CMakeLists.txt` and each
+  `src/rke/benchmark/<workload>/CMakeLists.txt` and `src/rke/profile/<workload>/CMakeLists.txt`
+  name every file. An unlisted header still compiles, so nothing will tell you it is
+  missing.
 - **An upstream source compiled into one of our targets must not be linted.**
   `src/rke/testsuite/CMakeLists.txt` pulls in
   `external/QuantLib/test-suite/utilities.cpp` and sets `SKIP_LINTING TRUE` on
@@ -90,22 +92,25 @@ Source of truth: `.clang-format`.
 
 ### 3.2 Naming and Namespaces
 
-- One namespace per directory under `src/rke/`: the library in
-  `RKE::QL::Ext`, benchmarks in `RKE::Benchmark`, the test suite in
+- One namespace per component under `src/rke/`, shared by its subdirectories: the
+  library in `RKE::QL::Ext`, the setup that benchmarks and profiles share in
+  `RKE::Common`, benchmarks in `RKE::Benchmark`, the test suite in
   `RKE::TestSuite`, profile executables in `RKE::Profile`. Every name a file
   declares goes there, test cases and `BENCHMARK(...)` registrations included;
   only `main` stays global, which keeps `BENCHMARK_MAIN()` and `testsuite.cpp`
   outside. Nothing outside `src/rke/ql/ext` goes into `RKE::QL::Ext`.
-- CMake targets follow the same directories: `rke_ql_ext`, `rke_testsuite`,
-  `rke_benchmark`, `rke_profile_<workload>`. A CTest name is its target's name;
-  the `rke_` prefix is what the test presets filter on.
+- CMake targets follow the same directories: `rke_ql_ext`, `rke_common`,
+  `rke_testsuite`, and one executable per workload directory:
+  `rke_benchmark_<workload>` from `src/rke/benchmark/<workload>/`,
+  `rke_profile_<workload>` from `src/rke/profile/<workload>/`. A CTest name starts
+  with its target's name; the `rke_` prefix is what the test presets filter on.
 - Headers qualify `QuantLib::` in full. Implementation files put
   `using namespace QuantLib;` after the includes — which is why
   `google-build-using-namespace` is off in `.clang-tidy`.
 - Types `PascalCase`, functions `lowerCamelCase`, data members with a trailing
   underscore, benchmark entry points `BM_PascalCase`.
-- File names in `src/rke/` are `PascalCase`, apart from the entry points
-  `testsuite.cpp` and `benchmark_main.cpp`; the directories under it lowercase. Include guards are the bare file name
+- File names in `src/rke/` are `PascalCase`, apart from the entry point
+  `testsuite.cpp`; the directories under it lowercase. Include guards are the bare file name
   uppercased (`BONUSCLASSICOPTION_HPP`), not a path; `llvm-header-guard` is off
   for that reason.
 - `[[nodiscard]]` on value accessors.
@@ -223,7 +228,7 @@ Before finishing a change:
       an independent check, as under "The Valuation Test Is a Regression Lock".
 - [ ] Every new `.cpp` and `.hpp` is listed in the owning `CMakeLists.txt`, and
       every new target links `rke::warnings`.
-- [ ] New benchmarks are registered in `src/rke/benchmark/benchmark_main.cpp`.
+- [ ] Every new benchmark has a `BENCHMARK(...)` registration next to its function.
 - [ ] Errors go through the `QL_*` macros, ownership through `ext::shared_ptr`.
 - [ ] Numerical tolerances are justified, and the conventions behind a price are
       stated, as under "Quant Claims Need Their Conventions Spelled Out".
