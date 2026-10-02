@@ -18,7 +18,13 @@ itself. QuantLib and google-benchmark are git submodules under `external/`.
   `external/benchmark`, tracking `google/benchmark`; a directory added there later
   is read-only the same way. Never edit a file in one, never reformat one
   (`.clang-format-ignore` excludes `external/**`), and never move a submodule
-  pointer as a side effect of another change. `external/CMakeLists.txt` is ours:
+  pointer as a side effect of another change. The one exception is a task that
+  improves QuantLib's own performance, which may edit `external/QuantLib` on a
+  branch of `ralfkonrad/QuantLib`. Such a task never moves the pointer on our
+  `master`, never opens a QuantLib pull request, and never runs
+  clang-format over a whole file there, only over the changed lines. Follow
+  [`.agents/changing-quantlib.md`](.agents/changing-quantlib.md).
+  `external/CMakeLists.txt` is ours:
   it adds the submodules and sets, before each `add_subdirectory`, the options
   that submodule reads. Nothing of ours is declared at the
   top level beside them: warnings and `CMAKE_CXX_CLANG_TIDY` are set in
@@ -64,6 +70,7 @@ task calls for it:
 | [`.agents/extending-rke-ql-ext.md`](.agents/extending-rke-ql-ext.md)     | You add or document an instrument, payoff, pricing engine, or test in `src/rke/`.                                     |
 | [`.agents/benchmarking.md`](.agents/benchmarking.md)                     | You add, change or run a benchmark.                                                                                   |
 | [`.agents/profiling.md`](.agents/profiling.md)                           | You profile an executable under `src/rke/profile/`, or read a profile.                                                |
+| [`.agents/changing-quantlib.md`](.agents/changing-quantlib.md)           | You change `external/QuantLib` itself to make it faster.                                                              |
 | [`.agents/maintaining-agent-docs.md`](.agents/maintaining-agent-docs.md) | You edit this file or anything in `.agents/`.                                                                         |
 
 ## 3. Coding Conventions
@@ -108,7 +115,7 @@ Source of truth: `.clang-format`.
 - Ownership through `QuantLib::ext::shared_ptr`, `ext::make_shared`,
   `ext::dynamic_pointer_cast`, not the `std::` spellings.
 - Errors through `QL_REQUIRE`, `QL_ENSURE`, `QL_FAIL`, `QL_ASSERT`, never a raw
-  `throw`. `NOT_IMPLEMENTED_FAILURE()` from `src/rke/ql/ext/Error.hpp` for an
+  `throw`. `NOT_IMPLEMENTED_FAILURE()` from `src/rke/ql/ext/Errors.hpp` for an
   override that is not implemented.
 - `Null<Real>()` and friends are the "not given" sentinel, checked in
   `arguments::validate()`.
@@ -220,5 +227,7 @@ Before finishing a change:
 - [ ] Errors go through the `QL_*` macros, ownership through `ext::shared_ptr`.
 - [ ] Numerical tolerances are justified, and the conventions behind a price are
       stated, as under "Quant Claims Need Their Conventions Spelled Out".
-- [ ] `clang-format` has been run over the touched files.
-- [ ] `git submodule status` shows no pointer moved unintentionally.
+- [ ] `clang-format` has been run over the touched files: ours whole,
+      `external/QuantLib` on the changed lines only.
+- [ ] `git submodule status` shows no pointer moved unintentionally, and
+      `external/QuantLib` only to a commit pushed to `ralfkonrad/QuantLib`.

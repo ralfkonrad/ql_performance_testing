@@ -9,7 +9,7 @@ set(RKE_QL_EXT_SOURCES
 # Headers are listed by hand, and an unlisted one still compiles, so an omission
 # is silent.
 set(RKE_QL_EXT_HEADER
-        Error.hpp
+        Errors.hpp
         instruments/BonusClassicOption.hpp
         pricingengines/bonusclassic/MCBonusClassicEngine.hpp
 )
