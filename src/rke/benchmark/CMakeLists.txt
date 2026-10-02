@@ -20,7 +20,7 @@ add_executable(
 
 target_link_libraries(
         rke_benchmark PRIVATE
-        rke_ql_ext
+        rke_common
         benchmark::benchmark
         rke::warnings
 )
