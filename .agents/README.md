@@ -23,6 +23,7 @@ otherwise.
 | [`extending-rke-ql-ext.md`](extending-rke-ql-ext.md)     | You are adding or documenting an instrument, payoff, pricing engine, or test under `src/rke/`.                                                                    |
 | [`benchmarking.md`](benchmarking.md)                     | You are adding, changing or running a benchmark.                                                                                                                  |
 | [`profiling.md`](profiling.md)                           | You are profiling an executable under `src/rke/profile/`, or reading a profile.                                                                                   |
+| [`changing-quantlib.md`](changing-quantlib.md)           | You are changing `external/QuantLib` itself to make it faster.                                                                                                    |
 | [`maintaining-agent-docs.md`](maintaining-agent-docs.md) | You are editing `AGENTS.md` or one of the files above.                                                                                                            |
 
 ## Why this directory
