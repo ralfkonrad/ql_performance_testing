@@ -218,8 +218,8 @@ namespace RKE::QL::Ext {
         QuantLib::McSimulation<QuantLib::SingleVariate, RNG, S>::calculate(
             requiredTolerance_, requiredSamples_, maxSamples_);
         results_.value = this->mcModel_->sampleAccumulator().mean();
-        // LowDiscrepancy sets allowsErrorEstimate = 0, and both callers instantiate the engine
-        // with it.
+        // LowDiscrepancy sets allowsErrorEstimate = 0, and every caller instantiates the engine
+        // with it or with traits derived from it.
         if constexpr (RNG::allowsErrorEstimate) {
             results_.errorEstimate = this->mcModel_->sampleAccumulator().errorEstimate();
         }

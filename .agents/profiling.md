@@ -30,10 +30,10 @@ OUT=build/profile/prof/$(basename "$PROG") && mkdir -p "$OUT"
 ```
 
 `rke_profile_bonusclassicoption` takes `[discrete|continuous] [iterations]`,
-defaulting to `discrete` and `10`. It prints the final NPV at full precision, which
-equals the test suite's regression lock for the chosen mode at any iteration count,
-since every iteration reprices the same low-discrepancy paths. The recipes below
-run it with the defaults; append arguments after `"$PROG"` for anything else.
+defaulting to `discrete` and `10`. It prints the final NPV at full precision, the
+same at any iteration count, since every iteration reprices the same low-discrepancy
+paths. The recipes below run it with the defaults; append arguments after
+`"$PROG"` for anything else.
 
 Every recipe ends in a text file, so an agent reads the result rather than a
 picture.

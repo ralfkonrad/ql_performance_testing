@@ -3,6 +3,8 @@
 
 #include "BonusClassicOptionSetup.hpp"
 #include <rke/ql/ext/pricingengines/bonusclassic/MCBonusClassicEngine.hpp>
+#include <ql/math/randomnumbers/rngtraits.hpp>
+#include <ql/math/randomnumbers/sobolrsg.hpp>
 #include <ql/quotes/simplequote.hpp>
 #include <ql/settings.hpp>
 #include <ql/termstructures/volatility/equityfx/blackconstantvol.hpp>
@@ -27,6 +29,15 @@ namespace RKE::Common {
             return ext::make_shared<BlackConstantVol>(today, NullCalendar(), Handle<Quote>(vol),
                                                       dc);
         }
+
+        // LowDiscrepancy with Joe-Kuo D7 direction integers, tabulated up to dimension 1898,
+        // instead of SobolRsg's default Jaeckel ones, tabulated up to 32 and drawn from the seed
+        // beyond. One dimension per time step, so a daily grid needs the former.
+        struct LowDiscrepancyJoeKuoD7 : LowDiscrepancy {
+            static rsg_type make_sequence_generator(Size dimension, BigNatural seed) {
+                return rsg_type(SobolRsg(dimension, seed, SobolRsg::JoeKuoD7));
+            }
+        };
 
         struct OptionData {
             Real barrier = 90.0;
@@ -73,7 +84,7 @@ namespace RKE::Common {
         // The Null<Real>() tolerance is mandatory, not a default: with no error estimate under
         // LowDiscrepancy, McSimulation::calculate takes the fixed-sample branch and maxSamples
         // never applies.
-        const auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
+        const auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancyJoeKuoD7>>(
             process, 100, 50'000, 50'001, Null<Real>(), isBiased, true, 42);
 
         const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
