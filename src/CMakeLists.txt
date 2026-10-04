@@ -5,7 +5,7 @@
 # external/ is a sibling of src/.
 set(CMAKE_COMPILE_WARNING_AS_ERROR ${RKE_COMPILE_WARNING_AS_ERROR})
 
-# Same reason: set above this directory, clang-tidy would lint both submodules.
+# Same reason: set above this directory, clang-tidy would lint the submodules.
 if (RKE_USE_CLANG_TIDY)
     if (NOT DEFINED RKE_CLANG_TIDY)
         set(RKE_CLANG_TIDY clang-tidy)

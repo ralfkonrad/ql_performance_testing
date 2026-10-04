@@ -7,3 +7,6 @@
 [submodule "external/QuantLib"]
 	path = external/QuantLib
 	url = https://github.com/ralfkonrad/QuantLib
+[submodule "external/CLI11"]
+	path = external/CLI11
+	url = https://github.com/CLIUtils/CLI11

@@ -9,13 +9,14 @@ SPDX-License-Identifier: MIT
 
 A QuantLib playground: a small extension library (`src/rke/ql/ext`) with its own
 Boost.Test suite, plus google-benchmark benchmarks that measure it and QuantLib
-itself. QuantLib and google-benchmark are git submodules under `external/`.
+itself. QuantLib, google-benchmark and CLI11 are git submodules under `external/`.
 
 ## 1. Hard Constraints
 
 - **Every directory under `external/` is a submodule and off limits.** Today
-  `external/QuantLib`, tracking the `ralfkonrad/QuantLib` fork, and
-  `external/benchmark`, tracking `google/benchmark`; a directory added there later
+  `external/QuantLib`, tracking the `ralfkonrad/QuantLib` fork,
+  `external/benchmark`, tracking `google/benchmark`, and `external/CLI11`, tracking
+  `CLIUtils/CLI11`, pinned to a release tag; a directory added there later
   is read-only the same way. Never edit a file in one, never reformat one
   (`.clang-format-ignore` excludes `external/**`), and never move a submodule
   pointer as a side effect of another change. The one exception is a task that

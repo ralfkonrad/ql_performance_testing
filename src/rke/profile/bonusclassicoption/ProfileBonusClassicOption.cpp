@@ -10,14 +10,12 @@
 // enough under callgrind, which counts instructions exactly.
 
 #include <rke/common/BonusClassicOptionSetup.hpp>
-#include <ql/errors.hpp>
-#include <cstdint>
+#include <CLI/CLI.hpp>
 #include <exception>
 #include <iomanip>
 #include <iostream>
-#include <sstream>
+#include <limits>
 #include <string>
-#include <vector>
 
 using namespace RKE::Common;
 using namespace QuantLib;
@@ -25,53 +23,44 @@ using namespace QuantLib;
 namespace RKE::Profile {
     namespace {
         struct Arguments {
-            bool isBiased = true;
+            std::string monitoring = "discrete";
             Size iterations = 10;
         };
 
-        Arguments parseArguments(const std::vector<std::string>& args) {
-            QL_REQUIRE(args.size() <= 2, "usage: [discrete|continuous] [iterations]");
-
-            auto result = Arguments();
-            if (!args.empty()) {
-                QL_REQUIRE(args[0] == "discrete" || args[0] == "continuous",
-                           "unknown monitoring '" << args[0]
-                                                  << "', expected discrete or continuous");
-                result.isBiased = args[0] == "discrete";
-            }
-            if (args.size() == 2) {
-                // Read signed, so that "-1" is rejected instead of wrapping around.
-                auto stream = std::istringstream(args[1]);
-                std::int64_t iterations = 0;
-                stream >> iterations;
-                QL_REQUIRE(stream && stream.eof() && iterations >= 1,
-                           "iterations must be a positive integer, got '" << args[1] << "'");
-                result.iterations = static_cast<Size>(iterations);
-            }
-            return result;
+        void addOptions(CLI::App& app, Arguments& arguments) {
+            app.add_option("monitoring", arguments.monitoring, "Barrier monitoring")
+                ->check(CLI::IsMember({"discrete", "continuous"}))
+                ->capture_default_str();
+            app.add_option("iterations", arguments.iterations,
+                           "Pricings, each of the same low-discrepancy paths")
+                ->check(CLI::Range(Size{1}, std::numeric_limits<Size>::max()))
+                ->capture_default_str();
         }
 
         void run(const Arguments& arguments) {
             // Built before the loop, as in the benchmark, so the profile shows pricing only.
-            const auto setup = makeBonusClassicOptionSetup(arguments.isBiased);
+            const auto setup = makeBonusClassicOptionSetup(arguments.monitoring == "discrete");
 
             Real npv = Null<Real>();
             for (Size i = 0; i < arguments.iterations; ++i) {
                 npv = reprice(*setup.option);
             }
 
-            std::cout << (arguments.isBiased ? "discrete" : "continuous") << ", "
-                      << arguments.iterations << " iterations, NPV " << std::setprecision(17) << npv
-                      << '\n';
+            std::cout << arguments.monitoring << ", " << arguments.iterations << " iterations, NPV "
+                      << std::setprecision(17) << npv << '\n';
         }
     }
 }
 
 int main(int argc, char* argv[]) {
     try {
-        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic): argv is argc long
-        const auto args = std::vector<std::string>(argv + 1, argv + argc);
-        RKE::Profile::run(RKE::Profile::parseArguments(args));
+        auto app = CLI::App("Prices a BonusClassicOption repeatedly, for perf and valgrind.");
+        auto arguments = RKE::Profile::Arguments();
+        RKE::Profile::addOptions(app, arguments);
+        // Returns from main on a parse error or --help, with CLI11's exit code.
+        CLI11_PARSE(app, argc, argv);
+
+        RKE::Profile::run(arguments);
         return 0;
     } catch (const std::exception& e) {
         std::cerr << e.what() << '\n';
