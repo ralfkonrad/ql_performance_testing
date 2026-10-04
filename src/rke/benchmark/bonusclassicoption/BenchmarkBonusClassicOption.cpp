@@ -29,7 +29,7 @@ namespace RKE::Benchmark {
             // Pins the count instead of letting google-benchmark scale to statistical stability,
             // trading the variance estimate for a predictable wall time; measure variance with
             // --benchmark_repetitions.
-            ->Iterations(100);
+            ->Iterations(10);
 
         // The same pricing with the barrier monitored continuously, which adds a variance()
         // call, a logarithm and an exponential per step of every surviving path.
@@ -41,7 +41,7 @@ namespace RKE::Benchmark {
             ->Name("BonusClassicOptionContinuous")
             ->Unit(benchmark::kMillisecond)
             // Pinned like BonusClassicOption, so the two times compare directly.
-            ->Iterations(100);
+            ->Iterations(10);
     }
 }
 

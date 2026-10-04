@@ -3,6 +3,8 @@
 
 #include "BonusClassicOptionSetup.hpp"
 #include <rke/ql/ext/pricingengines/bonusclassic/MCBonusClassicEngine.hpp>
+#include <ql/math/randomnumbers/rngtraits.hpp>
+#include <ql/math/randomnumbers/sobolrsg.hpp>
 #include <ql/quotes/simplequote.hpp>
 #include <ql/settings.hpp>
 #include <ql/termstructures/volatility/equityfx/blackconstantvol.hpp>
@@ -16,7 +18,7 @@ using namespace QuantLib;
 namespace RKE::Common {
     namespace {
         // Duplicates test-suite/utilities.hpp, which compiles into the test target only; the
-        // conventions are copied so this prices the instrument the tests check.
+        // market and its conventions are the tests', the maturity and the simulation are not.
         ext::shared_ptr<YieldTermStructure>
         flatRate(const Date& today, const ext::shared_ptr<Quote>& forward, const DayCounter& dc) {
             return ext::make_shared<FlatForward>(today, Handle<Quote>(forward), dc);
@@ -28,10 +30,20 @@ namespace RKE::Common {
                                                       dc);
         }
 
+        // LowDiscrepancy with Joe-Kuo D7 direction integers, tabulated up to dimension 1898,
+        // instead of SobolRsg's default Jaeckel ones, tabulated up to 32 and drawn from the seed
+        // beyond. One dimension per time step, so a daily grid needs the former.
+        struct LowDiscrepancyJoeKuoD7 : LowDiscrepancy {
+            static rsg_type make_sequence_generator(Size dimension, BigNatural seed) {
+                return rsg_type(SobolRsg(dimension, seed, SobolRsg::JoeKuoD7));
+            }
+        };
+
         struct OptionData {
             Real barrier = 90.0;
             Real bonusLevel = 120.00;
-            Period ttm = Period(5, Months);
+            // The low end of a bonus certificate's usual one to two years; the tests price 5M.
+            Period ttm = Period(1, Years);
         };
 
         struct MarketData {
@@ -72,9 +84,14 @@ namespace RKE::Common {
         const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
         // The Null<Real>() tolerance is mandatory, not a default: with no error estimate under
         // LowDiscrepancy, McSimulation::calculate takes the fixed-sample branch and maxSamples
-        // never applies.
-        const auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-            process, 100, 50'000, 50'001, Null<Real>(), isBiased, true, 42);
+        // never applies. Sized like a production run: about one step per business day, 255
+        // over the Actual360 year fraction 365/360, though not on the business days themselves,
+        // and a power of two of paths, where a Sobol sequence is balanced. SobolRsg skips the
+        // zero point, so these are points 1 to 2^16, the net with one point swapped.
+        constexpr Size timeStepsPerYear = 252;
+        constexpr Size samples = Size{1} << 16U;
+        const auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancyJoeKuoD7>>(
+            process, timeStepsPerYear, samples, samples + 1, Null<Real>(), isBiased, true, 42);
 
         const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
             option_data.barrier, option_data.bonusLevel, exerciseDate);
