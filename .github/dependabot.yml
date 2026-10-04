@@ -3,8 +3,8 @@
 
 version: 2
 updates:
-  # No "gitsubmodule" ecosystem on purpose: external/QuantLib tracks our own fork, and both
-  # submodule pointers are moved by hand rather than by a bot.
+  # No "gitsubmodule" ecosystem on purpose: external/QuantLib tracks our own fork, and every
+  # submodule pointer is moved by hand rather than by a bot.
   - package-ecosystem: "github-actions"
     directories:
       - "/"

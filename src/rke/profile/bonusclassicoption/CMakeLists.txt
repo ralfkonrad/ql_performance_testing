@@ -7,6 +7,7 @@ add_executable(rke_profile_bonusclassicoption
 
 target_link_libraries(rke_profile_bonusclassicoption PRIVATE
         rke_common
+        CLI11::CLI11
         rke::warnings
 )
 
