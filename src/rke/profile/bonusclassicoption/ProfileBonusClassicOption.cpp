@@ -6,8 +6,8 @@
 //
 //     rke_profile_bonusclassicoption [discrete|continuous] [iterations]
 //
-// Defaults are discrete and 10: enough samples for perf, and one iteration is enough under
-// callgrind, which counts instructions exactly.
+// Defaults are discrete and 10, about 20,000 samples under perf -F 999; one iteration is
+// enough under callgrind, which counts instructions exactly.
 
 #include <rke/common/BonusClassicOptionSetup.hpp>
 #include <ql/errors.hpp>
