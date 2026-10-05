@@ -3,6 +3,7 @@
 
 set(RKE_QL_EXT_SOURCES
         instruments/BonusClassicOption.cpp
+        methods/montecarlo/BlackScholesStepCache.cpp
         pricingengines/bonusclassic/MCBonusClassicEngine.cpp
 )
 
@@ -11,6 +12,8 @@ set(RKE_QL_EXT_SOURCES
 set(RKE_QL_EXT_HEADER
         Errors.hpp
         instruments/BonusClassicOption.hpp
+        methods/montecarlo/BlackScholesPathGenerator.hpp
+        methods/montecarlo/BlackScholesStepCache.hpp
         pricingengines/bonusclassic/MCBonusClassicEngine.hpp
 )
 

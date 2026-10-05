@@ -5,6 +5,7 @@
 #define MCBONUSCLASSICENGINE_HPP
 
 #include <rke/ql/ext/instruments/BonusClassicOption.hpp>
+#include <rke/ql/ext/methods/montecarlo/BlackScholesPathGenerator.hpp>
 #include <ql/pricingengines/barrier/mcbarrierengine.hpp>
 #include <ql/pricingengines/mcsimulation.hpp>
 #include <ql/processes/blackscholesprocess.hpp>
@@ -32,6 +33,11 @@ namespace RKE::QL::Ext {
         curve from maturity. Dividends enter through the process's drift.
         Neither antithetic variates nor a control variate are used.
 
+        Paths come from BlackScholesPathGenerator, which takes the process's
+        exact step from terms computed once per grid where the volatility is
+        strike-independent, and calls its evolve() otherwise. The paths are
+        the doubles QuantLib::PathGenerator would produce.
+
         \warning with isBiased = false the bridge is exact only for a
                  strike-independent volatility. Under a smile or local
                  volatility, QuantLib::GeneralizedBlackScholesProcess::variance()
@@ -57,14 +63,14 @@ namespace RKE::QL::Ext {
     */
     template <class RNG = QuantLib::PseudoRandom, class S = QuantLib::Statistics>
     class MCBonusClassicEngine : public BonusClassicOption::engine,
-                                 public QuantLib::McSimulation<QuantLib::SingleVariate, RNG, S> {
+                                 public QuantLib::McSimulation<BlackScholesSingleVariate, RNG, S> {
       public:
         using path_generator_type =
-            typename QuantLib::McSimulation<QuantLib::SingleVariate, RNG, S>::path_generator_type;
+            typename QuantLib::McSimulation<BlackScholesSingleVariate, RNG, S>::path_generator_type;
         using path_pricer_type =
-            typename QuantLib::McSimulation<QuantLib::SingleVariate, RNG, S>::path_pricer_type;
+            typename QuantLib::McSimulation<BlackScholesSingleVariate, RNG, S>::path_pricer_type;
         using stats_type =
-            typename QuantLib::McSimulation<QuantLib::SingleVariate, RNG, S>::stats_type;
+            typename QuantLib::McSimulation<BlackScholesSingleVariate, RNG, S>::stats_type;
 
         /*! \param process          the underlying; the engine registers with it
             \param timeStepsPerYear grid density; the grid has
@@ -175,18 +181,23 @@ namespace RKE::QL::Ext {
                                   the evaluation date
             \param process        the process the paths were generated with;
                                   its variance() gives \f$ v_i \f$
+            \param grid           the paths' time grid; where the process's
+                                  step is exact, \f$ v_i \f$ is taken from a
+                                  BlackScholesStepCache over it instead
             \pre barrier and bonus level of \p payoff are positive.
         */
         BonusClassicPathPricer(
             BonusClassicPayoff payoff,
             QuantLib::DiscountFactor discountFactor,
-            QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process);
+            QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process,
+            const QuantLib::TimeGrid& grid);
         QuantLib::Real operator()(const QuantLib::Path& path) const override;
 
       private:
         BonusClassicPayoff payoff_;
         QuantLib::DiscountFactor discountFactor_;
         QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process_;
+        BlackScholesStepCache stepCache_;
     };
 
 
@@ -200,7 +211,7 @@ namespace RKE::QL::Ext {
         bool isBiased,
         bool brownianBridge,
         QuantLib::BigNatural seed)
-    : QuantLib::McSimulation<QuantLib::SingleVariate, RNG, S>(false, false),
+    : QuantLib::McSimulation<BlackScholesSingleVariate, RNG, S>(false, false),
       process_(std::move(process)), timeStepsPerYear_(timeStepsPerYear),
       requiredSamples_(requiredSamples), maxSamples_(maxSamples),
       requiredTolerance_(requiredTolerance), isBiased_(isBiased), brownianBridge_(brownianBridge),
@@ -215,7 +226,7 @@ namespace RKE::QL::Ext {
         QL_REQUIRE(spot > 0.0, "negative or null underlying given");
         // The path pricer never inspects path[0], so an already-triggered spot is rejected here.
         QL_REQUIRE(!triggered(spot), "barrier touched");
-        QuantLib::McSimulation<QuantLib::SingleVariate, RNG, S>::calculate(
+        QuantLib::McSimulation<BlackScholesSingleVariate, RNG, S>::calculate(
             requiredTolerance_, requiredSamples_, maxSamples_);
         results_.value = this->mcModel_->sampleAccumulator().mean();
         // LowDiscrepancy sets allowsErrorEstimate = 0, and every caller instantiates the engine
@@ -242,7 +253,7 @@ namespace RKE::QL::Ext {
                 new BiasedBonusClassicPathPricer(*payoff, discountFactor));
         }
         return QuantLib::ext::shared_ptr<path_pricer_type>(
-            new BonusClassicPathPricer(*payoff, discountFactor, process_));
+            new BonusClassicPathPricer(*payoff, discountFactor, process_, grid));
     }
 
 
