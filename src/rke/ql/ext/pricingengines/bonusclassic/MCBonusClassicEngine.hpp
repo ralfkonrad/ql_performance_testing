@@ -181,18 +181,23 @@ namespace RKE::QL::Ext {
                                   the evaluation date
             \param process        the process the paths were generated with;
                                   its variance() gives \f$ v_i \f$
+            \param grid           the paths' time grid; where the process's
+                                  step is exact, \f$ v_i \f$ is taken from a
+                                  BlackScholesStepCache over it instead
             \pre barrier and bonus level of \p payoff are positive.
         */
         BonusClassicPathPricer(
             BonusClassicPayoff payoff,
             QuantLib::DiscountFactor discountFactor,
-            QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process);
+            QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process,
+            const QuantLib::TimeGrid& grid);
         QuantLib::Real operator()(const QuantLib::Path& path) const override;
 
       private:
         BonusClassicPayoff payoff_;
         QuantLib::DiscountFactor discountFactor_;
         QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process_;
+        BlackScholesStepCache stepCache_;
     };
 
 
@@ -248,7 +253,7 @@ namespace RKE::QL::Ext {
                 new BiasedBonusClassicPathPricer(*payoff, discountFactor));
         }
         return QuantLib::ext::shared_ptr<path_pricer_type>(
-            new BonusClassicPathPricer(*payoff, discountFactor, process_));
+            new BonusClassicPathPricer(*payoff, discountFactor, process_, grid));
     }
 
 
