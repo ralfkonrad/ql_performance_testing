@@ -6,7 +6,7 @@ SPDX-License-Identifier: MIT
 # Profiling the BonusClassicOption Monte Carlo
 
 Where `rke_profile_bonusclassicoption` spends its instructions, and which improvements
-carry over from this workload to a production market. Nothing here is implemented.
+carry over from this workload to a production market. Only 4.1 is implemented.
 
 ## 1. What Was Measured
 
@@ -88,10 +88,18 @@ the same pricing.
 
 ### 4.1 Precompute Path-Independent Step Terms Once per Grid
 
-- **Status:** verified by prototype. Saving 92.4% discrete and 91.0% continuous, against
-  92.2% and 90.9% in the first pass, which reported cached runs of 2.66 G and 3.56 G.
-- **Lives in:** rke, the path generation of `MCBonusClassicEngine` in
-  `src/rke/ql/ext/pricingengines/bonusclassic/MCBonusClassicEngine.hpp`.
+- **Status:** implemented, for the strike-independent branch only. On the `profile` preset,
+  one repricing drops from 34.18 G to 2.68 G Ir discrete (92.15%) and from 39.00 G to 3.58 G
+  continuous (90.81%), with the production NPVs unchanged to the last digit printed. The
+  prototype measured 92.4% and 91.0% against its own engine build.
+- **Lives in:** `BlackScholesStepCache` and `BlackScholesPathGenerator` in
+  `src/rke/ql/ext/methods/montecarlo/`. `MCBonusClassicEngine` takes its paths from them, and
+  `BonusClassicPathPricer` takes its step variance from the cache.
+- **Branch guard:** the cache classifies the volatility by type, then checks its step bitwise
+  against `evolve` at two points on every step. That catches the two cases the type misses: a
+  forced discretization, and a process built with an external local volatility. Under a smile,
+  or when the check fails, every step goes through `evolve` as before. The smile branch's
+  rate-only cache is not implemented.
 - **Finding:** every path recomputes per-step quantities that depend only on the time
   grid. That holds for any curve shape, not just flat ones.
 - **Strike-independent branch:** variance, its square root, and the drift
