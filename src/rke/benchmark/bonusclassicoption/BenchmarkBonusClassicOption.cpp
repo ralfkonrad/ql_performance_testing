@@ -28,9 +28,10 @@ namespace RKE::Benchmark {
         // too, so a hotspot found there is a hotspot here.
         void benchmarkBonusClassicOption(benchmark::State& state,
                                          bool isBiased,
-                                         PathGeneration pathGeneration) {
+                                         PathGeneration pathGeneration,
+                                         Market market = Market::Flat) {
             const auto setup =
-                makeBonusClassicOptionSetup(isBiased, pathGeneration, Market::Flat, samples);
+                makeBonusClassicOptionSetup(isBiased, pathGeneration, market, samples);
 
             for (const auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
                 auto npv = reprice(*setup.option);
@@ -82,6 +83,91 @@ namespace RKE::Benchmark {
             ->Name("BonusClassicOptionContinuousUncached")
             ->Unit(benchmark::kMillisecond)
             ->Iterations(10);
+
+        // The four pricings above on the bilinear smile market, whose step is the Euler step
+        // through LocalVolSurface, cached by LocalVolStepCache. Every step asks the surface for
+        // a local volatility, so fewer iterations are pinned.
+        void BM_BonusClassicOptionSmileBilinear(benchmark::State& state) {
+            benchmarkBonusClassicOption(state, true, PathGeneration::CachedStep,
+                                        Market::SmileBilinear);
+        }
+
+        BENCHMARK(BM_BonusClassicOptionSmileBilinear)
+            ->Name("BonusClassicOptionSmileBilinear")
+            ->Unit(benchmark::kMillisecond)
+            ->Iterations(3);
+
+        void BM_BonusClassicOptionSmileBilinearContinuous(benchmark::State& state) {
+            benchmarkBonusClassicOption(state, false, PathGeneration::CachedStep,
+                                        Market::SmileBilinear);
+        }
+
+        BENCHMARK(BM_BonusClassicOptionSmileBilinearContinuous)
+            ->Name("BonusClassicOptionSmileBilinearContinuous")
+            ->Unit(benchmark::kMillisecond)
+            ->Iterations(3);
+
+        void BM_BonusClassicOptionSmileBilinearUncached(benchmark::State& state) {
+            benchmarkBonusClassicOption(state, true, PathGeneration::Uncached,
+                                        Market::SmileBilinear);
+        }
+
+        BENCHMARK(BM_BonusClassicOptionSmileBilinearUncached)
+            ->Name("BonusClassicOptionSmileBilinearUncached")
+            ->Unit(benchmark::kMillisecond)
+            ->Iterations(3);
+
+        void BM_BonusClassicOptionSmileBilinearContinuousUncached(benchmark::State& state) {
+            benchmarkBonusClassicOption(state, false, PathGeneration::Uncached,
+                                        Market::SmileBilinear);
+        }
+
+        BENCHMARK(BM_BonusClassicOptionSmileBilinearContinuousUncached)
+            ->Name("BonusClassicOptionSmileBilinearContinuousUncached")
+            ->Unit(benchmark::kMillisecond)
+            ->Iterations(3);
+
+        // The same four on the bicubic surface, which builds a strike spline on every lookup. A
+        // repricing runs up to a minute, so a single iteration.
+        void BM_BonusClassicOptionSmileBicubic(benchmark::State& state) {
+            benchmarkBonusClassicOption(state, true, PathGeneration::CachedStep,
+                                        Market::SmileBicubic);
+        }
+
+        BENCHMARK(BM_BonusClassicOptionSmileBicubic)
+            ->Name("BonusClassicOptionSmileBicubic")
+            ->Unit(benchmark::kMillisecond)
+            ->Iterations(1);
+
+        void BM_BonusClassicOptionSmileBicubicContinuous(benchmark::State& state) {
+            benchmarkBonusClassicOption(state, false, PathGeneration::CachedStep,
+                                        Market::SmileBicubic);
+        }
+
+        BENCHMARK(BM_BonusClassicOptionSmileBicubicContinuous)
+            ->Name("BonusClassicOptionSmileBicubicContinuous")
+            ->Unit(benchmark::kMillisecond)
+            ->Iterations(1);
+
+        void BM_BonusClassicOptionSmileBicubicUncached(benchmark::State& state) {
+            benchmarkBonusClassicOption(state, true, PathGeneration::Uncached,
+                                        Market::SmileBicubic);
+        }
+
+        BENCHMARK(BM_BonusClassicOptionSmileBicubicUncached)
+            ->Name("BonusClassicOptionSmileBicubicUncached")
+            ->Unit(benchmark::kMillisecond)
+            ->Iterations(1);
+
+        void BM_BonusClassicOptionSmileBicubicContinuousUncached(benchmark::State& state) {
+            benchmarkBonusClassicOption(state, false, PathGeneration::Uncached,
+                                        Market::SmileBicubic);
+        }
+
+        BENCHMARK(BM_BonusClassicOptionSmileBicubicContinuousUncached)
+            ->Name("BonusClassicOptionSmileBicubicContinuousUncached")
+            ->Unit(benchmark::kMillisecond)
+            ->Iterations(1);
     }
 }
 
