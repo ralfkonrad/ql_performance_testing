@@ -6,7 +6,7 @@ SPDX-License-Identifier: MIT
 # Profiling the BonusClassicOption Monte Carlo
 
 Where `rke_profile_bonusclassicoption` spends its instructions, and which improvements
-carry over from this workload to a production market. Only 4.1 is implemented.
+carry over from this workload to a production market. 4.1 and 4.3 are implemented.
 
 ## 1. What Was Measured
 
@@ -168,9 +168,11 @@ the same pricing.
 
 ### 4.3 Link QuantLib Statically
 
-- **Status:** measured, and corrected from the first pass's estimate of about 2% Ir.
+- **Status:** implemented. The figures below were measured before it, against a second
+  tree, and correct the first pass's estimate of about 2% Ir.
 - **Lives in:** setup, `external/CMakeLists.txt`. QuantLib's own CMake sets
-  `BUILD_SHARED_LIBS` to `UNIX` when it is undefined, and we leave it undefined.
+  `BUILD_SHARED_LIBS` to `UNIX` when it is undefined; `external/CMakeLists.txt` now defines
+  it as `OFF` first, unless it is given on the command line.
 - **Finding:** `libQuantLib.so` is built with `-fPIC`, so calls between QuantLib
   functions go through the PLT. Cachegrind puts 17.7% of Ir in an unsymbolized bucket
   that holds the PLT stubs together with libm's `exp` and `log` kernels. Callgrind folds
