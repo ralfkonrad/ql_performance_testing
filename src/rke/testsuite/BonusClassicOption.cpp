@@ -321,6 +321,43 @@ namespace RKE::TestSuite {
         }
     }
 
+    BOOST_AUTO_TEST_CASE(testBonusClassicOptionLocalVolStep) { // NOLINT(misc-use-internal-linkage):
+                                                               // the struct is the macro's
+        BOOST_TEST_MESSAGE("BonusClassicOption prices the same Euler step under "
+                           "LocalVolStepSingleVariate and SingleVariate");
+
+        const auto option_data = OptionData();
+        auto market_data = MarketData();
+
+        const auto today = Date(22, Jun, 2025);
+        Settings::instance().evaluationDate() = today;
+
+        const auto exerciseDate = today + option_data.ttm;
+
+        // The forced discretization takes the Euler step through LocalConstantVol.
+        const auto process = market_data.makeGeneralizedBlackScholesProcess(today, true);
+
+        const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
+            option_data.barrier, option_data.bonusLevel, exerciseDate);
+
+        for (const bool isBiased : {true, false}) {
+            bonusClassicOption->setPricingEngine(
+                ext::make_shared<
+                    MCBonusClassicEngine<LowDiscrepancy, Statistics, LocalVolStepSingleVariate>>(
+                    process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(), isBiased, true, 42));
+            const auto cached = bonusClassicOption->NPV();
+
+            bonusClassicOption->setPricingEngine(
+                ext::make_shared<MCBonusClassicEngine<LowDiscrepancy, Statistics, SingleVariate>>(
+                    process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(), isBiased, true, 42));
+            const auto plain = bonusClassicOption->NPV();
+
+            // Exact on purpose: the cached step is the double QuantLib::PathGenerator evolves.
+            BOOST_TEST_MESSAGE((isBiased ? "discrete " : "continuous ") << cached);
+            BOOST_CHECK_EQUAL(cached, plain);
+        }
+    }
+
     BOOST_AUTO_TEST_CASE(testBonusClassicOptionInexactStep) { // NOLINT(misc-use-internal-linkage):
                                                               // the struct is the macro's
         BOOST_TEST_MESSAGE("BonusClassicOption refuses an inexact step under "
