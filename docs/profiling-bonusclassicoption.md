@@ -10,13 +10,13 @@ carry over from this workload to a production market. Only 4.1 is implemented.
 
 ## 1. What Was Measured
 
-| Item     | Value                                                                                                                                        |
-| -------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| Revision | `33eeead`; its code is that of `9b8fa24`, which the first pass measured, and every figure below was re-measured on it                        |
-| Build    | `profile` preset: `-O3 -g -fno-omit-frame-pointer`, Homebrew clang 23.1.2, C++17; a second `profile` tree with `-DBUILD_SHARED_LIBS=OFF`     |
-| Machine  | WSL2 laptop, no hardware counters                                                                                                            |
-| Tools    | valgrind 3.27.1 (callgrind, cachegrind, DHAT, massif), `perf` in `cpu-clock` mode, google-benchmark from the submodule                       |
-| Runs     | `discrete 1` and `continuous 1`, shared and static; one repricing, since callgrind counts exactly. Prototypes of 4.1 and 4.2 under callgrind |
+| Item     | Value                                                                                                                                                                                             |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Revision | `33eeead`; its code is that of `9b8fa24`, which the first pass measured, and every figure below was re-measured on it                                                                             |
+| Build    | `profile` preset: `-O3 -g -fno-omit-frame-pointer`, Homebrew clang 23.1.2, C++17; a second `profile` tree with `-DBUILD_SHARED_LIBS=OFF`                                                          |
+| Machine  | WSL2 laptop, no hardware counters                                                                                                                                                                 |
+| Tools    | valgrind 3.27.1 (callgrind, cachegrind, DHAT, massif), `perf` in `cpu-clock` mode, google-benchmark from the submodule                                                                            |
+| Runs     | `discrete 1` and `continuous 1`, shared and static; one repricing, since callgrind counts exactly. Prototypes of 4.1 and 4.2 under callgrind; 4.1's implementation at `8a9fafe` against `7e29f80` |
 
 The workload is `makeBonusClassicOptionSetup` in `src/rke/common/BonusClassicOptionSetup.cpp`:
 
@@ -108,20 +108,14 @@ the same pricing.
   is still a per-step constant. That is two `forwardRate` calls per step, 1,072 Ir on
   this setup's flat curves and more on interpolated ones. Only `localVol(t, x)` stays
   per path.
-- **Evidence:** a prototype that reproduces `MonteCarloModel::addSamples` with the
-  strike-independent terms cached:
+- **Evidence:** the measured figures are in Status. The continuous figure includes the
+  pricer's step variance from the cache. These percentages belong to this workload's
+  branch. With a smile, the rate-only cache would save at least the rate terms' absolute
+  cost, but its share of the run is unmeasured.
 
-  | Mode       |     Engine |    Cached | Saving |
-  | ---------- | ---------: | --------: | -----: |
-  | discrete   | 34.05 G Ir | 2.60 G Ir |  92.4% |
-  | continuous | 38.83 G Ir | 3.49 G Ir |  91.0% |
-
-  The continuous figure includes caching the pricer's `variance()` per step. These
-  percentages belong to this workload's branch. With a smile, the saving is at least
-  the rate terms' absolute cost, but its share of the run is unmeasured.
-
-- **Lock impact:** bit-identical. The cached doubles are the ones `evolve` computes.
-  The prototype reproduces, to the IEEE bit pattern:
+- **Lock impact:** bit-identical. The cached doubles are the ones `evolve` computes, and
+  `BlackScholesPathGeneratorTests` require every path point to equal
+  `QuantLib::PathGenerator`'s exactly. The implementation reproduces:
   - the production setup: discrete `100.22671167047309` and continuous
     `99.883605619178169`;
   - both locks in `src/rke/testsuite/BonusClassicOption.cpp`: discrete
@@ -135,12 +129,13 @@ the same pricing.
   `GeneralizedBlackScholesProcess`'s private `isStrikeIndependent_`,
   `forceDiscretization_` and `hasExternalLocalVol_`. Code outside QuantLib cannot read
   any of them.
-  - An rke implementation has to re-derive the decision from the volatility's type, as
-    `localVolatility()` does. It has to fall back to `evolve` for anything it cannot
-    classify, and it cannot see `forceDiscretization`.
-  - The path generator type is fixed by `McSimulation`'s `MC` template parameter, so a
-    custom generator comes in through our own Monte Carlo traits, not through
-    `SingleVariate`.
+  - The type check re-derives `isStrikeIndependent_` as `localVolatility()` does. The
+    other two are invisible to it, which is why the cache also checks its step against
+    `evolve`.
+  - The path generator type is fixed by `McSimulation`'s `MC` template parameter, so the
+    generator comes in through `BlackScholesSingleVariate`, not `SingleVariate`.
+  - The smile branch's discretization is a protected member with no accessor, so a
+    rate-only cache there cannot confirm it is `EulerDiscretization` either.
 
 ### 4.2 Compute the Forward Rate Without `InterestRate` in the Process
 
@@ -163,9 +158,10 @@ the same pricing.
   direct formula, so QuantLib stays untouched. It saves 124 Ir per call: 4.13 G Ir, or
   12.1%, discrete, and the same 4.13 G, or 10.6%, continuous. The subclass lives in the
   executable rather than in `libQuantLib`, which leaves the calls it removes the same.
-- **Overlap with 4.1:** with 4.1 in place, the forward rates run once per grid point
-  instead of once per path step, in either branch, so 4.2 adds almost nothing to this
-  engine. It pays where 4.1 does not reach: every other engine that evolves this process.
+- **Overlap with 4.1:** in the strike-independent branch, 4.1 runs the forward rates once
+  per grid point instead of once per path step, so there 4.2 adds almost nothing to this
+  engine. Under a smile, 4.1's rate-only cache is not implemented, so 4.2 still saves its
+  124 Ir per call in `drift`. It also pays in every other engine that evolves this process.
 - **Lock impact:** bit-identical, all four values above, to the IEEE bit pattern.
 - **Upstream:** medium. The change is local and behaviour-preserving, but it duplicates
   the core of `YieldTermStructure::forwardRate` in the process.
@@ -212,13 +208,13 @@ the same pricing.
 
 ## 5. Findings Dropped as Specific to This Market
 
-| Finding                                                                                    | Measured here                               | Why it does not carry over                                                                                                                      |
-| ------------------------------------------------------------------------------------------ | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| Pass `extrapolate = true` to `blackVariance` in `GeneralizedBlackScholesProcess::variance` | 4.35 G Ir discrete (12.7%), bit-identical   | Only the strike-independent branch calls it. Under a smile, `variance` goes to the discretization, and `LocalVolSurface` already passes `true`. |
-| Cache the continuous pricer's per-step `variance()`                                        | 3.86 G Ir continuous (9.9%)                 | With a smile the variance depends on `path[i]`, and the pricer's own header warns the bridge is approximate there.                              |
-| Drop the second `localVolatility()` "trigger update" per step                              | 0.37 G Ir (1.1%)                            | Insignificant next to `localVolImpl`.                                                                                                           |
-| Generate paths in log space and call `exp` only where a price is needed                    | about 0.95 G Ir after 4.1, moves both locks | `localVol(t, x)` needs the price level every step, and `localVolImpl` takes its own `log`.                                                      |
-| The 92% headline of 4.1                                                                    | see 4.1                                     | It is the strike-independent branch's figure; 4.1 keeps only the part that carries over.                                                        |
+| Finding                                                                                    | Measured here                               | Why it does not carry over                                                                                                                                                 |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pass `extrapolate = true` to `blackVariance` in `GeneralizedBlackScholesProcess::variance` | 4.35 G Ir discrete (12.7%), bit-identical   | Only the strike-independent branch calls it. Under a smile, `variance` goes to the discretization, and `LocalVolSurface` already passes `true`.                            |
+| Cache the continuous pricer's per-step `variance()`                                        | 3.86 G Ir continuous (9.9%)                 | Implemented with 4.1 for the strike-independent branch. With a smile the variance depends on `path[i]`, and the pricer's own header warns the bridge is approximate there. |
+| Drop the second `localVolatility()` "trigger update" per step                              | 0.37 G Ir (1.1%)                            | Insignificant next to `localVolImpl`.                                                                                                                                      |
+| Generate paths in log space and call `exp` only where a price is needed                    | about 0.95 G Ir after 4.1, moves both locks | `localVol(t, x)` needs the price level every step, and `localVolImpl` takes its own `log`.                                                                                 |
+| The 92% headline of 4.1                                                                    | see 4.1                                     | It is the strike-independent branch's figure, and that is the part implemented. The part that carries over, the smile branch's rate-only cache, is still open.             |
 
 ## 6. What the Profile Rules Out
 
@@ -234,7 +230,10 @@ These hold for the branch measured. A smile-surface profile has to confirm them 
   instruction-bound.
 - **Monte Carlo machinery:** RNG, bridge, pricer, statistics and setup together cost
   about 4%. A different inverse normal, dropping the bridge, or `IncrementalStatistics`
-  cannot gain more than that, and less under the heavier smile branch.
+  cannot gain more than that, and less under the heavier smile branch. With 4.1 in place
+  this bound no longer holds on this workload: of 2.68 G Ir discrete, Sobol plus
+  `InverseCumulativeNormal` take 0.92 G (34.3%) and `BrownianBridge::transform` 0.42 G
+  (15.6%), next to 1.17 G (43.6%) for the cached step, 0.95 G of it in `exp`.
 
 ## 7. Wall Clock (Secondary)
 
@@ -278,6 +277,9 @@ from the source should be measured there:
 - `localVolImpl` runs twice per step with identical `(t, x)`, once from `drift` and once
   from `diffusion`.
 - Its discounts and forward value depend only on `t`, so they could be cached per step.
+
+The same profile decides whether 4.1's rate-only cache for the smile branch and 4.2 pay,
+since for this engine both now matter only there.
 
 ## 9. Raw Profiles
 
