@@ -9,8 +9,7 @@
 //                                    [--market flat|smile-bilinear|smile-bicubic]
 //
 // Defaults are discrete, 10, cached and flat, about 20,000 samples under perf -F 999; one
-// iteration is enough under callgrind, which counts instructions exactly. The smile markets need
-// uncached: the cached path generator refuses them.
+// iteration is enough under callgrind, which counts instructions exactly.
 
 #include <rke/common/BonusClassicOptionSetup.hpp>
 #include <CLI/CLI.hpp>
@@ -41,7 +40,7 @@ namespace RKE::Profile {
                 ->check(CLI::Range(Size{1}, std::numeric_limits<Size>::max()))
                 ->capture_default_str();
             app.add_option("--path-generation", arguments.pathGeneration,
-                           "CachedStepSingleVariate or QuantLib::SingleVariate")
+                           "The market's step cache or QuantLib::SingleVariate")
                 ->check(CLI::IsMember({"cached", "uncached"}))
                 ->capture_default_str();
             app.add_option("--market", arguments.market,

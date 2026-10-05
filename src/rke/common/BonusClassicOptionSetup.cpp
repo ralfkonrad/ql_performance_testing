@@ -184,10 +184,16 @@ namespace RKE::Common {
         // zero point, so these are points 1 to 2^16, the net with one point swapped.
         constexpr Size timeStepsPerYear = 252;
         constexpr Size samples = Size{1} << 16U;
-        const auto mcEngine =
-            pathGeneration == PathGeneration::CachedStep ?
-                makeEngine<CachedStepSingleVariate>(process, timeStepsPerYear, samples, isBiased) :
-                makeEngine<SingleVariate>(process, timeStepsPerYear, samples, isBiased);
+        const auto mcEngine = [&] {
+            if (pathGeneration == PathGeneration::Uncached) {
+                return makeEngine<SingleVariate>(process, timeStepsPerYear, samples, isBiased);
+            }
+            return market == Market::Flat ?
+                       makeEngine<CachedStepSingleVariate>(process, timeStepsPerYear, samples,
+                                                           isBiased) :
+                       makeEngine<LocalVolStepSingleVariate>(process, timeStepsPerYear, samples,
+                                                             isBiased);
+        }();
 
         const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
             option_data.barrier, option_data.bonusLevel, exerciseDate);
