@@ -360,7 +360,9 @@ to back with nothing else running, alternating in the order shown, with
   10.9×. The two master runs drift 2.5–3.1% apart, far below the effect.
 - **Re-timing:** needs one build now. `BonusClassicOptionUncached` and
   `BonusClassicOptionContinuousUncached` run the uncached baseline in the same binary as the
-  cached `BonusClassicOption` and `BonusClassicOptionContinuous`.
+  cached `BonusClassicOption` and `BonusClassicOptionContinuous`. The
+  `BonusClassicOptionSmileBilinear*` and `BonusClassicOptionSmileBicubic*` registrations do
+  the same on the smile markets of section 8.
 
 ## 8. The Smile Market
 

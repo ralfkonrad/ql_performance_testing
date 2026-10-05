@@ -30,12 +30,19 @@ namespace RKE::Common {
     // spline on every lookup, which dominates its profile.
     enum class Market : std::uint8_t { Flat, SmileBilinear, SmileBicubic };
 
+    // A production run's path count: a power of two, where a Sobol sequence is balanced.
+    // SobolRsg skips the zero point, so these are points 1 to 2^16, the net with one point
+    // swapped.
+    inline constexpr QuantLib::Size productionSamples = QuantLib::Size{1} << 16U;
+
     // Sets the evaluation date to 22 Jun 2025 and prices with MCBonusClassicEngine under
-    // LowDiscrepancy; isBiased selects discrete monitoring, otherwise continuous.
+    // LowDiscrepancy; isBiased selects discrete monitoring, otherwise continuous. A smoke test
+    // passes fewer samples than productionSamples, on the same time grid.
     [[nodiscard]] BonusClassicOptionSetup
     makeBonusClassicOptionSetup(bool isBiased,
                                 PathGeneration pathGeneration = PathGeneration::CachedStep,
-                                Market market = Market::Flat);
+                                Market market = Market::Flat,
+                                QuantLib::Size samples = productionSamples);
 
     // The measured work. recalculate() is the point: NPV() alone returns the cached value, so a
     // loop would time one pricing and the rest cache reads.
