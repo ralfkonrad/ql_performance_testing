@@ -126,7 +126,7 @@ runs:
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
-        $boostVersion = '1.88.0'
+        $boostVersion = '1.92.0'
         $boostUnderscored = $boostVersion.Replace('.', '_')
         $msvcToolset = '14.3'
 
