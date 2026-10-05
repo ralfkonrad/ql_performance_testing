@@ -185,9 +185,10 @@ leg `S · exp(-q (T - t))` solves that exactly.
 - Discrete mode re-creates a jump at `H` on every monitoring date, and
   `FdmBackwardSolver` damps only the first `dampingSteps` after maturity. Douglas with
   `theta = 0.5` is Crank-Nicolson in one dimension, so delta and gamma near `H` may ring.
-  The lever, if the measured residuals show it in the price, is the scheme:
+  The first lever, if the measured residuals show it in the price, is the scheme:
   `FdmSchemeDesc::TrBDF2()` is second order and L-stable; `ImplicitEuler()` is first
-  order in time. Not a test subject until a Greek is one.
+  order in time. The second is a Rannacher restart after every monitoring date, which
+  needs the QuantLib change in section 3.5. Not a test subject until a Greek is one.
 
 ### 3.4 Documentation Block
 
@@ -202,6 +203,44 @@ day counter, the same
 approximation QuantLib's engines make and exact when both curves share a day counter;
 neither discrete dividends nor local volatility are supported. The instrument header's
 `\warning no default engine is set` and its `\test` line gain the new engines.
+
+### 3.5 Changes to QuantLib
+
+A `private` QuantLib member may be widened to `protected` or `public` where that
+serves this plan. Such a change lives on a topic branch of `ralfkonrad/QuantLib` and
+follows `.agents/changing-quantlib.md` for the worktree, the formatting of changed
+lines only and the pointer move. That guide and the hard constraint in `AGENTS.md`
+name performance work as the only reason to edit the submodule, so the commit that
+moves the pointer also widens that sentence to "performance, or access an extension in
+`src/rke` needs"; `.agents/maintaining-agent-docs.md` applies to that edit.
+
+Every API the plan uses is public, so the first implementation needs no such change.
+One place would benefit, and only once a measured residual demands it:
+
+- `Fdm1DimSolver` keeps `solverDesc_`, `schemeDesc_`, `op_`, `thetaCondition_`,
+  `conditions_`, `x_`, `initialValues_`, `resultValues_` and `interpolation_` private,
+  and its `performCalculations()` rolls back from maturity to zero in one
+  `FdmBackwardSolver::rollback` call, so the Rannacher damping steps run once, at
+  maturity. Wade, Khaliq, Yousuf, Vigo-Aguiar and Deininger (2007), "On smoothing of
+  the Crank-Nicolson scheme and higher order schemes for pricing barrier options",
+  Journal of Computational and Applied Mathematics 204, restart the damping after
+  every monitoring date. With those members `protected`, an
+  `FdmBonusClassicSolver : Fdm1DimSolver` in `src/rke/ql/ext` overrides
+  `performCalculations()` and rolls back one monitoring
+  interval at a time, `rollback(rhs, t_k, t_{k-1}, steps_k, dampingSteps)`, applying
+  the overwrite of section 3.2 itself between the calls. The overwrite then leaves
+  the step-condition composite, which keeps the theta snapshot only: the averaging at
+  the node on `H` is not idempotent, so it must run exactly once per date, and a
+  stopping time at an interval end would run it twice. `FdmBlackScholesSolver` builds
+  its `Fdm1DimSolver` privately, so the engine then constructs `FdmBlackScholesOp`,
+  which is public, and the subclass itself, and repeats the three one-line
+  conversions from `d/dx` to delta and gamma that `FdmBlackScholesSolver` makes.
+
+Where an access change does not help: `BinomialBarrierEngine` and
+`DiscretizedBarrierOption` are bound to `BarrierOption::arguments` by type, not by
+access; `FdmBlackScholesMesher` has no `requireCPoint` parameter, which would be an
+API addition rather than a visibility change, and its `locations()` already gives
+the range discrete mode needs.
 
 ## 4. `BinomialBonusClassicEngine<Tree>` and `DiscretizedBonusClassicOption`
 
@@ -347,7 +386,9 @@ Boyle-Lau for CRR only. No new file under `.agents/`, so its README and the `AGE
 table stay as they are.
 
 Adding both engines to `src/rke/common/BonusClassicOptionSetup` and the benchmark is a
-follow-up, not part of either branch.
+follow-up, not part of either branch. Should section 3.5 be exercised, the QuantLib
+change is pushed to `ralfkonrad/QuantLib` first, and the pointer bump is its own commit
+on `bonusclassic-fd-engine`, apart from the solver that uses it.
 
 ## 7. Validation
 
