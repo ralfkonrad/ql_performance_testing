@@ -44,11 +44,14 @@ Under `src/rke/ql/ext/instruments/`, derived from the fitting QuantLib base
 ## 3. A New Pricing Engine
 
 Under `src/rke/ql/ext/pricingengines/<instrument>/`. A Monte Carlo engine derives
-from both the instrument's `engine` and
-`QuantLib::McSimulation<BlackScholesSingleVariate, RNG, S>` when its process is a
-`GeneralizedBlackScholesProcess`, `QuantLib::SingleVariate` otherwise. The former
-builds paths with `BlackScholesPathGenerator`, which caches the exact step per grid
-and produces the same doubles as `QuantLib::PathGenerator`. Then:
+from both the instrument's `engine` and `QuantLib::McSimulation<MC, RNG, S>`, and
+exposes `MC` as a template-template parameter so the caller picks the path
+generator. `CachedStepSingleVariate`, the default, builds paths with
+`CachedStepPathGenerator`, which caches the exact step of a
+`GeneralizedBlackScholesProcess` per grid and refuses a process whose step is not
+exact, at construction and never by falling back. `QuantLib::SingleVariate` builds
+them with `QuantLib::PathGenerator` for every other process. Both produce the same
+doubles. Then:
 
 - `registerWith(process_)` in the constructor. Without it the instrument caches
   its first price and never recomputes — see "Lazy Evaluation" in

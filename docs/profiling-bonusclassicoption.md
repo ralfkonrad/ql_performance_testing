@@ -92,14 +92,22 @@ the same pricing.
   one repricing drops from 34.18 G to 2.68 G Ir discrete (92.15%) and from 39.00 G to 3.58 G
   continuous (90.81%), with the production NPVs unchanged to the last digit printed. The
   prototype measured 92.4% and 91.0% against its own engine build.
-- **Lives in:** `BlackScholesStepCache` and `BlackScholesPathGenerator` in
-  `src/rke/ql/ext/methods/montecarlo/`. `MCBonusClassicEngine` takes its paths from them, and
-  `BonusClassicPathPricer` takes its step variance from the cache.
+- **Lives in:** `BlackScholesStepCache` and `CachedStepPathGenerator` in
+  `src/rke/ql/ext/methods/montecarlo/`. `MCBonusClassicEngine` takes its paths from them under
+  its default traits, `CachedStepSingleVariate`, and `CachedStepBonusClassicPathPricer` takes
+  its step variance from the cache.
 - **Branch guard:** the cache classifies the volatility by type, then checks its step bitwise
   against `evolve` at two points on every step. That catches the two cases the type misses: a
-  forced discretization, and a process built with an external local volatility. Under a smile,
-  or when the check fails, every step goes through `evolve` as before. The smile branch's
-  rate-only cache is not implemented.
+  forced discretization, and a process built with an external local volatility. Where the
+  check fails, `CachedStepPathGenerator` refuses the process at construction instead of
+  falling back. Such a process, a smile included, takes `QuantLib::SingleVariate` through the
+  engine's `MC` template parameter, and every step goes through `evolve` as before. The smile
+  branch's rate-only cache is not implemented.
+- **Cost of the explicit choice:** none in work, one instruction per step in register
+  allocation. Callgrind on the static `profile` build, one repricing, master against this
+  design: 2.658 G to 2.675 G Ir discrete and 3.558 G to 3.575 G continuous, 0.6% each, the
+  NPVs bit-identical. The compiler spills the path pointer across `exp` where it kept it in a
+  register before; the two loops differ in nothing else.
 - **Finding:** every path recomputes per-step quantities that depend only on the time
   grid. That holds for any curve shape, not just flat ones.
 - **Strike-independent branch:** variance, its square root, and the drift
@@ -114,7 +122,7 @@ the same pricing.
   cost, but its share of the run is unmeasured.
 
 - **Lock impact:** bit-identical. The cached doubles are the ones `evolve` computes, and
-  `BlackScholesPathGeneratorTests` require every path point to equal
+  `CachedStepPathGeneratorTests` require every path point to equal
   `QuantLib::PathGenerator`'s exactly. The implementation reproduces:
   - the production setup: discrete `100.22671167047309` and continuous
     `99.883605619178169`;
@@ -133,7 +141,8 @@ the same pricing.
     other two are invisible to it, which is why the cache also checks its step against
     `evolve`.
   - The path generator type is fixed by `McSimulation`'s `MC` template parameter, so the
-    generator comes in through `BlackScholesSingleVariate`, not `SingleVariate`.
+    engine exposes it: `CachedStepSingleVariate` by default, `QuantLib::SingleVariate` for a
+    process the cache cannot reproduce. The caller decides, not the generator.
   - The smile branch's discretization is a protected member with no accessor, so a
     rate-only cache there cannot confirm it is `EulerDiscretization` either.
 

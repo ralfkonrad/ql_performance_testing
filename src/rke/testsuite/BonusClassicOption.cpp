@@ -5,8 +5,10 @@
 #include <rke/ql/ext/instruments/BonusClassicOption.hpp>
 #include <rke/ql/ext/pricingengines/bonusclassic/MCBonusClassicEngine.hpp>
 #include <ql/instruments/barrieroption.hpp>
+#include <ql/methods/montecarlo/mctraits.hpp>
 #include <ql/pricingengines/barrier/analyticbarrierengine.hpp>
 #include <ql/processes/blackscholesprocess.hpp>
+#include <ql/processes/eulerdiscretization.hpp>
 #include <ql/quotes/simplequote.hpp>
 #include <ql/time/daycounters/actual360.hpp>
 #include <boost/test/unit_test.hpp>
@@ -33,8 +35,10 @@ namespace RKE::TestSuite {
             Real dividendYield = 0.03;
             Real volatility = 0.20;
 
+            // forceDiscretization = true makes evolve() take Euler steps over the flat
+            // volatility, which BlackScholesStepCache cannot reproduce.
             ext::shared_ptr<GeneralizedBlackScholesProcess>
-            makeGeneralizedBlackScholesProcess(Date today) {
+            makeGeneralizedBlackScholesProcess(Date today, bool forceDiscretization = false) {
                 const auto dc = Actual360();
                 const auto spotQuote = ext::make_shared<SimpleQuote>(spot);
 
@@ -48,7 +52,8 @@ namespace RKE::TestSuite {
                 const auto volTS = flatVol(today, volaQuote, dc);
 
                 return ext::make_shared<BlackScholesMertonProcess>(
-                    Handle<Quote>(spotQuote), Handle(qTS), Handle(rTS), Handle(volTS));
+                    Handle<Quote>(spotQuote), Handle(qTS), Handle(rTS), Handle(volTS),
+                    ext::make_shared<EulerDiscretization>(), forceDiscretization);
             }
         };
 
@@ -277,6 +282,73 @@ namespace RKE::TestSuite {
         // only removes the bonus put, so on the same paths the continuous price is lower.
         BOOST_TEST_MESSAGE("discrete " << discrete << ", continuous " << continuous);
         BOOST_CHECK_LT(continuous, discrete);
+    }
+
+    BOOST_AUTO_TEST_CASE(
+        testBonusClassicOptionPathGeneratorTraits) { // NOLINT(misc-use-internal-linkage):
+                                                     // the struct is the macro's
+        BOOST_TEST_MESSAGE("BonusClassicOption prices the same under CachedStepSingleVariate and "
+                           "SingleVariate");
+
+        const auto option_data = OptionData();
+        auto market_data = MarketData();
+
+        const auto today = Date(22, Jun, 2025);
+        Settings::instance().evaluationDate() = today;
+
+        const auto exerciseDate = today + option_data.ttm;
+
+        const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
+
+        const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
+            option_data.barrier, option_data.bonusLevel, exerciseDate);
+
+        for (const bool isBiased : {true, false}) {
+            bonusClassicOption->setPricingEngine(
+                ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
+                    process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), isBiased, true, 42));
+            const auto cached = bonusClassicOption->NPV();
+
+            bonusClassicOption->setPricingEngine(
+                ext::make_shared<MCBonusClassicEngine<LowDiscrepancy, Statistics, SingleVariate>>(
+                    process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), isBiased, true, 42));
+            const auto plain = bonusClassicOption->NPV();
+
+            // Exact on purpose: the cached step is the double QuantLib::PathGenerator evolves,
+            // so the traits move no price.
+            BOOST_TEST_MESSAGE((isBiased ? "discrete " : "continuous ") << cached);
+            BOOST_CHECK_EQUAL(cached, plain);
+        }
+    }
+
+    BOOST_AUTO_TEST_CASE(testBonusClassicOptionInexactStep) { // NOLINT(misc-use-internal-linkage):
+                                                              // the struct is the macro's
+        BOOST_TEST_MESSAGE("BonusClassicOption refuses an inexact step under "
+                           "CachedStepSingleVariate and prices it under SingleVariate");
+
+        const auto option_data = OptionData();
+        auto market_data = MarketData();
+
+        const auto today = Date(22, Jun, 2025);
+        Settings::instance().evaluationDate() = today;
+
+        const auto exerciseDate = today + option_data.ttm;
+
+        const auto process = market_data.makeGeneralizedBlackScholesProcess(today, true);
+
+        const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
+            option_data.barrier, option_data.bonusLevel, exerciseDate);
+
+        // The volatility's type alone passes for exact; only the probe against evolve()
+        // catches the forced discretization, and the engine fails loud instead of falling back.
+        bonusClassicOption->setPricingEngine(ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
+            process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(), false, true, 42));
+        BOOST_CHECK_THROW(bonusClassicOption->NPV(), Error);
+
+        bonusClassicOption->setPricingEngine(
+            ext::make_shared<MCBonusClassicEngine<LowDiscrepancy, Statistics, SingleVariate>>(
+                process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(), false, true, 42));
+        BOOST_CHECK_NO_THROW(bonusClassicOption->NPV());
     }
 
     BOOST_AUTO_TEST_SUITE_END()
