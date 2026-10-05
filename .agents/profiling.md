@@ -29,10 +29,13 @@ PROG=./build/profile/src/rke/profile/<workload>/rke_profile_<workload>
 OUT=build/profile/prof/$(basename "$PROG") && mkdir -p "$OUT"
 ```
 
-`rke_profile_bonusclassicoption` takes `[discrete|continuous] [iterations]`,
-defaulting to `discrete` and `10`. It prints the final NPV at full precision, the
-same at any iteration count, since every iteration reprices the same low-discrepancy
-paths. The setup is sized like a production run, 1Y with daily steps and 2^16
+`rke_profile_bonusclassicoption` takes `[discrete|continuous] [iterations]
+[--path-generation cached|uncached]`, defaulting to `discrete`, `10` and `cached`.
+`cached` is `CachedStepSingleVariate`; `uncached` is `QuantLib::SingleVariate`, which
+asks the process for every step, the baseline the step cache is measured against. It
+prints the final NPV at full precision, the same at any iteration count, since every
+iteration reprices the same low-discrepancy paths, and the same under either path
+generation. The setup is sized like a production run, 1Y with daily steps and 2^16
 paths, so this is not the test suite's 5M regression lock. The recipes below
 run it with the defaults; append arguments after `"$PROG"` for anything else.
 
