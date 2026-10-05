@@ -5,10 +5,12 @@
 #define MCBONUSCLASSICENGINE_HPP
 
 #include <rke/ql/ext/instruments/BonusClassicOption.hpp>
+#include <rke/ql/ext/methods/montecarlo/BlackScholesStepCache.hpp>
 #include <rke/ql/ext/methods/montecarlo/CachedStepPathGenerator.hpp>
 #include <ql/pricingengines/barrier/mcbarrierengine.hpp>
 #include <ql/pricingengines/mcsimulation.hpp>
 #include <ql/processes/blackscholesprocess.hpp>
+#include <type_traits>
 
 namespace RKE::QL::Ext {
     //! Pricing engine for bonus certificates using Monte Carlo simulation
@@ -33,10 +35,20 @@ namespace RKE::QL::Ext {
         curve from maturity. Dividends enter through the process's drift.
         Neither antithetic variates nor a control variate are used.
 
-        Paths come from CachedStepPathGenerator, which takes the process's
-        exact step from terms computed once per grid and refuses a process
-        whose step is not exact. The paths are the doubles
-        QuantLib::PathGenerator would produce.
+        Paths come from the generator of the MC traits. The default,
+        CachedStepSingleVariate, builds them with CachedStepPathGenerator,
+        which takes the process's exact step from terms computed once per
+        grid and refuses a process whose step is not exact: a smile, a
+        forced discretization or an external local volatility. Such a
+        process takes QuantLib::SingleVariate, i.e. QuantLib::PathGenerator.
+        Both produce the same doubles, so the choice moves no price. The
+        continuous path pricer follows the traits: under
+        CachedStepSingleVariate it takes the step variance from the same
+        cache, otherwise from the process.
+
+        \tparam MC Monte Carlo traits naming the path generator:
+                   CachedStepSingleVariate for a process whose step is
+                   exact, QuantLib::SingleVariate for any other.
 
         \warning with isBiased = false the bridge is exact only for a
                  strike-independent volatility. Under a smile or local
@@ -61,16 +73,16 @@ namespace RKE::QL::Ext {
         \test the continuously monitored value is checked to lie below the
               discretely monitored one on the same grid and seed.
     */
-    template <class RNG = QuantLib::PseudoRandom, class S = QuantLib::Statistics>
+    template <class RNG = QuantLib::PseudoRandom,
+              class S = QuantLib::Statistics,
+              template <class> class MC = CachedStepSingleVariate>
     class MCBonusClassicEngine : public BonusClassicOption::engine,
-                                 public QuantLib::McSimulation<CachedStepSingleVariate, RNG, S> {
+                                 public QuantLib::McSimulation<MC, RNG, S> {
       public:
         using path_generator_type =
-            typename QuantLib::McSimulation<CachedStepSingleVariate, RNG, S>::path_generator_type;
-        using path_pricer_type =
-            typename QuantLib::McSimulation<CachedStepSingleVariate, RNG, S>::path_pricer_type;
-        using stats_type =
-            typename QuantLib::McSimulation<CachedStepSingleVariate, RNG, S>::stats_type;
+            typename QuantLib::McSimulation<MC, RNG, S>::path_generator_type;
+        using path_pricer_type = typename QuantLib::McSimulation<MC, RNG, S>::path_pricer_type;
+        using stats_type = typename QuantLib::McSimulation<MC, RNG, S>::stats_type;
 
         /*! \param process          the underlying; the engine registers with it
             \param timeStepsPerYear grid density; the grid has
@@ -181,28 +193,52 @@ namespace RKE::QL::Ext {
                                   the evaluation date
             \param process        the process the paths were generated with;
                                   its variance() gives \f$ v_i \f$
-            \param grid           the paths' time grid; where the process's
-                                  step is exact, \f$ v_i \f$ is taken from a
-                                  BlackScholesStepCache over it instead
             \pre barrier and bonus level of \p payoff are positive.
         */
         BonusClassicPathPricer(
             BonusClassicPayoff payoff,
             QuantLib::DiscountFactor discountFactor,
-            QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process,
-            const QuantLib::TimeGrid& grid);
+            QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process);
         QuantLib::Real operator()(const QuantLib::Path& path) const override;
 
       private:
         BonusClassicPayoff payoff_;
         QuantLib::DiscountFactor discountFactor_;
         QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process_;
+    };
+
+    //! BonusClassicPathPricer with the step variance from a BlackScholesStepCache
+    /*! The same value as BonusClassicPathPricer for paths from
+        CachedStepPathGenerator over the same grid: \f$ v_i \f$ is the
+        variance the generator evolved step \f$ i \f$ with, read from a
+        cache built once instead of from the process on every step.
+    */
+    class CachedStepBonusClassicPathPricer : public QuantLib::PathPricer<QuantLib::Path> {
+      public:
+        /*! \param discountFactor risk-free discount factor from maturity to
+                                  the evaluation date
+            \param process        the process the paths were generated with
+            \param grid           the paths' time grid
+            \pre barrier and bonus level of \p payoff are positive, and the
+                 process's step on \p grid is exact, as CachedStepPathGenerator
+                 requires.
+        */
+        CachedStepBonusClassicPathPricer(
+            BonusClassicPayoff payoff,
+            QuantLib::DiscountFactor discountFactor,
+            const QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess>& process,
+            const QuantLib::TimeGrid& grid);
+        QuantLib::Real operator()(const QuantLib::Path& path) const override;
+
+      private:
+        BonusClassicPayoff payoff_;
+        QuantLib::DiscountFactor discountFactor_;
         BlackScholesStepCache stepCache_;
     };
 
 
-    template <class RNG, class S>
-    MCBonusClassicEngine<RNG, S>::MCBonusClassicEngine(
+    template <class RNG, class S, template <class> class MC>
+    MCBonusClassicEngine<RNG, S, MC>::MCBonusClassicEngine(
         QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process,
         QuantLib::Size timeStepsPerYear,
         QuantLib::Size requiredSamples,
@@ -211,23 +247,22 @@ namespace RKE::QL::Ext {
         bool isBiased,
         bool brownianBridge,
         QuantLib::BigNatural seed)
-    : QuantLib::McSimulation<CachedStepSingleVariate, RNG, S>(false, false),
-      process_(std::move(process)), timeStepsPerYear_(timeStepsPerYear),
-      requiredSamples_(requiredSamples), maxSamples_(maxSamples),
-      requiredTolerance_(requiredTolerance), isBiased_(isBiased), brownianBridge_(brownianBridge),
-      seed_(seed) {
+    : QuantLib::McSimulation<MC, RNG, S>(false, false), process_(std::move(process)),
+      timeStepsPerYear_(timeStepsPerYear), requiredSamples_(requiredSamples),
+      maxSamples_(maxSamples), requiredTolerance_(requiredTolerance), isBiased_(isBiased),
+      brownianBridge_(brownianBridge), seed_(seed) {
         // Without this, NPV() keeps returning the first price.
         registerWith(process_);
     }
 
-    template <class RNG, class S>
-    void MCBonusClassicEngine<RNG, S>::calculate() const {
+    template <class RNG, class S, template <class> class MC>
+    void MCBonusClassicEngine<RNG, S, MC>::calculate() const {
         const auto spot = process_->x0();
         QL_REQUIRE(spot > 0.0, "negative or null underlying given");
         // The path pricer never inspects path[0], so an already-triggered spot is rejected here.
         QL_REQUIRE(!triggered(spot), "barrier touched");
-        QuantLib::McSimulation<CachedStepSingleVariate, RNG, S>::calculate(
-            requiredTolerance_, requiredSamples_, maxSamples_);
+        QuantLib::McSimulation<MC, RNG, S>::calculate(requiredTolerance_, requiredSamples_,
+                                                      maxSamples_);
         results_.value = this->mcModel_->sampleAccumulator().mean();
         // LowDiscrepancy sets allowsErrorEstimate = 0, and every caller instantiates the engine
         // with it or with traits derived from it.
@@ -236,9 +271,9 @@ namespace RKE::QL::Ext {
         }
     }
 
-    template <class RNG, class S>
-    QuantLib::ext::shared_ptr<typename MCBonusClassicEngine<RNG, S>::path_pricer_type>
-    MCBonusClassicEngine<RNG, S>::pathPricer() const {
+    template <class RNG, class S, template <class> class MC>
+    QuantLib::ext::shared_ptr<typename MCBonusClassicEngine<RNG, S, MC>::path_pricer_type>
+    MCBonusClassicEngine<RNG, S, MC>::pathPricer() const {
         const auto payoff =
             QuantLib::ext::dynamic_pointer_cast<BonusClassicPayoff>(arguments_.payoff);
         QL_REQUIRE(payoff, "non-plain payoff given");
@@ -252,13 +287,19 @@ namespace RKE::QL::Ext {
             return QuantLib::ext::shared_ptr<path_pricer_type>(
                 new BiasedBonusClassicPathPricer(*payoff, discountFactor));
         }
+        // The traits decide where the bridge's step variance comes from: the cache the
+        // paths were built from, or the process the paths were evolved with.
+        if constexpr (std::is_same_v<MC<RNG>, CachedStepSingleVariate<RNG>>) {
+            return QuantLib::ext::shared_ptr<path_pricer_type>(
+                new CachedStepBonusClassicPathPricer(*payoff, discountFactor, process_, grid));
+        }
         return QuantLib::ext::shared_ptr<path_pricer_type>(
-            new BonusClassicPathPricer(*payoff, discountFactor, process_, grid));
+            new BonusClassicPathPricer(*payoff, discountFactor, process_));
     }
 
 
-    template <class RNG, class S>
-    QuantLib::TimeGrid MCBonusClassicEngine<RNG, S>::timeGrid() const {
+    template <class RNG, class S, template <class> class MC>
+    QuantLib::TimeGrid MCBonusClassicEngine<RNG, S, MC>::timeGrid() const {
         const auto residualTime = process_->time(arguments_.exercise->lastDate());
         if (timeStepsPerYear_ != QuantLib::Null<QuantLib::Size>()) {
             // A short residual time truncates steps to 0, and TimeGrid(end, 0) divides by zero;
