@@ -111,8 +111,9 @@ suite. To skip that, build one target: `--target rke_testsuite`.
 
 CTest knows `quantlib_test_suite`, `rke_testsuite`, one
 `rke_benchmark_<workload>` per benchmark executable (a one-iteration dry run) and,
-per profile executable, one single-iteration smoke run per mode, such as
-`rke_profile_bonusclassicoption_discrete`.
+per profile executable, one single-iteration smoke run per mode and path generation,
+such as `rke_profile_bonusclassicoption_discrete` and
+`rke_profile_bonusclassicoption_discrete_uncached`.
 The first is QuantLib's full suite and dominates the runtime, so the hidden
 `default` test preset carries `filter.include.name` `^rke_` and both visible
 presets inherit it:

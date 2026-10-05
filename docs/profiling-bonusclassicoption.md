@@ -10,13 +10,13 @@ carry over from this workload to a production market. 4.1 and 4.3 are implemente
 
 ## 1. What Was Measured
 
-| Item     | Value                                                                                                                                                                                             |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Revision | `33eeead`; its code is that of `9b8fa24`, which the first pass measured, and every figure below was re-measured on it                                                                             |
-| Build    | `profile` preset: `-O3 -g -fno-omit-frame-pointer`, Homebrew clang 23.1.2, C++17; a second `profile` tree with `-DBUILD_SHARED_LIBS=OFF`                                                          |
-| Machine  | WSL2 laptop, no hardware counters                                                                                                                                                                 |
-| Tools    | valgrind 3.27.1 (callgrind, cachegrind, DHAT, massif), `perf` in `cpu-clock` mode, google-benchmark from the submodule                                                                            |
-| Runs     | `discrete 1` and `continuous 1`, shared and static; one repricing, since callgrind counts exactly. Prototypes of 4.1 and 4.2 under callgrind; 4.1's implementation at `8a9fafe` against `7e29f80` |
+| Item     | Value                                                                                                                                                                                                                                                                                                            |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Revision | `33eeead`; its code is that of `9b8fa24`, which the first pass measured, and every figure below was re-measured on it                                                                                                                                                                                            |
+| Build    | `profile` preset: `-O3 -g -fno-omit-frame-pointer`, Homebrew clang 23.1.2, C++17, QuantLib shared as it then defaulted to; a second `profile` tree with `-DBUILD_SHARED_LIBS=OFF`. Since 4.3 the preset links statically, so the shared figures need `-DBUILD_SHARED_LIBS=ON`                                    |
+| Machine  | WSL2 laptop, no hardware counters                                                                                                                                                                                                                                                                                |
+| Tools    | valgrind 3.27.1 (callgrind, cachegrind, DHAT, massif), `perf` in `cpu-clock` mode, google-benchmark from the submodule                                                                                                                                                                                           |
+| Runs     | `discrete 1` and `continuous 1` of the engine before 4.1, which `--path-generation uncached` runs today, the default `cached` being 4.1's path; shared and static; one repricing, since callgrind counts exactly. Prototypes of 4.1 and 4.2 under callgrind; 4.1's implementation at `8a9fafe` against `7e29f80` |
 
 The workload is `makeBonusClassicOptionSetup` in `src/rke/common/BonusClassicOptionSetup.cpp`:
 
@@ -88,14 +88,16 @@ the same pricing.
 
 ### 4.1 Precompute Path-Independent Step Terms Once per Grid
 
-- **Status:** implemented, for the strike-independent branch only. On the `profile` preset,
-  one repricing drops from 34.18 G to 2.68 G Ir discrete (92.15%) and from 39.00 G to 3.58 G
-  continuous (90.81%), with the production NPVs unchanged to the last digit printed. The
+- **Status:** implemented, for the strike-independent branch only. On the shared `profile`
+  build, one repricing drops from 34.18 G to 2.68 G Ir discrete (92.15%) and from 39.00 G to
+  3.58 G continuous (90.81%), with the production NPVs unchanged to the last digit printed. The
   prototype measured 92.4% and 91.0% against its own engine build.
 - **Lives in:** `BlackScholesStepCache` and `CachedStepPathGenerator` in
   `src/rke/ql/ext/methods/montecarlo/`. `MCBonusClassicEngine` takes its paths from them under
   its default traits, `CachedStepSingleVariate`, and `CachedStepBonusClassicPathPricer` takes
-  its step variance from the cache.
+  its step variance from the cache. `makeBonusClassicOptionSetup` picks the traits through
+  `PathGeneration`: `CachedStep` by default, `Uncached` for `QuantLib::SingleVariate`, which is
+  what `--path-generation uncached` and the `*Uncached` benchmarks run.
 - **Branch guard:** the cache classifies the volatility by type, then checks its step bitwise
   against `evolve` at two points on every step. That catches the two cases the type misses: a
   forced discretization, and a process built with an external local volatility. Where the
@@ -248,9 +250,10 @@ These hold for the branch measured. A smile-surface profile has to confirm them 
 
 ## 7. Wall Clock (Secondary)
 
-`rke_benchmark_bonusclassicoption --benchmark_repetitions=5` from the `release` preset and
-from a `release` tree with `-DBUILD_SHARED_LIBS=OFF`, run back to back in one session with
-nothing else running, in the order shown. Mean per repricing, with its cv:
+`rke_benchmark_bonusclassicoption --benchmark_repetitions=5` from a shared `release` tree,
+then the default and now `-DBUILD_SHARED_LIBS=ON`, and from a static one, now the `release`
+preset's default, run back to back in one session with nothing else running, in the order
+shown. Mean per repricing, with its cv:
 
 | Build          |            Discrete |          Continuous |
 | -------------- | ------------------: | ------------------: |
@@ -278,6 +281,9 @@ to back with nothing else running, alternating in the order shown, with
 
 - **Speed-up:** 13.0–13.4× discrete and 10.5–10.8× continuous, against Ir ratios of 12.7× and
   10.9×. The two master runs drift 2.5–3.1% apart, far below the effect.
+- **Re-timing:** needs one build now. `BonusClassicOptionUncached` and
+  `BonusClassicOptionContinuousUncached` run the uncached baseline in the same binary as the
+  cached `BonusClassicOption` and `BonusClassicOptionContinuous`.
 
 ## 8. Next Step
 
