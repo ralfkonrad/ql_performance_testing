@@ -252,8 +252,22 @@ nothing else running, in the order shown. Mean per repricing, with its cv:
   drift 2% apart, more than their cv, so that is the resolution of any comparison.
 - **4.3:** static is 6.6–8.5% faster discrete and 7.3–8.8% continuous, against 3.4% fewer
   Ir. Why the time gain is twice the Ir gain cannot be settled without hardware counters.
-- **4.1:** the first pass also timed its prototype natively, at 13.7×. That was not
-  repeated; the Ir ratio of 13.1× is the measured figure.
+- **4.1:** the first pass timed its prototype at 13.7×. The implementation is timed in the
+  table below, from a later session.
+
+The implementation of 4.1 against `master`, both from the `release` preset, shared, run back
+to back with nothing else running, alternating in the order shown, with
+`--benchmark_repetitions=5`. Mean per repricing, with its cv:
+
+| Build          |            Discrete |          Continuous |
+| -------------- | ------------------: | ------------------: |
+| master, first  | 2,128 ms (cv 6.69%) | 2,427 ms (cv 1.77%) |
+| 4.1, first     |   160 ms (cv 2.10%) |   224 ms (cv 0.14%) |
+| master, second | 2,077 ms (cv 0.95%) | 2,355 ms (cv 0.25%) |
+| 4.1, second    |   159 ms (cv 2.13%) |   225 ms (cv 2.22%) |
+
+- **Speed-up:** 13.0–13.4× discrete and 10.5–10.8× continuous, against Ir ratios of 12.7× and
+  10.9×. The two master runs drift 2.5–3.1% apart, far below the effect.
 
 ## 8. Next Step
 
@@ -282,6 +296,11 @@ Under `build/profile/prof/rke_profile_bonusclassicoption/`:
 - `prototype/`: `proto.cpp`, which prices `prod` or `lock` configurations with the
   `engine`, `cached` (4.1) or `directfwd` (4.2) variant; `lock-bits.txt`, every variant's
   NPV with its bit pattern, shared and static; and `cg-prod-*`, their callgrind runs
+
+For 4.1's implementation, in the same directory of its worktree:
+
+- `callgrind-4.1-{before,after}-{discrete,continuous}.out`, the counts in 4.1's status
+- `benchmark-4.1-master-branch.txt`, the second table of section 7
 
 Under `build/profile-static/prof/`: `callgrind-{discrete,continuous}.out` of the static
 build, with their annotations.
