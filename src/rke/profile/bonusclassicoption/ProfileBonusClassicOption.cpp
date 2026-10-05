@@ -1,12 +1,13 @@
 // SPDX-FileCopyrightText: 2026 Ralf Konrad Eckel
 // SPDX-License-Identifier: MIT
 
-// The workload of BM_BonusClassicOption and BM_BonusClassicOptionContinuous, without the
-// benchmark harness, for perf and valgrind.
+// The workload of the BM_BonusClassicOption* benchmarks, without the benchmark harness, for perf
+// and valgrind.
 //
 //     rke_profile_bonusclassicoption [discrete|continuous] [iterations]
+//                                    [--path-generation cached|uncached]
 //
-// Defaults are discrete and 10, about 20,000 samples under perf -F 999; one iteration is
+// Defaults are discrete, 10 and cached, about 20,000 samples under perf -F 999; one iteration is
 // enough under callgrind, which counts instructions exactly.
 
 #include <rke/common/BonusClassicOptionSetup.hpp>
@@ -25,6 +26,7 @@ namespace RKE::Profile {
         struct Arguments {
             std::string monitoring = "discrete";
             Size iterations = 10;
+            std::string pathGeneration = "cached";
         };
 
         void addOptions(CLI::App& app, Arguments& arguments) {
@@ -35,19 +37,27 @@ namespace RKE::Profile {
                            "Pricings, each of the same low-discrepancy paths")
                 ->check(CLI::Range(Size{1}, std::numeric_limits<Size>::max()))
                 ->capture_default_str();
+            app.add_option("--path-generation", arguments.pathGeneration,
+                           "CachedStepSingleVariate or QuantLib::SingleVariate")
+                ->check(CLI::IsMember({"cached", "uncached"}))
+                ->capture_default_str();
         }
 
         void run(const Arguments& arguments) {
             // Built before the loop, as in the benchmark, so the profile shows pricing only.
-            const auto setup = makeBonusClassicOptionSetup(arguments.monitoring == "discrete");
+            const auto setup = makeBonusClassicOptionSetup(arguments.monitoring == "discrete",
+                                                           arguments.pathGeneration == "cached" ?
+                                                               PathGeneration::CachedStep :
+                                                               PathGeneration::Uncached);
 
             Real npv = Null<Real>();
             for (Size i = 0; i < arguments.iterations; ++i) {
                 npv = reprice(*setup.option);
             }
 
-            std::cout << arguments.monitoring << ", " << arguments.iterations << " iterations, NPV "
-                      << std::setprecision(17) << npv << '\n';
+            std::cout << arguments.monitoring << ", " << arguments.pathGeneration << ", "
+                      << arguments.iterations << " iterations, NPV " << std::setprecision(17) << npv
+                      << '\n';
         }
     }
 }

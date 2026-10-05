@@ -8,6 +8,7 @@
 #include <ql/instrument.hpp>
 #include <ql/pricingengine.hpp>
 #include <ql/processes/blackscholesprocess.hpp>
+#include <cstdint>
 
 namespace RKE::Common {
     struct BonusClassicOptionSetup {
@@ -16,9 +17,15 @@ namespace RKE::Common {
         QuantLib::ext::shared_ptr<RKE::QL::Ext::BonusClassicOption> option;
     };
 
+    // The MC traits of MCBonusClassicEngine: CachedStepSingleVariate, or QuantLib::SingleVariate,
+    // which asks the process for every step again. Both price bit-identically.
+    enum class PathGeneration : std::uint8_t { CachedStep, Uncached };
+
     // Sets the evaluation date to 22 Jun 2025 and prices with MCBonusClassicEngine under
     // LowDiscrepancy; isBiased selects discrete monitoring, otherwise continuous.
-    [[nodiscard]] BonusClassicOptionSetup makeBonusClassicOptionSetup(bool isBiased);
+    [[nodiscard]] BonusClassicOptionSetup
+    makeBonusClassicOptionSetup(bool isBiased,
+                                PathGeneration pathGeneration = PathGeneration::CachedStep);
 
     // The measured work. recalculate() is the point: NPV() alone returns the cached value, so a
     // loop would time one pricing and the rest cache reads.

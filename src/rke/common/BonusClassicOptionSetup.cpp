@@ -5,6 +5,8 @@
 #include <rke/ql/ext/pricingengines/bonusclassic/MCBonusClassicEngine.hpp>
 #include <ql/math/randomnumbers/rngtraits.hpp>
 #include <ql/math/randomnumbers/sobolrsg.hpp>
+#include <ql/math/statistics/statistics.hpp>
+#include <ql/methods/montecarlo/mctraits.hpp>
 #include <ql/quotes/simplequote.hpp>
 #include <ql/settings.hpp>
 #include <ql/termstructures/volatility/equityfx/blackconstantvol.hpp>
@@ -39,6 +41,16 @@ namespace RKE::Common {
             }
         };
 
+        template <template <class> class MC>
+        ext::shared_ptr<PricingEngine>
+        makeEngine(const ext::shared_ptr<GeneralizedBlackScholesProcess>& process,
+                   Size timeStepsPerYear,
+                   Size samples,
+                   bool isBiased) {
+            return ext::make_shared<MCBonusClassicEngine<LowDiscrepancyJoeKuoD7, Statistics, MC>>(
+                process, timeStepsPerYear, samples, samples + 1, Null<Real>(), isBiased, true, 42);
+        }
+
         struct OptionData {
             Real barrier = 90.0;
             Real bonusLevel = 120.00;
@@ -72,7 +84,8 @@ namespace RKE::Common {
         };
     }
 
-    BonusClassicOptionSetup makeBonusClassicOptionSetup(bool isBiased) {
+    BonusClassicOptionSetup makeBonusClassicOptionSetup(bool isBiased,
+                                                        PathGeneration pathGeneration) {
         const auto option_data = OptionData();
         auto market_data = MarketData();
 
@@ -90,8 +103,10 @@ namespace RKE::Common {
         // zero point, so these are points 1 to 2^16, the net with one point swapped.
         constexpr Size timeStepsPerYear = 252;
         constexpr Size samples = Size{1} << 16U;
-        const auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancyJoeKuoD7>>(
-            process, timeStepsPerYear, samples, samples + 1, Null<Real>(), isBiased, true, 42);
+        const auto mcEngine =
+            pathGeneration == PathGeneration::CachedStep ?
+                makeEngine<CachedStepSingleVariate>(process, timeStepsPerYear, samples, isBiased) :
+                makeEngine<SingleVariate>(process, timeStepsPerYear, samples, isBiased);
 
         const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
             option_data.barrier, option_data.bonusLevel, exerciseDate);
