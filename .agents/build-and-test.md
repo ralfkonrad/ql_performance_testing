@@ -83,6 +83,11 @@ From `CMakeLists.txt`:
 - `Boost_USE_STATIC_LIBS`, `Boost_USE_STATIC_RUNTIME` — default to `ON` under
   MSVC only.
 
+From `external/CMakeLists.txt`:
+
+- `BUILD_SHARED_LIBS` — default `OFF`, so QuantLib is linked statically on every
+  platform. QuantLib alone would default it to `ON` on UNIX; `ON` fails under MSVC.
+
 QuantLib's own `QL_*` options are also available, since it is configured as a
 subdirectory.
 
