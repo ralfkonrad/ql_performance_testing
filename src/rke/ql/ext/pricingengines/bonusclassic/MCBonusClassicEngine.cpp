@@ -96,8 +96,9 @@ namespace RKE::QL::Ext {
     : payoff_(std::move(payoff)), discountFactor_(discountFactor), stepCache_(process, grid) {
         QL_REQUIRE(payoff_.barrier() > 0.0, "barrier less/equal zero not allowed");
         QL_REQUIRE(payoff_.bonusLevel() > 0.0, "bonus level less/equal zero not allowed");
-        QL_REQUIRE(stepCache_.isExact(), "the process's step on this grid is not the exact "
-                                         "Black-Scholes step; use BonusClassicPathPricer");
+        QL_REQUIRE(stepCache_.reproducesEvolve(),
+                   "the process's step on this grid is not the exact "
+                   "Black-Scholes step; use BonusClassicPathPricer");
     }
 
     Real CachedStepBonusClassicPathPricer::operator()(const Path& path) const {

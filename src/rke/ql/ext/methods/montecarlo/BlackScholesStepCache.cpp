@@ -65,6 +65,6 @@ namespace RKE::QL::Ext {
                 }
             }
         }
-        isExact_ = true;
+        reproducesEvolve_ = true;
     }
 }

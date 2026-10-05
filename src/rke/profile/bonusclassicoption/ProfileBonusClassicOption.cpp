@@ -6,9 +6,10 @@
 //
 //     rke_profile_bonusclassicoption [discrete|continuous] [iterations]
 //                                    [--path-generation cached|uncached]
+//                                    [--market flat|smile-bilinear|smile-bicubic]
 //
-// Defaults are discrete, 10 and cached, about 20,000 samples under perf -F 999; one iteration is
-// enough under callgrind, which counts instructions exactly.
+// Defaults are discrete, 10, cached and flat, about 20,000 samples under perf -F 999; one
+// iteration is enough under callgrind, which counts instructions exactly.
 
 #include <rke/common/BonusClassicOptionSetup.hpp>
 #include <CLI/CLI.hpp>
@@ -27,6 +28,7 @@ namespace RKE::Profile {
             std::string monitoring = "discrete";
             Size iterations = 10;
             std::string pathGeneration = "cached";
+            std::string market = "flat";
         };
 
         void addOptions(CLI::App& app, Arguments& arguments) {
@@ -38,9 +40,23 @@ namespace RKE::Profile {
                 ->check(CLI::Range(Size{1}, std::numeric_limits<Size>::max()))
                 ->capture_default_str();
             app.add_option("--path-generation", arguments.pathGeneration,
-                           "CachedStepSingleVariate or QuantLib::SingleVariate")
+                           "The market's step cache or QuantLib::SingleVariate")
                 ->check(CLI::IsMember({"cached", "uncached"}))
                 ->capture_default_str();
+            app.add_option("--market", arguments.market,
+                           "Flat curves and volatility, or zero curves and a smile surface")
+                ->check(CLI::IsMember({"flat", "smile-bilinear", "smile-bicubic"}))
+                ->capture_default_str();
+        }
+
+        Market toMarket(const std::string& market) {
+            if (market == "smile-bilinear") {
+                return Market::SmileBilinear;
+            }
+            if (market == "smile-bicubic") {
+                return Market::SmileBicubic;
+            }
+            return Market::Flat;
         }
 
         void run(const Arguments& arguments) {
@@ -48,7 +64,8 @@ namespace RKE::Profile {
             const auto setup = makeBonusClassicOptionSetup(arguments.monitoring == "discrete",
                                                            arguments.pathGeneration == "cached" ?
                                                                PathGeneration::CachedStep :
-                                                               PathGeneration::Uncached);
+                                                               PathGeneration::Uncached,
+                                                           toMarket(arguments.market));
 
             Real npv = Null<Real>();
             for (Size i = 0; i < arguments.iterations; ++i) {
@@ -56,8 +73,8 @@ namespace RKE::Profile {
             }
 
             std::cout << arguments.monitoring << ", " << arguments.pathGeneration << ", "
-                      << arguments.iterations << " iterations, NPV " << std::setprecision(17) << npv
-                      << '\n';
+                      << arguments.market << ", " << arguments.iterations << " iterations, NPV "
+                      << std::setprecision(17) << npv << '\n';
         }
     }
 }

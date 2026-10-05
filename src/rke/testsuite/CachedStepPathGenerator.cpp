@@ -4,6 +4,7 @@
 #include "TestSuiteFixture.hpp"
 #include <rke/ql/ext/methods/montecarlo/BlackScholesStepCache.hpp>
 #include <rke/ql/ext/methods/montecarlo/CachedStepPathGenerator.hpp>
+#include <rke/ql/ext/methods/montecarlo/LocalVolStepCache.hpp>
 #include <ql/errors.hpp>
 #include <ql/math/matrix.hpp>
 #include <ql/math/randomnumbers/rngtraits.hpp>
@@ -18,6 +19,8 @@
 #include <ql/time/calendars/nullcalendar.hpp>
 #include <ql/time/daycounters/actual360.hpp>
 #include <boost/test/unit_test.hpp>
+#include <algorithm>
+#include <cmath>
 #include <test-suite/utilities.hpp>
 #include <vector>
 
@@ -36,6 +39,8 @@ namespace RKE::TestSuite {
         constexpr Size timeSteps = 50;
         constexpr Size paths = 64;
         constexpr BigNatural seed = 42;
+        // A step's rounding, about 1e-16 relative, accumulated over timeSteps steps.
+        constexpr Real pathTolerance = 1.0e-12;
 
         using rsg_type = LowDiscrepancy::rsg_type;
 
@@ -52,42 +57,159 @@ namespace RKE::TestSuite {
         }
 
         // Both generators draw the same Sobol sequence through the same bridge, and every
-        // point of every path, plain and antithetic, has to be the same double.
-        void checkSamePaths(const ext::shared_ptr<GeneralizedBlackScholesProcess>& process) {
+        // point of every path, plain and antithetic, has to be the same double, or within the
+        // relative tolerance where one is given.
+        template <class StepCache = BlackScholesStepCache>
+        void checkSamePaths(const ext::shared_ptr<GeneralizedBlackScholesProcess>& process,
+                            Real tolerance = 0.0) {
             const TimeGrid grid(maturity, timeSteps);
             const PathGenerator<rsg_type> reference(
                 process, grid, LowDiscrepancy::make_sequence_generator(timeSteps, seed), true);
-            const CachedStepPathGenerator<rsg_type> generator(
+            const CachedStepPathGenerator<rsg_type, StepCache> generator(
                 process, grid, LowDiscrepancy::make_sequence_generator(timeSteps, seed), true);
 
             Size mismatches = 0;
+            Real maxRelative = 0.0;
             for (Size j = 0; j < paths; ++j) {
                 for (const bool antithetic : {false, true}) {
                     const auto& expected = antithetic ? reference.antithetic() : reference.next();
                     const auto& actual = antithetic ? generator.antithetic() : generator.next();
                     BOOST_CHECK_EQUAL(actual.weight, expected.weight);
                     for (Size i = 0; i < expected.value.length(); ++i) {
-                        // Exact comparison on purpose: the regression locks depend on it.
-                        if (actual.value[i] != expected.value[i]) {
+                        const auto difference = std::fabs(actual.value[i] - expected.value[i]);
+                        maxRelative = std::max(maxRelative, difference / expected.value[i]);
+                        // Exact comparison by default: the regression locks depend on it.
+                        if (difference > tolerance * expected.value[i]) {
                             ++mismatches;
                         }
                     }
                 }
             }
+            BOOST_TEST_MESSAGE("  largest relative difference " << maxRelative);
+            BOOST_CHECK_EQUAL(mismatches, Size(0));
+        }
+
+        // One step from the same point on every step of the grid: both sides evaluate the same
+        // local volatility, so only the rounding of the step's own arithmetic can differ.
+        void checkSameSteps(const ext::shared_ptr<GeneralizedBlackScholesProcess>& process) {
+            const TimeGrid grid(maturity, timeSteps);
+            const LocalVolStepCache cache(process, grid);
+            BOOST_REQUIRE(cache.reproducesEvolve());
+
+            // Onto and around the surface's interior strike nodes, where LocalVolSurface's
+            // finite differences in strike are least smooth, and beyond the last one. Not near
+            // the first, where the flat extrapolation's kink makes the local variance negative.
+            const std::vector<Real> levels = {
+                65.0, 79.99, 80.0, 95.0, 100.0, 100.01, 119.99, 120.0, 135.0, 150.0,
+            };
+            const std::vector<Real> increments = {-2.5, -0.4, 0.0, 0.9, 3.1};
+            Size mismatches = 0;
+            Real maxRelative = 0.0;
+            for (Size i = 0; i < timeSteps; ++i) {
+                for (const auto x : levels) {
+                    for (const auto dw : increments) {
+                        const auto expected = process->evolve(grid[i], x, grid.dt(i), dw);
+                        const auto difference = std::fabs(cache.evolve(i, x, dw) - expected);
+                        maxRelative = std::max(maxRelative, difference / expected);
+                        if (difference > LocalVolStepCache::stepTolerance * expected) {
+                            ++mismatches;
+                        }
+                    }
+                }
+            }
+            BOOST_TEST_MESSAGE("  largest relative difference " << maxRelative);
             BOOST_CHECK_EQUAL(mismatches, Size(0));
         }
 
         // The cache finds the process's step inexact, and the generator refuses the process
         // instead of falling back to evolve().
+        template <class StepCache = BlackScholesStepCache>
         void checkRefused(const ext::shared_ptr<GeneralizedBlackScholesProcess>& process) {
             const TimeGrid grid(maturity, timeSteps);
-            const BlackScholesStepCache cache(process, grid);
-            BOOST_CHECK(!cache.isExact());
+            const StepCache cache(process, grid);
+            BOOST_CHECK(!cache.reproducesEvolve());
             BOOST_CHECK_EQUAL(cache.size(), Size(0));
             BOOST_CHECK_THROW(
-                CachedStepPathGenerator<rsg_type>(
-                    process, grid, LowDiscrepancy::make_sequence_generator(timeSteps, seed), true),
+                (CachedStepPathGenerator<rsg_type, StepCache>(
+                    process, grid, LowDiscrepancy::make_sequence_generator(timeSteps, seed), true)),
                 Error);
+        }
+
+        // Zero rates linear between the nodes, continuously compounded.
+        Handle<YieldTermStructure> zeroCurve(const std::vector<Rate>& rates) {
+            const std::vector<Date> curveDates = {
+                today(),
+                today() + Period(3, Months),
+                today() + Period(1, Years),
+                today() + Period(2, Years),
+            };
+            return Handle<YieldTermStructure>(
+                ext::make_shared<ZeroCurve>(curveDates, rates, Actual360(), NullCalendar()));
+        }
+
+        Handle<YieldTermStructure> zeroRiskFree() {
+            return zeroCurve({0.010, 0.012, 0.018, 0.022});
+        }
+
+        Handle<YieldTermStructure> zeroDividend() {
+            return zeroCurve({0.030, 0.028, 0.025, 0.024});
+        }
+
+        ext::shared_ptr<GeneralizedBlackScholesProcess> constantVolProcess() {
+            return ext::make_shared<BlackScholesMertonProcess>(spotQuote(), flatCurve(0.03),
+                                                               flatCurve(0.01), constantVol());
+        }
+
+        ext::shared_ptr<GeneralizedBlackScholesProcess> varianceCurveProcess() {
+            const std::vector<Date> volDates = {
+                today() + Period(3, Months),
+                today() + Period(1, Years),
+                today() + Period(2, Years),
+            };
+            const auto vol = Handle<BlackVolTermStructure>(ext::make_shared<BlackVarianceCurve>(
+                today(), volDates, std::vector<Volatility>{0.25, 0.21, 0.19}, Actual360()));
+            return ext::make_shared<BlackScholesMertonProcess>(spotQuote(), zeroDividend(),
+                                                               zeroRiskFree(), vol);
+        }
+
+        // A mild skew, flat in time, bilinear in time and strike, on zero curves.
+        ext::shared_ptr<GeneralizedBlackScholesProcess> smileProcess() {
+            const std::vector<Date> dates = {
+                today() + Period(6, Months),
+                today() + Period(1, Years),
+                today() + Period(2, Years),
+            };
+            const std::vector<Real> strikes = {60.0, 80.0, 100.0, 120.0, 140.0};
+            // Rows are strikes, columns dates.
+            Matrix vols(strikes.size(), dates.size());
+            const std::vector<Volatility> skew = {0.28, 0.24, 0.20, 0.19, 0.19};
+            for (Size i = 0; i < strikes.size(); ++i) {
+                for (Size j = 0; j < dates.size(); ++j) {
+                    vols(i, j) = skew[i];
+                }
+            }
+            const auto surface =
+                Handle<BlackVolTermStructure>(ext::make_shared<BlackVarianceSurface>(
+                    today(), NullCalendar(), dates, strikes, vols, Actual360(),
+                    BlackVarianceSurface::ConstantExtrapolation,
+                    BlackVarianceSurface::ConstantExtrapolation));
+            return ext::make_shared<BlackScholesMertonProcess>(spotQuote(), zeroDividend(),
+                                                               zeroRiskFree(), surface);
+        }
+
+        // The type check alone would take the exact step here.
+        ext::shared_ptr<GeneralizedBlackScholesProcess> forcedDiscretizationProcess() {
+            return ext::make_shared<BlackScholesMertonProcess>(
+                spotQuote(), flatCurve(0.03), flatCurve(0.01), constantVol(),
+                ext::make_shared<EulerDiscretization>(), true);
+        }
+
+        // Euler steps over a BlackConstantVol, which the type check alone would miss.
+        ext::shared_ptr<GeneralizedBlackScholesProcess> externalLocalVolProcess() {
+            const auto localVol = Handle<LocalVolTermStructure>(
+                ext::make_shared<LocalConstantVol>(today(), 0.20, Actual360()));
+            return ext::make_shared<GeneralizedBlackScholesProcess>(
+                spotQuote(), flatCurve(0.03), flatCurve(0.01), constantVol(), localVol);
         }
     }
 
@@ -100,13 +222,12 @@ namespace RKE::TestSuite {
         BOOST_TEST_MESSAGE("CachedStepPathGenerator with a constant volatility");
         Settings::instance().evaluationDate() = today();
 
-        const auto process = ext::make_shared<BlackScholesMertonProcess>(
-            spotQuote(), flatCurve(0.03), flatCurve(0.01), constantVol());
+        const auto process = constantVolProcess();
         checkSamePaths(process);
 
         const TimeGrid grid(maturity, timeSteps);
         const BlackScholesStepCache cache(process, grid);
-        BOOST_REQUIRE(cache.isExact());
+        BOOST_REQUIRE(cache.reproducesEvolve());
         for (Size i = 0; i < timeSteps; ++i) {
             BOOST_CHECK_EQUAL(cache.variance(i), process->variance(grid[i], spot, grid.dt(i)));
         }
@@ -117,29 +238,7 @@ namespace RKE::TestSuite {
         BOOST_TEST_MESSAGE("CachedStepPathGenerator with a variance curve and zero curves");
         Settings::instance().evaluationDate() = today();
 
-        const std::vector<Date> curveDates = {
-            today(),
-            today() + Period(3, Months),
-            today() + Period(1, Years),
-            today() + Period(2, Years),
-        };
-        const auto riskFree = Handle<YieldTermStructure>(
-            ext::make_shared<ZeroCurve>(curveDates, std::vector<Rate>{0.010, 0.012, 0.018, 0.022},
-                                        Actual360(), NullCalendar()));
-        const auto dividend = Handle<YieldTermStructure>(
-            ext::make_shared<ZeroCurve>(curveDates, std::vector<Rate>{0.030, 0.028, 0.025, 0.024},
-                                        Actual360(), NullCalendar()));
-
-        const std::vector<Date> volDates = {
-            today() + Period(3, Months),
-            today() + Period(1, Years),
-            today() + Period(2, Years),
-        };
-        const auto vol = Handle<BlackVolTermStructure>(ext::make_shared<BlackVarianceCurve>(
-            today(), volDates, std::vector<Volatility>{0.25, 0.21, 0.19}, Actual360()));
-
-        checkSamePaths(
-            ext::make_shared<BlackScholesMertonProcess>(spotQuote(), dividend, riskFree, vol));
+        checkSamePaths(varianceCurveProcess());
     }
 
     BOOST_AUTO_TEST_CASE(testVolatilitySurface) { // NOLINT(misc-use-internal-linkage): the
@@ -147,27 +246,7 @@ namespace RKE::TestSuite {
         BOOST_TEST_MESSAGE("CachedStepPathGenerator refuses a smile");
         Settings::instance().evaluationDate() = today();
 
-        const std::vector<Date> dates = {
-            today() + Period(6, Months),
-            today() + Period(1, Years),
-            today() + Period(2, Years),
-        };
-        const std::vector<Real> strikes = {60.0, 80.0, 100.0, 120.0, 140.0};
-        // Rows are strikes, columns dates: a mild skew, flat in time.
-        Matrix vols(strikes.size(), dates.size());
-        const std::vector<Volatility> skew = {0.28, 0.24, 0.20, 0.19, 0.19};
-        for (Size i = 0; i < strikes.size(); ++i) {
-            for (Size j = 0; j < dates.size(); ++j) {
-                vols(i, j) = skew[i];
-            }
-        }
-        const auto surface = Handle<BlackVolTermStructure>(ext::make_shared<BlackVarianceSurface>(
-            today(), NullCalendar(), dates, strikes, vols, Actual360(),
-            BlackVarianceSurface::ConstantExtrapolation,
-            BlackVarianceSurface::ConstantExtrapolation));
-
-        checkRefused(ext::make_shared<BlackScholesMertonProcess>(spotQuote(), flatCurve(0.03),
-                                                                 flatCurve(0.01), surface));
+        checkRefused(smileProcess());
     }
 
     BOOST_AUTO_TEST_CASE(testForcedDiscretization) { // NOLINT(misc-use-internal-linkage): the
@@ -175,10 +254,8 @@ namespace RKE::TestSuite {
         BOOST_TEST_MESSAGE("CachedStepPathGenerator refuses a forced discretization");
         Settings::instance().evaluationDate() = today();
 
-        // The type check alone would take the exact step here; the probe has to catch it.
-        checkRefused(ext::make_shared<BlackScholesMertonProcess>(
-            spotQuote(), flatCurve(0.03), flatCurve(0.01), constantVol(),
-            ext::make_shared<EulerDiscretization>(), true));
+        // The probe has to catch what the type check misses.
+        checkRefused(forcedDiscretizationProcess());
     }
 
     BOOST_AUTO_TEST_CASE(testExternalLocalVolatility) { // NOLINT(misc-use-internal-linkage):
@@ -186,11 +263,64 @@ namespace RKE::TestSuite {
         BOOST_TEST_MESSAGE("CachedStepPathGenerator refuses an external local vol");
         Settings::instance().evaluationDate() = today();
 
-        // Euler steps over a BlackConstantVol, which the type check alone would miss.
-        const auto localVol = Handle<LocalVolTermStructure>(
-            ext::make_shared<LocalConstantVol>(today(), 0.20, Actual360()));
-        checkRefused(ext::make_shared<GeneralizedBlackScholesProcess>(
-            spotQuote(), flatCurve(0.03), flatCurve(0.01), constantVol(), localVol));
+        checkRefused(externalLocalVolProcess());
+    }
+
+    BOOST_AUTO_TEST_SUITE_END()
+
+    BOOST_AUTO_TEST_SUITE(LocalVolStepPathGeneratorTests)
+
+    // Paths are compared within a tolerance where the local volatility is constant: there a
+    // step's rounding cannot feed back into sigma, and the difference stays at the rounding
+    // accumulated over the steps. Under a smile, LocalVolSurface's finite differences in strike
+    // turn a last bit into a different sigma, so the smile is checked one step at a time.
+
+    BOOST_AUTO_TEST_CASE(testVolatilitySurface) { // NOLINT(misc-use-internal-linkage): the
+                                                  // struct is the macro's
+        BOOST_TEST_MESSAGE("LocalVolStepCache with a smile and zero curves");
+        Settings::instance().evaluationDate() = today();
+
+        checkSameSteps(smileProcess());
+    }
+
+    BOOST_AUTO_TEST_CASE(testForcedDiscretization) { // NOLINT(misc-use-internal-linkage): the
+                                                     // struct is the macro's
+        BOOST_TEST_MESSAGE("CachedStepPathGenerator with a LocalVolStepCache and a forced "
+                           "discretization");
+        Settings::instance().evaluationDate() = today();
+
+        checkSamePaths<LocalVolStepCache>(forcedDiscretizationProcess(), pathTolerance);
+    }
+
+    BOOST_AUTO_TEST_CASE(testExternalLocalVolatility) { // NOLINT(misc-use-internal-linkage):
+                                                        // the struct is the macro's
+        BOOST_TEST_MESSAGE("CachedStepPathGenerator with a LocalVolStepCache and an external "
+                           "local vol");
+        Settings::instance().evaluationDate() = today();
+
+        checkSamePaths<LocalVolStepCache>(externalLocalVolProcess(), pathTolerance);
+    }
+
+    BOOST_AUTO_TEST_CASE(testExactStep) { // NOLINT(misc-use-internal-linkage): the struct is
+                                          // the macro's
+        BOOST_TEST_MESSAGE("CachedStepPathGenerator with a LocalVolStepCache refuses the exact "
+                           "step on a variance curve");
+        Settings::instance().evaluationDate() = today();
+
+        checkRefused<LocalVolStepCache>(varianceCurveProcess());
+    }
+
+    BOOST_AUTO_TEST_CASE(testCoincidingExactStep) { // NOLINT(misc-use-internal-linkage): the
+                                                    // struct is the macro's
+        BOOST_TEST_MESSAGE("CachedStepPathGenerator with a LocalVolStepCache follows the exact "
+                           "step where it coincides with Euler");
+        Settings::instance().evaluationDate() = today();
+
+        // A constant volatility on flat curves makes the Euler and the exact step equal in exact
+        // arithmetic, so the check cannot tell them apart, and need not. They round differently:
+        // the Euler drift's forward rate spans 1e-4 years, the exact step's the whole step, about
+        // 5e-15 relative per step and 2.3e-13 over the grid, measured.
+        checkSamePaths<LocalVolStepCache>(constantVolProcess(), 1.0e-11);
     }
 
     BOOST_AUTO_TEST_SUITE_END()

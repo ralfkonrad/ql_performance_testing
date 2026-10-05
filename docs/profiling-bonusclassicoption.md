@@ -6,7 +6,8 @@ SPDX-License-Identifier: MIT
 # Profiling the BonusClassicOption Monte Carlo
 
 Where `rke_profile_bonusclassicoption` spends its instructions, and which improvements
-carry over from this workload to a production market. 4.1 and 4.3 are implemented.
+carry over from this workload to a production market. 4.1, 4.3 and 4.5 are implemented.
+Section 8 profiles a smile market, and section 9 lists the QuantLib changes it calls for.
 
 ## 1. What Was Measured
 
@@ -75,9 +76,9 @@ that never touch the barrier on a grid point.
   The volatility now depends on the path's level, so it cannot be precomputed per step.
 
 A production market has interpolated curves and a smile, so it takes the second branch.
-Its per-step cost is expected to be well above the 1,938 Ir measured here, but that is
-unmeasured: this profile never executed `localVolImpl`. The findings below are kept only
-where they hold in that branch as well.
+Section 8 measures it at 7,609 Ir per step on a bilinear surface and 51,804 on a bicubic
+one, against the 1,938 measured here. The findings below are kept only where they hold in
+that branch as well.
 
 ## 4. Candidates That Carry Over to Production
 
@@ -104,7 +105,7 @@ the same pricing.
   check fails, `CachedStepPathGenerator` refuses the process at construction instead of
   falling back. Such a process, a smile included, takes `QuantLib::SingleVariate` through the
   engine's `MC` template parameter, and every step goes through `evolve` as before. The smile
-  branch's rate-only cache is not implemented.
+  branch has its own cache, 4.5.
 - **Cost of the explicit choice:** none in work, one instruction per step in register
   allocation. Callgrind on the static `profile` build, one repricing, master against this
   design: 2.658 G to 2.675 G Ir discrete and 3.558 G to 3.575 G continuous, 0.6% each, the
@@ -120,8 +121,7 @@ the same pricing.
   per path.
 - **Evidence:** the measured figures are in Status. The continuous figure includes the
   pricer's step variance from the cache. These percentages belong to this workload's
-  branch. With a smile, the rate-only cache would save at least the rate terms' absolute
-  cost, but its share of the run is unmeasured.
+  branch; 4.5 measures the smile branch's counterpart.
 
 - **Lock impact:** bit-identical. The cached doubles are the ones `evolve` computes, and
   `CachedStepPathGeneratorTests` require every path point to equal
@@ -131,9 +131,8 @@ the same pricing.
   - both locks in `src/rke/testsuite/BonusClassicOption.cpp`: discrete
     `106.96041418042263` and continuous `105.88329042929441`.
 
-  In the smile branch, caching `r − q` keeps QuantLib's evaluation order
-  `(r − q) − ½σ²`, so it should stay bit-identical as well. That follows from the source;
-  no run checked it, and none can until a smile market is profiled.
+  In the smile branch, 4.5 caches `r − q` in QuantLib's evaluation order `(r − q) − ½σ²`,
+  bit-identical without FMA contraction; 4.5 gives the differences with it.
 
 - **Design constraint:** the branch decision rests on
   `GeneralizedBlackScholesProcess`'s private `isStrikeIndependent_`,
@@ -145,8 +144,8 @@ the same pricing.
   - The path generator type is fixed by `McSimulation`'s `MC` template parameter, so the
     engine exposes it: `CachedStepSingleVariate` by default, `QuantLib::SingleVariate` for a
     process the cache cannot reproduce. The caller decides, not the generator.
-  - The smile branch's discretization is a protected member with no accessor, so a
-    rate-only cache there cannot confirm it is `EulerDiscretization` either.
+  - The smile branch's discretization is a protected member with no accessor, so 4.5
+    confirms it is `EulerDiscretization` only through the same bitwise check.
 
 ### 4.2 Compute the Forward Rate Without `InterestRate` in the Process
 
@@ -171,8 +170,9 @@ the same pricing.
   executable rather than in `libQuantLib`, which leaves the calls it removes the same.
 - **Overlap with 4.1:** in the strike-independent branch, 4.1 runs the forward rates once
   per grid point instead of once per path step, so there 4.2 adds almost nothing to this
-  engine. Under a smile, 4.1's rate-only cache is not implemented, so 4.2 still saves its
-  124 Ir per call in `drift`. It also pays in every other engine that evolves this process.
+  engine. Under a smile, 4.5 does the same for `drift`'s forward rates, so in this engine
+  4.2 adds almost nothing in either branch. It still pays in every other engine that
+  evolves this process.
 - **Lock impact:** bit-identical, all four values above, to the IEEE bit pattern.
 - **Upstream:** medium. The change is local and behaviour-preserving, but it duplicates
   the core of `YieldTermStructure::forwardRate` in the process.
@@ -219,6 +219,80 @@ the same pricing.
   happen only where `checkRange` runs without `extrapolate`; `LocalVolSurface` passes
   `true`, so under a smile they drop out.
 
+### 4.5 Evaluate the Local Volatility Once per Euler Step
+
+Measured on the smile markets of section 8, not on this workload, whose step is exact.
+
+- **Status:** implemented. Callgrind on the static `profile` build, one repricing at 2^16
+  paths, uncached against cached:
+
+  | Market           | Mode       | Uncached |   Cached | Saved |
+  | ---------------- | ---------- | -------: | -------: | ----: |
+  | `smile-bilinear` | discrete   | 127.22 G |  52.69 G | 58.6% |
+  | `smile-bilinear` | continuous | 147.31 G |  72.79 G | 50.6% |
+  | `smile-bicubic`  | discrete   | 865.79 G | 422.01 G | 51.3% |
+
+- **Lives in:** `LocalVolStepCache` in `src/rke/ql/ext/methods/montecarlo/`, which
+  `CachedStepPathGenerator` takes as its `StepCache` parameter. `LocalVolStepSingleVariate`
+  pairs it with `QuantLib::SingleVariate`, and `makeBonusClassicOptionSetup` picks it under
+  `PathGeneration::CachedStep` on the smile markets.
+- **Finding:** in the Euler branch, `evolve` evaluates `localVol(t, x)` twice with the
+  same arguments, once in `drift` and once through `EulerDiscretization::diffusion`, and
+  calls `forwardRate(t, t + 1e-4)` twice per step although it depends on the grid only.
+- **Change:** `r − q` and `√Δt` once per grid, and the local volatility once per step,
+  through the process's own `localVolatility()` link. No QuantLib code is copied, so it
+  holds for any local volatility: `LocalVolSurface` under a smile, `LocalConstantVol` or
+  `LocalVolCurve` under a forced discretization, or an external one.
+- **Branch guard:** the step is compared with `evolve` at two points on every step, as in
+  4.1, but to a relative `LocalVolStepCache::stepTolerance` of 1e-13 instead of bitwise.
+  Both sides evaluate the same local volatility at the same point, so only the step's own
+  rounding can differ. The exact step on a variance curve fails the check, and so would any
+  discretization other than `EulerDiscretization`. A constant volatility on flat curves
+  passes it, because there the exact and the Euler step coincide in exact arithmetic.
+- **Lock impact:** the locks take the exact step and do not move. On the smile markets the
+  cache is bit-identical where the compiler does not contract to FMAs, which is the x86-64
+  baseline and MSVC: on the static `profile` build here the NPVs are the same cached and
+  uncached, bilinear discrete `100.23201398081022` and continuous `99.886405693076455`,
+  bicubic discrete `100.27835252928404` and continuous `99.932975609578065`.
+- **Under FMA contraction:** every arm64 build, and x86-64 with FMA enabled. The cached step
+  is one expression, where the compiler may fuse a different product into the exponent's
+  sum than it fuses across `evolve`'s function boundaries, so its last bit can differ.
+  `LocalVolSurface::localVolImpl` divides second differences in strike by `dy²`, with
+  `dy` as small as 1e-6, so that bit turns into a different σ and a path moves visibly:
+  single bilinear paths end up to 3% apart, bicubic ones about 1e-5. The prices do not
+  follow. Cached against uncached, one repricing at 2^16 paths, built with
+  `-march=x86-64-v3`, relative:
+
+  | Compiler | Surface  | Discrete | Continuous |
+  | -------- | -------- | -------: | ---------: |
+  | gcc      | bilinear |  −5.4e-7 |    −7.0e-7 |
+  | gcc      | bicubic  |  −3.0e-9 |    −3.0e-9 |
+  | clang    | bilinear |  +2.3e-7 |    −1.9e-6 |
+  | clang    | bicubic  |  −6.1e-9 |    −1.9e-8 |
+
+  No path changes its knock-out status. The Monte Carlo standard error is about 8.4e-4
+  relative, and the uncached engine itself moves by 8.2e-6 between a contracting gcc build
+  and the non-contracting one here, bilinear discrete.
+
+- **Tests:** `LocalVolStepPathGeneratorTests` compare one step from the same point under a
+  smile within `stepTolerance`, measured up to 4e-16 under contraction, and every path
+  point within 1e-12 where the local volatility is constant, measured 7.7e-16. The engine
+  test prices a smile within 1e-6 of `QuantLib::SingleVariate`, measured 1.3e-8 at 1,000
+  paths. Without contraction all of them are exact.
+- **What it leaves:**
+  - In continuous mode `BonusClassicPathPricer` calls `process->variance` on each step of
+    each path that stays above the barrier on the grid. Under Euler that is
+    `EulerDiscretization::variance`, a third `localVol(t, x)` at the same `(tᵢ, xᵢ)` the
+    generator already evaluated: 19.11 G of the cached bilinear run, 26.3%. Reusing the
+    generator's σ needs a side channel to the pricer, since a `Path` carries values only.
+  - The six `discount` calls per `localVolImpl` that depend on `t` only, and the surface
+    lookups. Both live in QuantLib, section 9.
+- **Alternative not taken:** a prototype that copies `LocalVolSurface::localVolImpl` and
+  feeds it the cached discounts runs 1,670 Ir per step against this design's 3,168 on the
+  bilinear surface, and 23,768 against 25,265 on the bicubic one. It was rejected to keep
+  QuantLib code out of this repository and to stay generic over the local volatility.
+  9.1's time slice would do the same computation inside QuantLib, without a copy.
+
 ## 5. Findings Dropped as Specific to This Market
 
 | Finding                                                                                    | Measured here                               | Why it does not carry over                                                                                                                                                 |
@@ -227,11 +301,11 @@ the same pricing.
 | Cache the continuous pricer's per-step `variance()`                                        | 3.86 G Ir continuous (9.9%)                 | Implemented with 4.1 for the strike-independent branch. With a smile the variance depends on `path[i]`, and the pricer's own header warns the bridge is approximate there. |
 | Drop the second `localVolatility()` "trigger update" per step                              | 0.37 G Ir (1.1%)                            | Insignificant next to `localVolImpl`.                                                                                                                                      |
 | Generate paths in log space and call `exp` only where a price is needed                    | about 0.95 G Ir after 4.1, moves both locks | `localVol(t, x)` needs the price level every step, and `localVolImpl` takes its own `log`.                                                                                 |
-| The 92% headline of 4.1                                                                    | see 4.1                                     | It is the strike-independent branch's figure, and that is the part implemented. The part that carries over, the smile branch's rate-only cache, is still open.             |
+| The 92% headline of 4.1                                                                    | see 4.1                                     | It is the strike-independent branch's figure. The smile branch's counterpart is 4.5, at 51–59%.                                                                            |
 
 ## 6. What the Profile Rules Out
 
-These hold for the branch measured. A smile-surface profile has to confirm them for the other.
+These hold for the branch measured. Under a smile, section 8 qualifies two of them.
 
 - **Allocation:** one repricing allocates 119 blocks and 2.22 MB, nothing per path or
   per step (DHAT, 2-iteration minus 1-iteration run). 94.6% of the bytes are the doubling
@@ -247,6 +321,9 @@ These hold for the branch measured. A smile-surface profile has to confirm them 
   this bound no longer holds on this workload: of 2.68 G Ir discrete, Sobol plus
   `InverseCumulativeNormal` take 0.92 G (34.3%) and `BrownianBridge::transform` 0.42 G
   (15.6%), next to 1.17 G (43.6%) for the cached step, 0.95 G of it in `exp`.
+- **Under a smile:** the bicubic surface allocates on every lookup, 9.2. With 4.5 in
+  place on the bilinear smile, Sobol plus `InverseCumulativeNormal` take 0.92 G (1.7%) and
+  the bridge about 0.42 G (0.8%) of 52.69 G, so the machinery's bound holds there.
 
 ## 7. Wall Clock (Secondary)
 
@@ -285,20 +362,112 @@ to back with nothing else running, alternating in the order shown, with
   `BonusClassicOptionContinuousUncached` run the uncached baseline in the same binary as the
   cached `BonusClassicOption` and `BonusClassicOptionContinuous`.
 
-## 8. Next Step
+## 8. The Smile Market
 
-Rank for production by profiling a production-like market: an interpolated
-risk-free and dividend curve and a `BlackVarianceSurface` with a smile. Two things
-from the source should be measured there:
+### 8.1 What Was Measured
 
-- `localVolImpl` runs twice per step with identical `(t, x)`, once from `drift` and once
-  from `diffusion`.
-- Its discounts and forward value depend only on `t`, so they could be cached per step.
+The markets `smile-bilinear` and `smile-bicubic`, from `SmileMarketData` in
+`src/rke/common/BonusClassicOptionSetup.cpp`; option, grid and paths as in section 1:
 
-The same profile decides whether 4.1's rate-only cache for the smile branch and 4.2 pay,
-since for this engine both now matter only there.
+- **Curves:** `ZeroCurve` on today, 3M, 6M, 1Y and 2Y, linear in the zero rate,
+  continuously compounded. Risk-free 0.8%, 0.9%, 1.0%, 1.1%, 1.2%; dividend yield 3.2%,
+  3.1%, 3.0%, 2.9%, 2.8%.
+- **Surface:** `BlackVarianceSurface`, σ(K) = 0.20 − 0.08 · ln(K / 100) on every date,
+  expiries 1M to 2Y, strikes 10 to 400 with constant strike extrapolation, which no path
+  reaches. Bilinear or bicubic in time and strike, the markets' only difference.
+- **Conventions:** `Actual360` and `NullCalendar` throughout, spot 100.
 
-## 9. Raw Profiles
+The engine is `--path-generation uncached`. One uncached `smile-bicubic` repricing runs
+about a minute natively, so the breakdown below comes from a harness over the same setup at
+2^10 paths, 261,120 steps; Ir per step does not depend on the path count. Per-step figures
+are the path generator's inclusive Ir divided by that. 4.5's status table is the
+implementation at 2^16 paths, at `70763ec`; the prototypes ran against `f080503`. Build and
+tools as in section 1: the static `profile` preset, valgrind 3.27.1.
+
+### 8.2 Where the Instructions Go
+
+Discrete, uncached. Per step `evolve` makes 2 `localVolImpl` calls, which make 10
+`blackVariance` and 12 `discount` calls, plus 2 `forwardRate` with 4 more `discount`:
+
+| Callee               | Bilinear Ir per step | Bicubic Ir per step |
+| -------------------- | -------------------: | ------------------: |
+| all, path generation |                7,609 |              51,804 |
+| `localVol` × 2       |                5,951 |              50,146 |
+| `blackVariance` × 10 |                2,528 |              46,723 |
+| `discount` × 16      |                2,902 |               2,902 |
+| `forwardRate` × 2    |                1,130 |               1,130 |
+
+The `discount` row includes the 4 calls inside `forwardRate`. On the bicubic surface,
+`BicubicSplineImpl::value` is 88.5% of the run, about 4,599 Ir per lookup, and its
+`shared_ptr` refcount atomics alone are 13.9%.
+
+Against the same harness, per step:
+
+| Variant                                   | Bilinear | Bicubic |
+| ----------------------------------------- | -------: | ------: |
+| engine, `QuantLib::SingleVariate`         |    7,609 |  51,804 |
+| 4.5, `LocalVolStepCache`                  |    3,168 |  25,265 |
+| copied `localVolImpl` (4.5's alternative) |    1,670 |  23,768 |
+
+Without FMA contraction all three price to the same NPV bit pattern at 2^16 paths, discrete
+and continuous, under both surfaces; 4.5 gives the differences under contraction.
+
+## 9. QuantLib Changes the Smile Profile Calls For
+
+None of these is made here. Each belongs on a branch of `ralfkonrad/QuantLib`, measured
+with `--market smile-*`, as `.agents/changing-quantlib.md` describes, and reaches this
+repository through a submodule bump once it is upstream. 4.5 gains from 9.2 unchanged;
+for 9.1 its one `localVol` call switches to the slice overload.
+
+### 9.1 A Time Slice for the Local Volatility
+
+- **Finding:** `LocalVolSurface::localVolImpl(t, x)` computes `dr`, `dq` and the forward
+  value at `t`, and four more discounts at `t ± dt`, on every call. All of them depend on
+  `t` only, and a Monte Carlo grid asks for the same `t` once per path.
+- **Change:** a virtual on `LocalVolTermStructure` that returns the terms for a time, with
+  a default that holds the time only, and a `localVol` overload that takes them.
+  `LocalVolSurface` precomputes its discounts and forward there, and its own
+  `localVolImpl` goes through the same code, so without FMA contraction the result stays
+  bit-identical.
+  `LocalVolStepCache` builds one slice per grid time and passes it per step.
+- **Evidence:** the copied-`localVolImpl` prototype does exactly this computation:
+  3,168 → 1,670 Ir per step on the bilinear surface (47%), 25,265 → 23,768 on the bicubic.
+- **Upstream:** medium. It adds API to a base class, but stays optional for every other
+  local volatility.
+
+### 9.2 A Time Slice for the Black Variance Surface
+
+- **Finding:** `localVolImpl` asks the surface for 3 strikes at `t` and one each at
+  `t + dt` and `t − dt`. For a fixed time, `BicubicSplineImpl::value` builds the same
+  strike spline on every call: it evaluates each row spline at `t` into a freshly
+  allocated section, constructs a `CubicInterpolation` over it, and evaluates that once.
+  `BilinearInterpolationImpl::value` repeats the time `locate` and weights.
+- **Change:** the same pattern one level down. A slice of `BlackVarianceSurface` at a time
+  holds the strike spline, or the bilinear time weights, and `LocalVolSurface`'s slice of
+  9.1 holds the three it needs. The bicubic slice builds the same spline from the same
+  section, so without FMA contraction it stays bit-identical. The bilinear one does so only
+  if it keeps the four corner values and the existing formula, saving just the `locate`.
+- **Evidence:** unmeasured. Its ceiling is the surface's share after 4.5: 33% of the
+  bilinear step and 92% of the bicubic one, against 35% and 4% for the six `discount`
+  calls of 9.1. On the bicubic surface it replaces a spline construction, about 4,599 Ir,
+  by a one-dimensional spline evaluation per lookup.
+- **Upstream:** medium. A smaller form, which any caller gains from, reuses the section
+  buffer instead of allocating it per call; it removes one allocation per lookup, not the
+  spline construction.
+
+### 9.3 The Forward Rate Without `InterestRate`
+
+4.2, unchanged. Both step caches take the rate terms out of this engine's path loop, so
+here it adds almost nothing; it pays in every other engine that evolves the process.
+
+## 10. Next Step
+
+1. 9.1 and 9.2 on a `ralfkonrad/QuantLib` branch, measured with
+   `--market smile-bilinear` and `--market smile-bicubic` against 4.5's figures.
+2. The continuous pricer's third `localVol` per step, 4.5's "What it leaves", in this
+   repository: 26.3% of the cached bilinear continuous run.
+
+## 11. Raw Profiles
 
 These are local and untracked. The recipes that produce them are in `.agents/profiling.md`.
 
@@ -323,6 +492,20 @@ For 4.1's implementation, in the same directory of its worktree:
 
 Under `build/profile-static/prof/`: `callgrind-{discrete,continuous}.out` of the static
 build, with their annotations.
+
+For section 8 and 4.5, in the same directory of the `smile-market-profile` worktree:
+
+- `callgrind-smile-bilinear-{discrete,continuous}-{cached,uncached}.out` and
+  `callgrind-smile-bicubic-discrete-{cached,uncached}.out`, the 2^16-path runs of 4.5's
+  status, by the copy `rke_profile_bonusclassicoption-localvolstep`
+- `prototype/smileproto.cpp`, which prices `engine`, `lite` (4.5) or `cached` (the copied
+  `localVolImpl`) on either surface at a given path count; `cg-smile-*` and
+  `cg-smile-lite-*`, its 2^10-path callgrind runs; `full-*.txt`, its 2^16-path NPVs with
+  their bit patterns
+
+In the `smile-market-profile` worktree, `build/gcc-v3` and `build/clang-v3` are release
+trees configured with `-DCMAKE_CXX_FLAGS=-march=x86-64-v3`. They reproduce CI's contracting
+jobs to the mismatch count and give 4.5's figures under FMA contraction.
 
 `proto.cpp` is compiled by hand with the `profile` flags against `librke_ql_ext.a` and
 `libQuantLib` of either tree.

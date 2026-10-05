@@ -5,6 +5,7 @@
 #define CACHEDSTEPPATHGENERATOR_HPP
 
 #include <rke/ql/ext/methods/montecarlo/BlackScholesStepCache.hpp>
+#include <rke/ql/ext/methods/montecarlo/LocalVolStepCache.hpp>
 #include <ql/math/randomnumbers/rngtraits.hpp>
 #include <ql/methods/montecarlo/brownianbridge.hpp>
 #include <ql/methods/montecarlo/path.hpp>
@@ -16,22 +17,26 @@
 #include <vector>
 
 namespace RKE::QL::Ext {
-    //! Path generator taking the exact Black-Scholes step from a BlackScholesStepCache
+    //! Path generator taking the Black-Scholes step from a step cache
     /*! A drop-in for QuantLib::PathGenerator over a
         QuantLib::GeneralizedBlackScholesProcess whose step on the grid a
-        BlackScholesStepCache, built once, reproduces. The constructor refuses
-        any other process: under a smile, a forced discretization or an
-        external local volatility, use QuantLib::PathGenerator, i.e.
-        QuantLib::SingleVariate. The paths are the same doubles
-        QuantLib::PathGenerator produces from the same sequence.
+        StepCache, built once, reproduces: BlackScholesStepCache for the exact
+        lognormal step, LocalVolStepCache for the Euler step through the local
+        volatility. The constructor refuses any other process; use
+        QuantLib::PathGenerator for it, i.e. QuantLib::SingleVariate. Under
+        BlackScholesStepCache the paths are the doubles QuantLib::PathGenerator
+        produces from the same sequence. Under LocalVolStepCache each step is
+        within LocalVolStepCache::stepTolerance of the process's from the same
+        point, and the same double where nothing is contracted.
     */
-    template <class GSG>
+    template <class GSG, class StepCache = BlackScholesStepCache>
     class CachedStepPathGenerator {
       public:
         using sample_type = QuantLib::Sample<QuantLib::Path>;
 
-        /*! \pre the process's evolve() on \p timeGrid is the exact lognormal
-                 step, see BlackScholesStepCache::isExact(). */
+        /*! \pre the StepCache reproduces the process's evolve() on \p timeGrid,
+                 see BlackScholesStepCache::reproducesEvolve() and
+                 LocalVolStepCache::reproducesEvolve(). */
         CachedStepPathGenerator(
             QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process,
             QuantLib::TimeGrid timeGrid,
@@ -51,7 +56,7 @@ namespace RKE::QL::Ext {
         QuantLib::Size dimension_;
         QuantLib::TimeGrid timeGrid_;
         QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process_;
-        BlackScholesStepCache cache_;
+        StepCache cache_;
         mutable sample_type next_;
         mutable std::vector<QuantLib::Real> temp_;
         QuantLib::BrownianBridge bb_;
@@ -68,9 +73,20 @@ namespace RKE::QL::Ext {
         static constexpr bool allowsErrorEstimate = RNG::allowsErrorEstimate != 0;
     };
 
+    //! Monte Carlo traits that pair QuantLib::SingleVariate with a LocalVolStepCache
+    template <class RNG = QuantLib::PseudoRandom>
+    struct LocalVolStepSingleVariate {
+        using rng_traits = RNG;
+        using path_type = QuantLib::Path;
+        using path_pricer_type = QuantLib::PathPricer<path_type>;
+        using rsg_type = typename RNG::rsg_type;
+        using path_generator_type = CachedStepPathGenerator<rsg_type, LocalVolStepCache>;
+        static constexpr bool allowsErrorEstimate = RNG::allowsErrorEstimate != 0;
+    };
 
-    template <class GSG>
-    CachedStepPathGenerator<GSG>::CachedStepPathGenerator(
+
+    template <class GSG, class StepCache>
+    CachedStepPathGenerator<GSG, StepCache>::CachedStepPathGenerator(
         QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process,
         QuantLib::TimeGrid timeGrid,
         GSG generator,
@@ -82,13 +98,14 @@ namespace RKE::QL::Ext {
         QL_REQUIRE(dimension_ == timeGrid_.size() - 1, "sequence generator dimensionality ("
                                                            << dimension_ << ") != timeSteps ("
                                                            << timeGrid_.size() - 1 << ")");
-        QL_REQUIRE(cache_.isExact(), "the process's step on this grid is not the exact "
-                                     "Black-Scholes step; use QuantLib::PathGenerator");
+        QL_REQUIRE(cache_.reproducesEvolve(),
+                   "the step cache does not reproduce the process's step on "
+                   "this grid; use QuantLib::PathGenerator");
     }
 
-    template <class GSG>
-    const typename CachedStepPathGenerator<GSG>::sample_type&
-    CachedStepPathGenerator<GSG>::next(bool antithetic) const {
+    template <class GSG, class StepCache>
+    const typename CachedStepPathGenerator<GSG, StepCache>::sample_type&
+    CachedStepPathGenerator<GSG, StepCache>::next(bool antithetic) const {
         // The body of QuantLib::PathGenerator::next(bool), with the step taken from the cache.
         const auto& sequence = antithetic ? generator_.lastSequence() : generator_.nextSequence();
 
