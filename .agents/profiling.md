@@ -30,7 +30,8 @@ OUT=build/profile/prof/$(basename "$PROG") && mkdir -p "$OUT"
 ```
 
 `rke_profile_bonusclassicoption` takes `[discrete|continuous] [iterations]
-[--path-generation cached|uncached]`, defaulting to `discrete`, `10` and `cached`.
+[--path-generation cached|uncached] [--market flat|smile-bilinear|smile-bicubic]`,
+defaulting to `discrete`, `10`, `cached` and `flat`.
 `cached` is `CachedStepSingleVariate`; `uncached` is `QuantLib::SingleVariate`, which
 asks the process for every step, the baseline the step cache is measured against. It
 prints the final NPV at full precision, the same at any iteration count, since every
@@ -38,6 +39,12 @@ iteration reprices the same low-discrepancy paths, and the same under either pat
 generation. The setup is sized like a production run, 1Y with daily steps and 2^16
 paths, so this is not the test suite's 5M regression lock. The recipes below
 run it with the defaults; append arguments after `"$PROG"` for anything else.
+
+The smile markets take the Euler branch through `LocalVolSurface`, which the step
+cache refuses: pass `--path-generation uncached` with them. One `smile-bicubic`
+repricing runs about a minute natively, far too long for callgrind at 2^16 paths.
+Ir per step does not depend on the path count, so count a smile run with fewer paths,
+from a separate harness over `makeBonusClassicOptionSetup`, and quote it per step.
 
 Every recipe ends in a text file, so an agent reads the result rather than a
 picture.
