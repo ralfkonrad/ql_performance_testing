@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 #include "TestSuiteFixture.hpp"
-#include <rke/ql/ext/methods/montecarlo/BlackScholesPathGenerator.hpp>
 #include <rke/ql/ext/methods/montecarlo/BlackScholesStepCache.hpp>
+#include <rke/ql/ext/methods/montecarlo/CachedStepPathGenerator.hpp>
+#include <ql/errors.hpp>
 #include <ql/math/matrix.hpp>
 #include <ql/math/randomnumbers/rngtraits.hpp>
 #include <ql/methods/montecarlo/pathgenerator.hpp>
@@ -36,6 +37,8 @@ namespace RKE::TestSuite {
         constexpr Size paths = 64;
         constexpr BigNatural seed = 42;
 
+        using rsg_type = LowDiscrepancy::rsg_type;
+
         Handle<Quote> spotQuote() {
             return Handle<Quote>(ext::make_shared<SimpleQuote>(spot));
         }
@@ -50,16 +53,12 @@ namespace RKE::TestSuite {
 
         // Both generators draw the same Sobol sequence through the same bridge, and every
         // point of every path, plain and antithetic, has to be the same double.
-        void checkSamePaths(const ext::shared_ptr<GeneralizedBlackScholesProcess>& process,
-                            bool expectExact) {
-            using rsg_type = LowDiscrepancy::rsg_type;
+        void checkSamePaths(const ext::shared_ptr<GeneralizedBlackScholesProcess>& process) {
             const TimeGrid grid(maturity, timeSteps);
             const PathGenerator<rsg_type> reference(
                 process, grid, LowDiscrepancy::make_sequence_generator(timeSteps, seed), true);
-            const BlackScholesPathGenerator<rsg_type> generator(
+            const CachedStepPathGenerator<rsg_type> generator(
                 process, grid, LowDiscrepancy::make_sequence_generator(timeSteps, seed), true);
-
-            BOOST_CHECK_EQUAL(generator.isExact(), expectExact);
 
             Size mismatches = 0;
             for (Size j = 0; j < paths; ++j) {
@@ -77,20 +76,33 @@ namespace RKE::TestSuite {
             }
             BOOST_CHECK_EQUAL(mismatches, Size(0));
         }
+
+        // The cache finds the process's step inexact, and the generator refuses the process
+        // instead of falling back to evolve().
+        void checkRefused(const ext::shared_ptr<GeneralizedBlackScholesProcess>& process) {
+            const TimeGrid grid(maturity, timeSteps);
+            const BlackScholesStepCache cache(process, grid);
+            BOOST_CHECK(!cache.isExact());
+            BOOST_CHECK_EQUAL(cache.size(), Size(0));
+            BOOST_CHECK_THROW(
+                CachedStepPathGenerator<rsg_type>(
+                    process, grid, LowDiscrepancy::make_sequence_generator(timeSteps, seed), true),
+                Error);
+        }
     }
 
     BOOST_FIXTURE_TEST_SUITE(RkeQLExtTestSuite, TestSuiteFixture)
 
-    BOOST_AUTO_TEST_SUITE(BlackScholesPathGeneratorTests)
+    BOOST_AUTO_TEST_SUITE(CachedStepPathGeneratorTests)
 
     BOOST_AUTO_TEST_CASE(testConstantVolatility) { // NOLINT(misc-use-internal-linkage): the
                                                    // struct is the macro's
-        BOOST_TEST_MESSAGE("BlackScholesPathGenerator with a constant volatility");
+        BOOST_TEST_MESSAGE("CachedStepPathGenerator with a constant volatility");
         Settings::instance().evaluationDate() = today();
 
         const auto process = ext::make_shared<BlackScholesMertonProcess>(
             spotQuote(), flatCurve(0.03), flatCurve(0.01), constantVol());
-        checkSamePaths(process, true);
+        checkSamePaths(process);
 
         const TimeGrid grid(maturity, timeSteps);
         const BlackScholesStepCache cache(process, grid);
@@ -102,7 +114,7 @@ namespace RKE::TestSuite {
 
     BOOST_AUTO_TEST_CASE(testVarianceCurveAndZeroCurves) { // NOLINT(misc-use-internal-linkage):
                                                            // the struct is the macro's
-        BOOST_TEST_MESSAGE("BlackScholesPathGenerator with a variance curve and zero curves");
+        BOOST_TEST_MESSAGE("CachedStepPathGenerator with a variance curve and zero curves");
         Settings::instance().evaluationDate() = today();
 
         const std::vector<Date> curveDates = {
@@ -127,13 +139,12 @@ namespace RKE::TestSuite {
             today(), volDates, std::vector<Volatility>{0.25, 0.21, 0.19}, Actual360()));
 
         checkSamePaths(
-            ext::make_shared<BlackScholesMertonProcess>(spotQuote(), dividend, riskFree, vol),
-            true);
+            ext::make_shared<BlackScholesMertonProcess>(spotQuote(), dividend, riskFree, vol));
     }
 
     BOOST_AUTO_TEST_CASE(testVolatilitySurface) { // NOLINT(misc-use-internal-linkage): the
                                                   // struct is the macro's
-        BOOST_TEST_MESSAGE("BlackScholesPathGenerator falls back under a smile");
+        BOOST_TEST_MESSAGE("CachedStepPathGenerator refuses a smile");
         Settings::instance().evaluationDate() = today();
 
         const std::vector<Date> dates = {
@@ -155,34 +166,31 @@ namespace RKE::TestSuite {
             BlackVarianceSurface::ConstantExtrapolation,
             BlackVarianceSurface::ConstantExtrapolation));
 
-        checkSamePaths(ext::make_shared<BlackScholesMertonProcess>(spotQuote(), flatCurve(0.03),
-                                                                   flatCurve(0.01), surface),
-                       false);
+        checkRefused(ext::make_shared<BlackScholesMertonProcess>(spotQuote(), flatCurve(0.03),
+                                                                 flatCurve(0.01), surface));
     }
 
     BOOST_AUTO_TEST_CASE(testForcedDiscretization) { // NOLINT(misc-use-internal-linkage): the
                                                      // struct is the macro's
-        BOOST_TEST_MESSAGE("BlackScholesPathGenerator falls back under a forced discretization");
+        BOOST_TEST_MESSAGE("CachedStepPathGenerator refuses a forced discretization");
         Settings::instance().evaluationDate() = today();
 
         // The type check alone would take the exact step here; the probe has to catch it.
-        checkSamePaths(ext::make_shared<BlackScholesMertonProcess>(
-                           spotQuote(), flatCurve(0.03), flatCurve(0.01), constantVol(),
-                           ext::make_shared<EulerDiscretization>(), true),
-                       false);
+        checkRefused(ext::make_shared<BlackScholesMertonProcess>(
+            spotQuote(), flatCurve(0.03), flatCurve(0.01), constantVol(),
+            ext::make_shared<EulerDiscretization>(), true));
     }
 
     BOOST_AUTO_TEST_CASE(testExternalLocalVolatility) { // NOLINT(misc-use-internal-linkage):
                                                         // the struct is the macro's
-        BOOST_TEST_MESSAGE("BlackScholesPathGenerator falls back under an external local vol");
+        BOOST_TEST_MESSAGE("CachedStepPathGenerator refuses an external local vol");
         Settings::instance().evaluationDate() = today();
 
         // Euler steps over a BlackConstantVol, which the type check alone would miss.
         const auto localVol = Handle<LocalVolTermStructure>(
             ext::make_shared<LocalConstantVol>(today(), 0.20, Actual360()));
-        checkSamePaths(ext::make_shared<GeneralizedBlackScholesProcess>(
-                           spotQuote(), flatCurve(0.03), flatCurve(0.01), constantVol(), localVol),
-                       false);
+        checkRefused(ext::make_shared<GeneralizedBlackScholesProcess>(
+            spotQuote(), flatCurve(0.03), flatCurve(0.01), constantVol(), localVol));
     }
 
     BOOST_AUTO_TEST_SUITE_END()
