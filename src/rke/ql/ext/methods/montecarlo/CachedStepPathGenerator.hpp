@@ -33,7 +33,8 @@ namespace RKE::QL::Ext {
         using sample_type = QuantLib::Sample<QuantLib::Path>;
 
         /*! \pre the StepCache reproduces the process's evolve() on \p timeGrid,
-                 see BlackScholesStepCache::isExact() and LocalVolStepCache::isExact(). */
+                 see BlackScholesStepCache::reproducesEvolve() and
+                 LocalVolStepCache::reproducesEvolve(). */
         CachedStepPathGenerator(
             QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process,
             QuantLib::TimeGrid timeGrid,
@@ -95,8 +96,9 @@ namespace RKE::QL::Ext {
         QL_REQUIRE(dimension_ == timeGrid_.size() - 1, "sequence generator dimensionality ("
                                                            << dimension_ << ") != timeSteps ("
                                                            << timeGrid_.size() - 1 << ")");
-        QL_REQUIRE(cache_.isExact(), "the step cache does not reproduce the process's step on "
-                                     "this grid; use QuantLib::PathGenerator");
+        QL_REQUIRE(cache_.reproducesEvolve(),
+                   "the step cache does not reproduce the process's step on "
+                   "this grid; use QuantLib::PathGenerator");
     }
 
     template <class GSG, class StepCache>

@@ -27,7 +27,7 @@ namespace RKE::QL::Ext {
         discretization and an external local volatility both turn it into an
         Euler scheme whatever the Black volatility's type. The constructor
         therefore checks the cached step bit for bit against the process's
-        evolve() on every step at two fixed points. isExact() is false if the
+        evolve() on every step at two fixed points. reproducesEvolve() is false if the
         volatility is of any other type or a check fails, and nothing is
         cached then.
     */
@@ -38,17 +38,17 @@ namespace RKE::QL::Ext {
             const QuantLib::TimeGrid& grid);
 
         //! whether the cached terms reproduce the process's evolve()
-        [[nodiscard]] bool isExact() const { return isExact_; }
+        [[nodiscard]] bool reproducesEvolve() const { return reproducesEvolve_; }
 
-        //! number of cached steps, 0 unless isExact()
+        //! number of cached steps, 0 unless reproducesEvolve()
         [[nodiscard]] QuantLib::Size size() const { return variance_.size(); }
 
         //! integrated variance of step i
-        /*! \pre isExact() */
+        /*! \pre reproducesEvolve() */
         [[nodiscard]] QuantLib::Real variance(QuantLib::Size i) const { return variance_[i]; }
 
         //! the process's evolve() over step i, from \p x0 with increment \p dw
-        /*! \pre isExact() */
+        /*! \pre reproducesEvolve() */
         [[nodiscard]] QuantLib::Real
         evolve(QuantLib::Size i, QuantLib::Real x0, QuantLib::Real dw) const {
             // The shape of GeneralizedBlackScholesProcess::evolve() and apply(): a different
@@ -57,7 +57,7 @@ namespace RKE::QL::Ext {
         }
 
       private:
-        bool isExact_ = false;
+        bool reproducesEvolve_ = false;
         std::vector<QuantLib::Real> variance_;
         std::vector<QuantLib::Real> stdDeviation_;
         std::vector<QuantLib::Real> drift_;

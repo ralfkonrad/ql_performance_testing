@@ -31,7 +31,7 @@ namespace RKE::QL::Ext {
         constructor therefore checks the step bit for bit against the process's
         evolve() on every step at two fixed points. The exact lognormal step, which
         evolve() takes with different arithmetic, fails the check, and so does any
-        discretization other than QuantLib::EulerDiscretization. isExact() is false
+        discretization other than QuantLib::EulerDiscretization. reproducesEvolve() is false
         if a check fails, and nothing is cached then.
     */
     class LocalVolStepCache {
@@ -41,13 +41,13 @@ namespace RKE::QL::Ext {
             const QuantLib::TimeGrid& grid);
 
         //! whether the cached terms reproduce the process's evolve()
-        [[nodiscard]] bool isExact() const { return isExact_; }
+        [[nodiscard]] bool reproducesEvolve() const { return reproducesEvolve_; }
 
-        //! number of cached steps, 0 unless isExact()
+        //! number of cached steps, 0 unless reproducesEvolve()
         [[nodiscard]] QuantLib::Size size() const { return rateDrift_.size(); }
 
         //! the process's evolve() over step i, from \p x0 with increment \p dw
-        /*! \pre isExact() */
+        /*! \pre reproducesEvolve() */
         [[nodiscard]] QuantLib::Real
         evolve(QuantLib::Size i, QuantLib::Real x0, QuantLib::Real dw) const {
             // The shape of GeneralizedBlackScholesProcess::drift(), EulerDiscretization's
@@ -59,7 +59,7 @@ namespace RKE::QL::Ext {
         }
 
       private:
-        bool isExact_ = false;
+        bool reproducesEvolve_ = false;
         QuantLib::ext::shared_ptr<QuantLib::LocalVolTermStructure> localVolatility_;
         std::vector<QuantLib::Time> time_;
         std::vector<QuantLib::Time> dt_;

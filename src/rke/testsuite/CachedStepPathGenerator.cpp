@@ -85,7 +85,7 @@ namespace RKE::TestSuite {
         void checkRefused(const ext::shared_ptr<GeneralizedBlackScholesProcess>& process) {
             const TimeGrid grid(maturity, timeSteps);
             const StepCache cache(process, grid);
-            BOOST_CHECK(!cache.isExact());
+            BOOST_CHECK(!cache.reproducesEvolve());
             BOOST_CHECK_EQUAL(cache.size(), Size(0));
             BOOST_CHECK_THROW(
                 (CachedStepPathGenerator<rsg_type, StepCache>(
@@ -185,7 +185,7 @@ namespace RKE::TestSuite {
 
         const TimeGrid grid(maturity, timeSteps);
         const BlackScholesStepCache cache(process, grid);
-        BOOST_REQUIRE(cache.isExact());
+        BOOST_REQUIRE(cache.reproducesEvolve());
         for (Size i = 0; i < timeSteps; ++i) {
             BOOST_CHECK_EQUAL(cache.variance(i), process->variance(grid[i], spot, grid.dt(i)));
         }
