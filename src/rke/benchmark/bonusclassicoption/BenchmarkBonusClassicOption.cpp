@@ -2,18 +2,35 @@
 // SPDX-License-Identifier: MIT
 
 #include <rke/common/BonusClassicOptionSetup.hpp>
+#include <CLI/CLI.hpp>
 #include <benchmark/benchmark.h>
+#include <exception>
+#include <iostream>
+#include <limits>
 
 using namespace RKE::Common;
+using namespace QuantLib;
 
 namespace RKE::Benchmark {
     namespace {
+        // Paths per pricing: productionSamples unless --samples sets another, which the CTest
+        // smoke test does so that its dry run takes seconds, not minutes.
+        Size samples = productionSamples;
+
+        // google-benchmark's usage, which ends the process on --help before CLI11 sees it, plus
+        // the flag added here.
+        void printHelp() {
+            benchmark::PrintDefaultHelp();
+            std::cout << "          [--samples=<paths per pricing>]\n";
+        }
+
         // The setup and the loop body come from rke_common, which the profile executable uses
         // too, so a hotspot found there is a hotspot here.
         void benchmarkBonusClassicOption(benchmark::State& state,
                                          bool isBiased,
                                          PathGeneration pathGeneration) {
-            const auto setup = makeBonusClassicOptionSetup(isBiased, pathGeneration);
+            const auto setup =
+                makeBonusClassicOptionSetup(isBiased, pathGeneration, Market::Flat, samples);
 
             for (const auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
                 auto npv = reprice(*setup.option);
@@ -68,4 +85,25 @@ namespace RKE::Benchmark {
     }
 }
 
-BENCHMARK_MAIN();
+// BENCHMARK_MAIN() with a flag of its own: benchmark::Initialize consumes the --benchmark_*
+// flags and leaves the rest of argv to CLI11.
+int main(int argc, char* argv[]) {
+    try {
+        benchmark::MaybeReenterWithoutASLR(argc, argv);
+        benchmark::Initialize(&argc, argv, RKE::Benchmark::printHelp);
+
+        auto app = CLI::App("Times BonusClassicOption pricings with google-benchmark.");
+        app.add_option("--samples", RKE::Benchmark::samples, "Paths per pricing")
+            ->check(CLI::Range(Size{1}, std::numeric_limits<Size>::max()))
+            ->capture_default_str();
+        // Returns from main on a parse error, with CLI11's exit code.
+        CLI11_PARSE(app, argc, argv);
+
+        benchmark::RunSpecifiedBenchmarks();
+        benchmark::Shutdown();
+        return 0;
+    } catch (const std::exception& e) {
+        std::cerr << e.what() << '\n';
+        return 1;
+    }
+}

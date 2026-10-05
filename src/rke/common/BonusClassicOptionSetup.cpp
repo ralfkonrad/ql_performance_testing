@@ -162,8 +162,10 @@ namespace RKE::Common {
         };
     }
 
-    BonusClassicOptionSetup
-    makeBonusClassicOptionSetup(bool isBiased, PathGeneration pathGeneration, Market market) {
+    BonusClassicOptionSetup makeBonusClassicOptionSetup(bool isBiased,
+                                                        PathGeneration pathGeneration,
+                                                        Market market,
+                                                        Size samples) {
         const auto option_data = OptionData();
         auto market_data = MarketData();
 
@@ -178,12 +180,10 @@ namespace RKE::Common {
                                      today, market == Market::SmileBicubic);
         // The Null<Real>() tolerance is mandatory, not a default: with no error estimate under
         // LowDiscrepancy, McSimulation::calculate takes the fixed-sample branch and maxSamples
-        // never applies. Sized like a production run: about one step per business day, 255
-        // over the Actual360 year fraction 365/360, though not on the business days themselves,
-        // and a power of two of paths, where a Sobol sequence is balanced. SobolRsg skips the
-        // zero point, so these are points 1 to 2^16, the net with one point swapped.
+        // never applies. The grid is a production run's whatever the path count: about one step
+        // per business day, 255 over the Actual360 year fraction 365/360, though not on the
+        // business days themselves.
         constexpr Size timeStepsPerYear = 252;
-        constexpr Size samples = Size{1} << 16U;
         const auto mcEngine = [&] {
             if (pathGeneration == PathGeneration::Uncached) {
                 return makeEngine<SingleVariate>(process, timeStepsPerYear, samples, isBiased);
