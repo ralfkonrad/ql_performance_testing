@@ -45,6 +45,10 @@ or lattices yet.
 | B. Native Fdm engine                                     | continuous and discrete | Chosen. Same blocks as `FdBlackScholesBarrierEngine`; `FdmDiscountDirichletBoundary` fed with the dividend curve yields the asset-leg boundary without a new class. First engine with Greeks.        |
 | C. Binomial tree engine                                  | every lattice step      | Chosen as a second engine, to benchmark lattices against FD and MC. `BinomialBarrierEngine` is bound to `BarrierOption::arguments`, so its `calculate()` is copied, with our own `DiscretizedAsset`. |
 
+Every QuantLib signature and behaviour this plan relies on was read in the pinned
+submodule, `v1.43-625-g966a4cc10`; a later pointer move re-checks section 3.3 and the
+Greeks in section 4.
+
 QuantLib's own yardsticks against Haug's tabulated barrier prices, in
 `test-suite/barrieroption.cpp`: `FdBlackScholesBarrierEngine` at `tGrid 200, xGrid 400`
 within `5e-3` absolute; `BinomialBarrierEngine<CoxRossRubinstein, DiscretizedBarrierOption>`
@@ -79,6 +83,7 @@ class FdBlackScholesBonusClassicEngine : public BonusClassicOption::engine {
 
 class FdmBonusClassicKnockOutCondition : public QuantLib::StepCondition<QuantLib::Array> {
   public:
+    //! \pre one node of \p mesher lies on log(barrier); QL_REQUIRE checks this
     FdmBonusClassicKnockOutCondition(QuantLib::ext::shared_ptr<QuantLib::FdmMesher> mesher,
                                      std::vector<QuantLib::Time> monitoringTimes,
                                      QuantLib::Real barrier,
@@ -101,25 +106,42 @@ In order: cast the payoff to `BonusClassicPayoff` and `QL_REQUIRE` it, require a
 bonus level, European exercise, `spot > 0` and `!triggered(spot)` ("barrier touched"), then
 `maturity = process_->time(exercise->lastDate())`. The two modes differ in three parts:
 
-| Part           | Continuous                                                                                                                        | Discrete                                                                                                                                                                                                     |
-| -------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Mesher         | `FdmBlackScholesMesher(xGrid, process, T, B, xMinConstraint = log(H))`: the first node sits on `H`                                | the range of `FdmBlackScholesMesher(xGrid, process, T, B)`, then `Concentrating1dMesher(xMin, xMax, xGrid, {log(H), 0.1}, requireCPoint = true)` in an `FdmMesherComposite`, so one node sits exactly on `H` |
-| Boundary       | `FdmDiscountDirichletBoundary(mesher, dividendYield.currentLink(), T, H, 0, Lower)`, i.e. `H · qTS.discount(T) / qTS.discount(t)` | none; the operator uses one-sided stencils at the ends, as `FdBlackScholesVanillaEngine` runs                                                                                                                |
-| Step condition | none                                                                                                                              | `FdmBonusClassicKnockOutCondition` at the points `1..n-1` of `timeGrid()`, inside an `FdmStepConditionComposite`                                                                                             |
+| Part           | Continuous                                                                                                                        | Discrete                                                                                                                                                                                                                                                                                      |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Mesher         | `FdmBlackScholesMesher(xGrid, process, T, B, xMinConstraint = log(H))`: the first node sits on `H`                                | `xMin`, `xMax` from `locations()` of `FdmBlackScholesMesher(xGrid, process, T, B)`, then `Concentrating1dMesher(xMin, xMax, xGrid, {(log(H), 0.1, true), (log(B), 0.1, false)})`, the tuple overload, in an `FdmMesherComposite`: one node exactly on `H`, density at `H` and at the kink `B` |
+| Boundary       | `FdmDiscountDirichletBoundary(mesher, dividendYield.currentLink(), T, H, 0, Lower)`, i.e. `H · qTS.discount(T) / qTS.discount(t)` | none; the operator uses one-sided stencils at the ends, as `FdBlackScholesVanillaEngine` runs                                                                                                                                                                                                 |
+| Step condition | none                                                                                                                              | `FdmBonusClassicKnockOutCondition` at the points `1..n-1` of `timeGrid()`, inside an `FdmStepConditionComposite`                                                                                                                                                                              |
 
 The parts both modes share: `FdmLogInnerValue(payoff, mesher, 0)` with the
 `BonusClassicPayoff` itself, which already pays `S` at or below `H` and so monitors
 maturity in discrete mode, and reduces to `max(S, B)` on a grid that starts at `H`;
 `FdmSolverDesc{mesher, bcSet, condition, calculator, maturity, tGrid, dampingSteps}`;
 `FdmBlackScholesSolver(Handle(process_), B, desc, schemeDesc_)`; then `value`, `delta`,
-`gamma`, `theta` into `results_`, in that order, because `thetaAt` does not trigger the
-calculation.
+`gamma`, `theta` into `results_`. Every accessor calls `calculate()` itself, `thetaAt`
+included, so the order is cosmetic. `B` is also the strike `FdmBlackScholesOp` reads its
+variance slice at; under a smile that choice is the engine's, and the tests use a flat
+volatility.
 
 The step condition stores `exp(mesher->locations(0))` the way `FdmDividendHandler` does,
-and on a monitoring time sets `a[i] = S_i · qTS.discount(T) / qTS.discount(t)` for every
-node with `S_i <= H`. Between monitoring dates the knocked-out region evolves under the
-PDE; `S · exp(-q (T - t))` is an exact solution of it, so the overwrite is needed at the
-monitoring times only.
+finds the node `k` on `H` once in its constructor, and on a monitoring time `t` sets, with
+`A(S, t) = S · qTS.discount(T) / qTS.discount(t)` the asset leg,
+
+```text
+a[i] = A(S_i, t)                               for i < k
+a[k] = w · A(H, t) + (1 - w) · a[k],   w = dminus(k) / (dminus(k) + dplus(k))
+```
+
+and leaves `i > k` alone. The node on `H` gets the average of its cell, knocked out below
+`H` and alive above, which is what `FdmLogInnerValue` does with the payoff's jump at
+maturity. A jump has to sit mid-cell for second order: a node on the jump that takes one
+side's value moves the effective barrier half a cell, an `O(dx)` error, see section 3.3.
+The inclusive barrier is a convention on a null set; the PDE cannot tell `<=` from `<`,
+and the convention lives in the payoff, `triggered()` and the MC pricer.
+
+Between monitoring dates the whole grid, the knocked-out region included, evolves under
+the PDE, which is what discrete monitoring means. No boundary condition is needed at
+`xMin`: there the operator reduces to one-sided convection and discounting, and the asset
+leg `S · exp(-q (T - t))` solves that exactly.
 
 ### 3.3 QuantLib Behaviour the Design Relies On
 
@@ -138,28 +160,50 @@ monitoring times only.
   calculator, and a node on `H` carries the cell average at `T`; a condition fired at `T`
   would overwrite it with `H`.
 - The mesher's default range at `eps = 1e-4` and scale 1.5 is about `S ∈ [48, 207]` for
-  the test market, so `B = 120` lies inside. Nothing forces a node on `H` unless
-  `requireCPoint` is set: on a uniform grid the effective barrier sits anywhere within one
-  cell above `H`, and with `dV/dH ≈ -1` (the two MC locks differ by 1.08 for a barrier
-  shift of 1.05) that is about `3e-3` relative at `xGrid 400`, above the tolerance the
-  replication test needs. With the node on `H` the error is `O(dx²)` and the inclusive
-  barrier is represented exactly. The fallback, should concentrating the grid at `H` hurt
-  the kink at `B`, is a uniform grid and a weighted overwrite of the cell that straddles
-  `H`.
+  the test market, so `B = 120` lies inside. Nothing forces a node on `H` unless the
+  `Concentrating1dMesher` is asked for it; `FdmBlackScholesMesher` never passes
+  `requireCPoint`, which is why discrete mode builds the mesher itself. On a uniform grid
+  the effective barrier sits anywhere within one cell above `H`, and with `dV/dH ≈ -1`
+  (the two MC locks differ by 1.08 for a barrier shift of 1.05) that is up to `3e-3`
+  relative at `xGrid 400`.
+- A node on `H` is not enough on its own. Measured with a scratch Crank-Nicolson solver
+  on the payoff monitored at maturity alone, which has a closed form
+  (`S e^{-qT} + Put(B) - Put(H) - (B - H) · digital put at H`, 110.8768 in the test
+  market), uniform log grid with a node on `H`, `tGrid 200`, two Rannacher steps:
+
+  | `xGrid` | node on `H` takes the knocked-out value | node on `H` takes the cell average |
+  | ------: | --------------------------------------: | ---------------------------------: |
+  |     200 |                               `-2.4e-3` |                            `-5e-6` |
+  |     400 |                               `-1.2e-3` |                            `+2e-6` |
+  |     800 |                               `-6.0e-4` |                            `+6e-7` |
+
+  Relative errors; the left column halves with `dx`, the right one is second order. The
+  left column is what a plain `S_i <= H` overwrite produces, and it is larger than the
+  `5e-4` the FD-versus-MC case expects, so the weighted overwrite in section 3.2 is the
+  design, not a fallback.
+
+- Discrete mode re-creates a jump at `H` on every monitoring date, and
+  `FdmBackwardSolver` damps only the first `dampingSteps` after maturity. Douglas with
+  `theta = 0.5` is Crank-Nicolson in one dimension, so delta and gamma near `H` may ring.
+  The lever, if the measured residuals show it in the price, is the scheme:
+  `FdmSchemeDesc::TrBDF2()` is second order and L-stable; `ImplicitEuler()` is first
+  order in time. Not a test subject until a Greek is one.
 
 ### 3.4 Documentation Block
 
-Per `.agents/extending-rke-ql-ext.md` §6: the brief, the PDE with its boundary value and
+Per "Documentation Comments" in `.agents/extending-rke-ql-ext.md`: the brief, the PDE
+with its boundary value and
 the step-condition formula, the conventions (time from the process, discounting on the
 risk-free curve, the asset leg on the dividend curve), `\param monitoringStepsPerYear` with
 the `Null` switch, `\ingroup barrierengines`, one `\test` line per test in section 5, and
 three `\warning` entries: discrete mode is second order only because a node is forced on
-`H`; `qTS->discount(t)` reads `t` in the dividend curve's day counter, the same
+`H` and takes its cell average there; `qTS->discount(t)` reads `t` in the dividend curve's
+day counter, the same
 approximation QuantLib's engines make and exact when both curves share a day counter;
 neither discrete dividends nor local volatility are supported. The instrument header's
 `\warning no default engine is set` and its `\test` line gain the new engines.
 
-## 4. `BinomialBonusClassicEngine<T>` and `DiscretizedBonusClassicOption`
+## 4. `BinomialBonusClassicEngine<Tree>` and `DiscretizedBonusClassicOption`
 
 Files: `src/rke/ql/ext/pricingengines/bonusclassic/BinomialBonusClassicEngine.hpp`, a
 header-only template like the MC engine, and `DiscretizedBonusClassicOption.{hpp,cpp}`;
@@ -185,7 +229,7 @@ class DiscretizedBonusClassicOption : public QuantLib::DiscretizedAsset {
     void postAdjustValuesImpl() override;
 };
 
-template <class T>
+template <class Tree> // the tree type, as in BinomialBarrierEngine; T below is maturity
 class BinomialBonusClassicEngine : public BonusClassicOption::engine {
   public:
     BinomialBonusClassicEngine(
@@ -198,25 +242,33 @@ class BinomialBonusClassicEngine : public BonusClassicOption::engine {
 
 ### 4.2 Behaviour
 
-`postAdjustValuesImpl()` reads the per-node spot from `method()->grid(time())`. At
-maturity it sets `values_[j] = payoff(grid[j])`. At every other lattice time it sets
-`values_[j] = grid[j] · exp(-q (T - t))` where `grid[j] <= H`, the same inclusive test as
-the payoff and `engine::triggered()`, and leaves the nodes above `H` to the rolled-back
-value. `TreeLattice::partialRollback` adjusts after every step, so this is monitoring on
-every lattice step, the tree's stand-in for continuous monitoring.
+`postAdjustValuesImpl()` reads the per-node spot `S_j` from `method()->grid(time())`, the
+lattice's `BlackScholesLattice::grid(Time)`. At maturity, `isOnTime(maturity)`, it sets
+`values_[j] = payoff(S_j)`. At every other lattice time it sets
+`values_[j] = S_j · exp(-q (T - t))` where `S_j <= H`, the same inclusive test as the
+payoff and `engine::triggered()`, and leaves the nodes above `H` to the rolled-back
+value. `TreeLattice::partialRollback` adjusts after every step but the last of a
+`rollback(to)` call, and `rollback` adjusts at `to` itself, so every lattice step is
+monitored exactly once, `t = 0` included, where `!triggered(s0)` guarantees a no-op. That
+is the tree's stand-in for continuous monitoring. `reset(size)` zero-fills `values_` and
+calls `adjustValues()`, as `DiscretizedBarrierOption::reset` does.
 
 `calculate()`: cast the payoff, require European exercise, `s0 > 0` and `!triggered(s0)`;
-flatten the risk-free rate and the dividend yield as continuous zero rates at maturity in
-each curve's own day counter, and the volatility as `blackVol(T, s0)`, the convention of
-QuantLib's lattice engines; `maturity` is the risk-free day counter's year fraction, the
-same number as `process->time()`. Apply Boyle-Lau when `T` derives from
-`CoxRossRubinstein` and `maxTimeSteps > timeSteps`: the first
-`floor(i² · v² · T / ln²(s0 / H))` above `timeSteps`, capped at `maxTimeSteps`. Round the
-step count up to odd for `LeisenReimer` and `Joshi4` before building anything: QuantLib's
-engines build the lattice with the even count while those trees use the odd one, a `dt`
-mismatch. Then `T tree(bs, T, steps, B)`, `BlackScholesLattice<T>(tree, r, T, steps)`,
+flatten the risk-free rate and the dividend yield as continuous zero rates at the maturity
+date in each curve's own day counter, and the volatility as
+`blackVol(exercise->lastDate(), s0)`, the date overload, all as `BinomialBarrierEngine`
+does; `maturity` is the risk-free day counter's year fraction, the same number as
+`process->time()`. Apply Boyle-Lau under the same rule as `BinomialBarrierEngine` in the
+pinned QuantLib, `std::is_base_of_v<CoxRossRubinstein, Tree>` and
+`maxTimeSteps > timeSteps`: the first `floor(i² · v² · T / ln²(s0 / H))` above
+`timeSteps`, capped at `maxTimeSteps`. Round the step count up to odd for `LeisenReimer`
+and `Joshi4` before building anything: those trees take `steps + 1` for an even `steps`
+while QuantLib's engines build `BlackScholesLattice` and its `TimeGrid` with the even
+count, a `dt` mismatch. Then `Tree tree(bs, T, steps, B)`, where `B` is the strike only
+`LeisenReimer` and `Joshi4` centre on, `BlackScholesLattice<Tree>(tree, r, T, steps)`,
 `DiscretizedBonusClassicOption option(arguments_, q, T)`, `option.initialize(lattice, T)`,
-rollback to `grid[2]`, `grid[1]` and `0`, Greeks, results.
+rollback to the second, first and zeroth time of the lattice's `TimeGrid`, Greeks,
+results.
 
 Decisions:
 
@@ -263,9 +315,14 @@ asserts `timeGrid().size() - 1 == 42`. The tree cases use `treeTimeSteps = 400` 
 | `testBonusClassicOptionBinomialBoyleLau`        | the same with `maxTimeSteps = timeSteps`: the Boyle-Lau residual is the smaller one  | `BOOST_CHECK_LT`, both residuals reported              |
 
 Each tolerance comment records the measured residual and why it is discretisation error
-rather than noise, as `AGENTS.md` §5.1 and the extending guide demand. A lock is
-re-derived, never pasted, after any change to grid, scheme, node placement, flattening or
-Boyle-Lau.
+rather than noise, as "The Valuation Test Is a Regression Lock" in `AGENTS.md` and "Two
+Kinds of Price Test" in the extending guide demand. A lock is re-derived, never pasted,
+after any change to grid, scheme, node placement, flattening or Boyle-Lau. The
+FD-versus-MC expectation of `5e-4` is an upper bound on the sum of two errors: the FD
+discretisation, second order in `dx` with the weighted overwrite, and the MC lock's own
+distance from the discrete price, which is unknown and fixed by its seed. If the measured
+residual exceeds it, compare FD at `xGrid 800` first: a residual that does not move with
+`xGrid` belongs to the MC lock.
 
 ## 6. Branches and Commits
 
@@ -278,14 +335,16 @@ request, one concern per commit:
 - `bonusclassic-tree-engine`: the discretized asset, the engine and its three tests; the
   documentation paragraph.
 
-The documentation paragraph amends `.agents/extending-rke-ql-ext.md` §3 with one short
-list per engine kind: for FD, derive from the instrument's engine, assemble mesher,
-boundary, step condition and solver, gate a step condition on `t` because the model calls
-it after every step, and expose the monitoring times as `timeGrid()` since they define the
-product; for a tree, a `DiscretizedAsset` subclass with `reset`, `postAdjustValuesImpl` and
-`mandatoryTimes`, an engine that flattens rate, yield and volatility itself and hands the
-flattened yield to the asset, monitoring per lattice step, Boyle-Lau for CRR only. No new
-file under `.agents/`, so its README and the `AGENTS.md` table stay as they are.
+The documentation paragraph amends "A New Pricing Engine" in
+`.agents/extending-rke-ql-ext.md` with one short list per engine kind: for FD, derive
+from the instrument's engine, assemble mesher, boundary, step condition and solver, gate a
+step condition on `t` because the model calls it after every step, put a jump mid-cell or
+average the node it sits on, and expose the monitoring times as `timeGrid()` since they
+define the product; for a tree, a `DiscretizedAsset` subclass with `reset`,
+`postAdjustValuesImpl` and `mandatoryTimes`, an engine that flattens rate, yield and
+volatility itself and hands the flattened yield to the asset, monitoring per lattice step,
+Boyle-Lau for CRR only. No new file under `.agents/`, so its README and the `AGENTS.md`
+table stay as they are.
 
 Adding both engines to `src/rke/common/BonusClassicOptionSetup` and the benchmark is a
 follow-up, not part of either branch.
@@ -315,9 +374,11 @@ stored by value; `modernize-pass-by-value` and `performance-unnecessary-value-pa
 
 ## 8. Open Risks
 
-- Concentrating the FD grid at `H` with density 0.1 thins it near the kink at `B`. If the
-  continuous and discrete residuals disagree with the second-order expectation, switch to
-  the uniform grid and the weighted overwrite of the straddling cell.
+- The two-point `Concentrating1dMesher` has not been exercised on this payoff. If the
+  discrete residual does not fall by about four from `xGrid 400` to `800`, drop the point
+  at `B` first, then fall back to a uniform grid: the overwrite then weights the one cell
+  that contains `H` by the fraction of it below `H`, the same cell-average rule as in
+  section 3.2 with `w` no longer one half.
 - The FD boundary and step condition read `t` with the dividend curve's day counter, the
   risk-free curve's time measure elsewhere; equal whenever both day counters agree, which
   holds in every test.
@@ -326,5 +387,7 @@ stored by value; `modernize-pass-by-value` and `performance-unnecessary-value-pa
   count.
 - The tree flattens the dividend curve, the MC engine does not; under a sloped curve the
   two disagree. The tests use flat curves and the engine's `\warning` says so.
-- Theta is not tested: the tree's depends on `blackScholesTheta`, the FD engine's differs
-  slightly between modes through the snapshot time.
+- Theta is not tested: the tree's is the Black-Scholes PDE identity through
+  `blackScholesTheta`, the FD engine's a difference quotient over the snapshot at
+  `0.99 / 365`, the same time in both modes since the first monitoring time, about
+  `0.0101`, is larger. The two definitions need not agree to the tolerance of a test.
