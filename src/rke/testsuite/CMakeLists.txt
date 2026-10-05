@@ -3,6 +3,7 @@
 
 add_executable(rke_testsuite
         testsuite.cpp
+        BlackScholesPathGenerator.cpp
         BonusClassicOption.cpp
         TestSuiteFixture.hpp
         ${PROJECT_SOURCE_DIR}/external/QuantLib/test-suite/utilities.cpp
