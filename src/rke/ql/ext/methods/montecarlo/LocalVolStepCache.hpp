@@ -24,18 +24,33 @@ namespace RKE::QL::Ext {
         depend on the grid only. The process evaluates them on every path step, and
         the local volatility twice, once for the drift and once for the diffusion.
         This class computes \f$ r_i - q_i \f$ and \f$ \sqrt{\Delta t_i} \f$ once,
-        and evolve() evaluates the process's own local volatility once per step, so
-        it returns the same double as the process.
+        and evolve() evaluates the process's own local volatility once per step.
+
+        evolve() returns the process's step up to rounding, not bit for bit. Where
+        the compiler contracts multiplications and additions into FMAs, it may fuse
+        a different product into the exponent's sum here than across QuantLib's
+        function boundaries, which moves the last bit. LocalVolSurface's finite
+        differences in strike amplify that bit along a path, so single paths can
+        drift apart while prices agree. Without contraction the step is the same
+        double.
 
         The process exposes neither its branch nor its discretization. The
-        constructor therefore checks the step bit for bit against the process's
-        evolve() on every step at two fixed points. The exact lognormal step, which
-        evolve() takes with different arithmetic, fails the check, and so does any
-        discretization other than QuantLib::EulerDiscretization. reproducesEvolve() is false
-        if a check fails, and nothing is cached then.
+        constructor therefore compares the step with the process's evolve() on
+        every step at two fixed points, to the relative stepTolerance. Both sides
+        evaluate the same local volatility at the same point, so contraction moves
+        the result by about one ulp. A different scheme misses by terms that do not
+        vanish with the rounding: the exact lognormal step on a time-dependent
+        volatility or curve, or a discretization other than
+        QuantLib::EulerDiscretization. reproducesEvolve() is false if a check fails,
+        and nothing is cached then.
     */
     class LocalVolStepCache {
       public:
+        //! relative tolerance between evolve() and the process's step
+        /*! Contraction moves one step by up to \f$ 4 \cdot 10^{-16} \f$, measured
+            with gcc and clang at -march=x86-64-v3; this leaves 250 times that. */
+        static constexpr QuantLib::Real stepTolerance = 1.0e-13;
+
         LocalVolStepCache(
             const QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess>& process,
             const QuantLib::TimeGrid& grid);
@@ -47,12 +62,13 @@ namespace RKE::QL::Ext {
         [[nodiscard]] QuantLib::Size size() const { return rateDrift_.size(); }
 
         //! the process's evolve() over step i, from \p x0 with increment \p dw
-        /*! \pre reproducesEvolve() */
+        /*! Within stepTolerance of the process's step.
+            \pre reproducesEvolve() */
         [[nodiscard]] QuantLib::Real
         evolve(QuantLib::Size i, QuantLib::Real x0, QuantLib::Real dw) const {
             // The shape of GeneralizedBlackScholesProcess::drift(), EulerDiscretization's
-            // drift() and diffusion(), and apply(): a different expression could round
-            // differently and change the last bit.
+            // drift() and diffusion(), and apply(), which is the same double where nothing
+            // is contracted.
             const auto sigma = localVolatility_->localVol(time_[i], x0, true);
             return x0 * std::exp(((rateDrift_[i] - (0.5 * sigma * sigma)) * dt_[i]) +
                                  (sigma * sqrtDt_[i] * dw));

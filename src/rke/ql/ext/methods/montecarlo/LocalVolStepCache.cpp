@@ -3,6 +3,7 @@
 
 #include "LocalVolStepCache.hpp"
 #include <array>
+#include <cmath>
 #include <utility>
 
 using namespace QuantLib;
@@ -39,8 +40,8 @@ namespace RKE::QL::Ext {
         for (Size i = 0; i < steps; ++i) {
             for (const auto& [scale, dw] : probes) {
                 const auto x = scale * x0;
-                // Bitwise on purpose: a step that is only close would move the regression locks.
-                if (evolve(i, x, dw) != process->evolve(grid[i], x, grid.dt(i), dw)) {
+                const auto expected = process->evolve(grid[i], x, grid.dt(i), dw);
+                if (std::fabs(evolve(i, x, dw) - expected) > stepTolerance * std::fabs(expected)) {
                     time_.clear();
                     dt_.clear();
                     sqrtDt_.clear();

@@ -5,15 +5,20 @@
 #include <rke/ql/ext/instruments/BonusClassicOption.hpp>
 #include <rke/ql/ext/pricingengines/bonusclassic/MCBonusClassicEngine.hpp>
 #include <ql/instruments/barrieroption.hpp>
+#include <ql/math/matrix.hpp>
 #include <ql/methods/montecarlo/mctraits.hpp>
 #include <ql/pricingengines/barrier/analyticbarrierengine.hpp>
 #include <ql/processes/blackscholesprocess.hpp>
 #include <ql/processes/eulerdiscretization.hpp>
 #include <ql/quotes/simplequote.hpp>
+#include <ql/termstructures/volatility/equityfx/blackvariancesurface.hpp>
+#include <ql/termstructures/yield/zerocurve.hpp>
+#include <ql/time/calendars/nullcalendar.hpp>
 #include <ql/time/daycounters/actual360.hpp>
 #include <boost/test/unit_test.hpp>
 #include <cmath>
 #include <test-suite/utilities.hpp>
+#include <vector>
 
 using namespace RKE::QL::Ext;
 using namespace QuantLib;
@@ -57,6 +62,78 @@ namespace RKE::TestSuite {
             }
         };
 
+        // The Euler step through LocalVolSurface: zero curves linear between the nodes,
+        // continuously compounded, and a bilinear Black variance surface with
+        // sigma(K) = 0.20 - 0.08 ln(K / 100) on every date. The strikes reach far beyond any
+        // path, so the flat strike extrapolation's kink, which LocalVolSurface turns into a
+        // negative local variance, is never reached.
+        ext::shared_ptr<GeneralizedBlackScholesProcess> makeSmileProcess(Date today) {
+            const auto dc = Actual360();
+            const std::vector<Date> curveDates = {
+                today,
+                today + Period(3, Months),
+                today + Period(1, Years),
+                today + Period(2, Years),
+            };
+            const auto rTS = Handle<YieldTermStructure>(ext::make_shared<ZeroCurve>(
+                curveDates, std::vector<Rate>{0.008, 0.009, 0.010, 0.012}, dc, NullCalendar()));
+            const auto qTS = Handle<YieldTermStructure>(ext::make_shared<ZeroCurve>(
+                curveDates, std::vector<Rate>{0.032, 0.031, 0.030, 0.028}, dc, NullCalendar()));
+
+            const std::vector<Date> volDates = {
+                today + Period(1, Months),
+                today + Period(6, Months),
+                today + Period(1, Years),
+            };
+            const std::vector<Real> strikes = {
+                10.0, 25.0, 50.0, 70.0, 85.0, 100.0, 115.0, 130.0, 160.0, 220.0, 400.0,
+            };
+            // Rows are strikes, columns dates.
+            Matrix vols(strikes.size(), volDates.size());
+            for (Size i = 0; i < strikes.size(); ++i) {
+                for (Size j = 0; j < volDates.size(); ++j) {
+                    vols(i, j) = 0.20 - (0.08 * std::log(strikes[i] / 100.0));
+                }
+            }
+            const auto volTS = Handle<BlackVolTermStructure>(ext::make_shared<BlackVarianceSurface>(
+                today, NullCalendar(), volDates, strikes, vols, dc,
+                BlackVarianceSurface::ConstantExtrapolation,
+                BlackVarianceSurface::ConstantExtrapolation));
+
+            return ext::make_shared<BlackScholesMertonProcess>(
+                Handle<Quote>(ext::make_shared<SimpleQuote>(100.0)), qTS, rTS, volTS);
+        }
+
+        // Prices under LocalVolStepSingleVariate and SingleVariate, both monitoring modes, and
+        // requires them within the relative tolerance.
+        void checkLocalVolStepPrices(Date today,
+                                     const ext::shared_ptr<GeneralizedBlackScholesProcess>& process,
+                                     Real tolerance) {
+            const auto option_data = OptionData();
+            const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
+                option_data.barrier, option_data.bonusLevel, today + option_data.ttm);
+
+            for (const bool isBiased : {true, false}) {
+                bonusClassicOption->setPricingEngine(
+                    ext::make_shared<MCBonusClassicEngine<LowDiscrepancy, Statistics,
+                                                          LocalVolStepSingleVariate>>(
+                        process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(), isBiased, true,
+                        42));
+                const auto cached = bonusClassicOption->NPV();
+
+                bonusClassicOption->setPricingEngine(
+                    ext::make_shared<
+                        MCBonusClassicEngine<LowDiscrepancy, Statistics, SingleVariate>>(
+                        process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(), isBiased, true,
+                        42));
+                const auto plain = bonusClassicOption->NPV();
+
+                BOOST_TEST_MESSAGE((isBiased ? "discrete " : "continuous ")
+                                   << cached << ", relative difference "
+                                   << std::fabs(cached - plain) / plain);
+                BOOST_CHECK_CLOSE_FRACTION(cached, plain, tolerance);
+            }
+        }
     }
 
     BOOST_FIXTURE_TEST_SUITE(RkeQLExtTestSuite, TestSuiteFixture)
@@ -323,39 +400,21 @@ namespace RKE::TestSuite {
 
     BOOST_AUTO_TEST_CASE(testBonusClassicOptionLocalVolStep) { // NOLINT(misc-use-internal-linkage):
                                                                // the struct is the macro's
-        BOOST_TEST_MESSAGE("BonusClassicOption prices the same Euler step under "
-                           "LocalVolStepSingleVariate and SingleVariate");
-
-        const auto option_data = OptionData();
-        auto market_data = MarketData();
+        BOOST_TEST_MESSAGE("BonusClassicOption prices the Euler step under "
+                           "LocalVolStepSingleVariate as under SingleVariate");
 
         const auto today = Date(22, Jun, 2025);
         Settings::instance().evaluationDate() = today;
 
-        const auto exerciseDate = today + option_data.ttm;
-
-        // The forced discretization takes the Euler step through LocalConstantVol.
-        const auto process = market_data.makeGeneralizedBlackScholesProcess(today, true);
-
-        const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
-            option_data.barrier, option_data.bonusLevel, exerciseDate);
-
-        for (const bool isBiased : {true, false}) {
-            bonusClassicOption->setPricingEngine(
-                ext::make_shared<
-                    MCBonusClassicEngine<LowDiscrepancy, Statistics, LocalVolStepSingleVariate>>(
-                    process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(), isBiased, true, 42));
-            const auto cached = bonusClassicOption->NPV();
-
-            bonusClassicOption->setPricingEngine(
-                ext::make_shared<MCBonusClassicEngine<LowDiscrepancy, Statistics, SingleVariate>>(
-                    process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(), isBiased, true, 42));
-            const auto plain = bonusClassicOption->NPV();
-
-            // Exact on purpose: the cached step is the double QuantLib::PathGenerator evolves.
-            BOOST_TEST_MESSAGE((isBiased ? "discrete " : "continuous ") << cached);
-            BOOST_CHECK_EQUAL(cached, plain);
-        }
+        // The forced discretization takes the Euler step through LocalConstantVol, where the
+        // paths agree to their rounding.
+        checkLocalVolStepPrices(today, MarketData().makeGeneralizedBlackScholesProcess(today, true),
+                                1.0e-12);
+        // Under a smile LocalVolSurface amplifies a last bit along a path. Where the compiler
+        // contracts to FMAs the prices then differ by up to 1.3e-8 relative, measured with gcc
+        // and clang at -march=x86-64-v3, far inside the Monte Carlo error; without contraction
+        // they are the same double.
+        checkLocalVolStepPrices(today, makeSmileProcess(today), 1.0e-6);
     }
 
     BOOST_AUTO_TEST_CASE(testBonusClassicOptionInexactStep) { // NOLINT(misc-use-internal-linkage):

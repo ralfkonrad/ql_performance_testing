@@ -19,8 +19,9 @@ namespace RKE::Common {
 
     // The MC traits of MCBonusClassicEngine: the step cache of the market's branch,
     // CachedStepSingleVariate on the flat market and LocalVolStepSingleVariate on the smiles, or
-    // QuantLib::SingleVariate, which asks the process for every step again. Both price
-    // bit-identically.
+    // QuantLib::SingleVariate, which asks the process for every step again. They price
+    // bit-identically, except on the smiles where the compiler contracts to FMAs: there the
+    // cached step may round differently, and the prices differ by up to 2e-6 relative.
     enum class PathGeneration : std::uint8_t { CachedStep, Uncached };
 
     // Flat: flat curves and a constant volatility, the exact step. The smiles: zero curves and a

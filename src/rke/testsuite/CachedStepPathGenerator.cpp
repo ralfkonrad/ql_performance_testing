@@ -19,6 +19,8 @@
 #include <ql/time/calendars/nullcalendar.hpp>
 #include <ql/time/daycounters/actual360.hpp>
 #include <boost/test/unit_test.hpp>
+#include <algorithm>
+#include <cmath>
 #include <test-suite/utilities.hpp>
 #include <vector>
 
@@ -37,6 +39,8 @@ namespace RKE::TestSuite {
         constexpr Size timeSteps = 50;
         constexpr Size paths = 64;
         constexpr BigNatural seed = 42;
+        // A step's rounding, about 1e-16 relative, accumulated over timeSteps steps.
+        constexpr Real pathTolerance = 1.0e-12;
 
         using rsg_type = LowDiscrepancy::rsg_type;
 
@@ -53,9 +57,11 @@ namespace RKE::TestSuite {
         }
 
         // Both generators draw the same Sobol sequence through the same bridge, and every
-        // point of every path, plain and antithetic, has to be the same double.
+        // point of every path, plain and antithetic, has to be the same double, or within the
+        // relative tolerance where one is given.
         template <class StepCache = BlackScholesStepCache>
-        void checkSamePaths(const ext::shared_ptr<GeneralizedBlackScholesProcess>& process) {
+        void checkSamePaths(const ext::shared_ptr<GeneralizedBlackScholesProcess>& process,
+                            Real tolerance = 0.0) {
             const TimeGrid grid(maturity, timeSteps);
             const PathGenerator<rsg_type> reference(
                 process, grid, LowDiscrepancy::make_sequence_generator(timeSteps, seed), true);
@@ -63,19 +69,55 @@ namespace RKE::TestSuite {
                 process, grid, LowDiscrepancy::make_sequence_generator(timeSteps, seed), true);
 
             Size mismatches = 0;
+            Real maxRelative = 0.0;
             for (Size j = 0; j < paths; ++j) {
                 for (const bool antithetic : {false, true}) {
                     const auto& expected = antithetic ? reference.antithetic() : reference.next();
                     const auto& actual = antithetic ? generator.antithetic() : generator.next();
                     BOOST_CHECK_EQUAL(actual.weight, expected.weight);
                     for (Size i = 0; i < expected.value.length(); ++i) {
-                        // Exact comparison on purpose: the regression locks depend on it.
-                        if (actual.value[i] != expected.value[i]) {
+                        const auto difference = std::fabs(actual.value[i] - expected.value[i]);
+                        maxRelative = std::max(maxRelative, difference / expected.value[i]);
+                        // Exact comparison by default: the regression locks depend on it.
+                        if (difference > tolerance * expected.value[i]) {
                             ++mismatches;
                         }
                     }
                 }
             }
+            BOOST_TEST_MESSAGE("  largest relative difference " << maxRelative);
+            BOOST_CHECK_EQUAL(mismatches, Size(0));
+        }
+
+        // One step from the same point on every step of the grid: both sides evaluate the same
+        // local volatility, so only the rounding of the step's own arithmetic can differ.
+        void checkSameSteps(const ext::shared_ptr<GeneralizedBlackScholesProcess>& process) {
+            const TimeGrid grid(maturity, timeSteps);
+            const LocalVolStepCache cache(process, grid);
+            BOOST_REQUIRE(cache.reproducesEvolve());
+
+            // Onto and around the surface's interior strike nodes, where LocalVolSurface's
+            // finite differences in strike are least smooth, and beyond the last one. Not near
+            // the first, where the flat extrapolation's kink makes the local variance negative.
+            const std::vector<Real> levels = {
+                65.0, 79.99, 80.0, 95.0, 100.0, 100.01, 119.99, 120.0, 135.0, 150.0,
+            };
+            const std::vector<Real> increments = {-2.5, -0.4, 0.0, 0.9, 3.1};
+            Size mismatches = 0;
+            Real maxRelative = 0.0;
+            for (Size i = 0; i < timeSteps; ++i) {
+                for (const auto x : levels) {
+                    for (const auto dw : increments) {
+                        const auto expected = process->evolve(grid[i], x, grid.dt(i), dw);
+                        const auto difference = std::fabs(cache.evolve(i, x, dw) - expected);
+                        maxRelative = std::max(maxRelative, difference / expected);
+                        if (difference > LocalVolStepCache::stepTolerance * expected) {
+                            ++mismatches;
+                        }
+                    }
+                }
+            }
+            BOOST_TEST_MESSAGE("  largest relative difference " << maxRelative);
             BOOST_CHECK_EQUAL(mismatches, Size(0));
         }
 
@@ -228,13 +270,17 @@ namespace RKE::TestSuite {
 
     BOOST_AUTO_TEST_SUITE(LocalVolStepPathGeneratorTests)
 
+    // Paths are compared within a tolerance where the local volatility is constant: there a
+    // step's rounding cannot feed back into sigma, and the difference stays at the rounding
+    // accumulated over the steps. Under a smile, LocalVolSurface's finite differences in strike
+    // turn a last bit into a different sigma, so the smile is checked one step at a time.
+
     BOOST_AUTO_TEST_CASE(testVolatilitySurface) { // NOLINT(misc-use-internal-linkage): the
                                                   // struct is the macro's
-        BOOST_TEST_MESSAGE("CachedStepPathGenerator with a LocalVolStepCache, a smile and zero "
-                           "curves");
+        BOOST_TEST_MESSAGE("LocalVolStepCache with a smile and zero curves");
         Settings::instance().evaluationDate() = today();
 
-        checkSamePaths<LocalVolStepCache>(smileProcess());
+        checkSameSteps(smileProcess());
     }
 
     BOOST_AUTO_TEST_CASE(testForcedDiscretization) { // NOLINT(misc-use-internal-linkage): the
@@ -243,7 +289,7 @@ namespace RKE::TestSuite {
                            "discretization");
         Settings::instance().evaluationDate() = today();
 
-        checkSamePaths<LocalVolStepCache>(forcedDiscretizationProcess());
+        checkSamePaths<LocalVolStepCache>(forcedDiscretizationProcess(), pathTolerance);
     }
 
     BOOST_AUTO_TEST_CASE(testExternalLocalVolatility) { // NOLINT(misc-use-internal-linkage):
@@ -252,19 +298,29 @@ namespace RKE::TestSuite {
                            "local vol");
         Settings::instance().evaluationDate() = today();
 
-        checkSamePaths<LocalVolStepCache>(externalLocalVolProcess());
+        checkSamePaths<LocalVolStepCache>(externalLocalVolProcess(), pathTolerance);
     }
 
     BOOST_AUTO_TEST_CASE(testExactStep) { // NOLINT(misc-use-internal-linkage): the struct is
                                           // the macro's
         BOOST_TEST_MESSAGE("CachedStepPathGenerator with a LocalVolStepCache refuses the exact "
-                           "step");
+                           "step on a variance curve");
         Settings::instance().evaluationDate() = today();
 
-        // Flat curves and a constant volatility make the Euler and the exact step equal in
-        // exact arithmetic, so only their rounding tells them apart.
-        checkRefused<LocalVolStepCache>(constantVolProcess());
         checkRefused<LocalVolStepCache>(varianceCurveProcess());
+    }
+
+    BOOST_AUTO_TEST_CASE(testCoincidingExactStep) { // NOLINT(misc-use-internal-linkage): the
+                                                    // struct is the macro's
+        BOOST_TEST_MESSAGE("CachedStepPathGenerator with a LocalVolStepCache follows the exact "
+                           "step where it coincides with Euler");
+        Settings::instance().evaluationDate() = today();
+
+        // A constant volatility on flat curves makes the Euler and the exact step equal in exact
+        // arithmetic, so the check cannot tell them apart, and need not. They round differently:
+        // the Euler drift's forward rate spans 1e-4 years, the exact step's the whole step, about
+        // 5e-15 relative per step and 2.3e-13 over the grid, measured.
+        checkSamePaths<LocalVolStepCache>(constantVolProcess(), 1.0e-11);
     }
 
     BOOST_AUTO_TEST_SUITE_END()

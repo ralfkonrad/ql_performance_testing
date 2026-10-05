@@ -37,7 +37,8 @@ and `LocalVolStepSingleVariate` on the smiles; `uncached` is `QuantLib::SingleVa
 which asks the process for every step, the baseline the step cache is measured against. It
 prints the final NPV at full precision, the same at any iteration count, since every
 iteration reprices the same low-discrepancy paths, and the same under either path
-generation. The setup is sized like a production run, 1Y with daily steps and 2^16
+generation, except on the smile markets where the compiler contracts to FMAs, as on arm64:
+there the two differ by up to 2e-6 relative. The setup is sized like a production run, 1Y with daily steps and 2^16
 paths, so this is not the test suite's 5M regression lock. The recipes below
 run it with the defaults; append arguments after `"$PROG"` for anything else.
 
