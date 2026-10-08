@@ -12,7 +12,6 @@
 #include <ql/math/randomnumbers/rngtraits.hpp>
 #include <ql/methods/montecarlo/pathgenerator.hpp>
 #include <ql/processes/blackscholesprocess.hpp>
-#include <ql/processes/eulerdiscretization.hpp>
 #include <ql/quotes/simplequote.hpp>
 #include <ql/termstructures/volatility/equityfx/blackvariancecurve.hpp>
 #include <ql/termstructures/volatility/equityfx/blackvariancesurface.hpp>
@@ -154,9 +153,9 @@ namespace RKE::TestSuite {
             return zeroCurve({0.030, 0.028, 0.025, 0.024});
         }
 
+        // The flat reference market under EulerDiscretization, as the benchmarks price it.
         ext::shared_ptr<GeneralizedBlackScholesProcess> constantVolProcess() {
-            return ext::make_shared<BlackScholesMertonProcess>(spotQuote(), flatCurve(0.03),
-                                                               flatCurve(0.01), constantVol());
+            return RKE::Common::MarketData().makeGeneralizedBlackScholesProcess(evaluationDate());
         }
 
         ext::shared_ptr<GeneralizedBlackScholesProcess> varianceCurveProcess() {
@@ -199,9 +198,8 @@ namespace RKE::TestSuite {
 
         // The type check alone would take the exact step here.
         ext::shared_ptr<GeneralizedBlackScholesProcess> forcedDiscretizationProcess() {
-            return ext::make_shared<BlackScholesMertonProcess>(
-                spotQuote(), flatCurve(0.03), flatCurve(0.01), constantVol(),
-                ext::make_shared<EulerDiscretization>(), true);
+            return RKE::Common::MarketData().makeGeneralizedBlackScholesProcess(evaluationDate(),
+                                                                                true);
         }
 
         // Euler steps over a BlackConstantVol, which the type check alone would miss.
