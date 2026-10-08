@@ -17,6 +17,7 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <map>
 #include <string>
 
 using namespace RKE::Common;
@@ -31,9 +32,33 @@ namespace RKE::Profile {
             std::string market = "flat";
         };
 
+        // One table per option: CLI::IsMember validates against the keys, run() looks the value
+        // up, so a name accepted here cannot mean something else there. Function-local, since a
+        // namespace-scope map's initialization could throw before main().
+        struct Tables {
+            std::map<std::string, bool> monitorings = {
+                {"discrete", true},
+                {"continuous", false},
+            };
+            std::map<std::string, PathGeneration> pathGenerations = {
+                {"cached", PathGeneration::CachedStep},
+                {"uncached", PathGeneration::Uncached},
+            };
+            std::map<std::string, Market> markets = {
+                {"flat", Market::Flat},
+                {"smile-bilinear", Market::SmileBilinear},
+                {"smile-bicubic", Market::SmileBicubic},
+            };
+        };
+
+        const Tables& tables() {
+            static const auto instance = Tables();
+            return instance;
+        }
+
         void addOptions(CLI::App& app, Arguments& arguments) {
             app.add_option("monitoring", arguments.monitoring, "Barrier monitoring")
-                ->check(CLI::IsMember({"discrete", "continuous"}))
+                ->check(CLI::IsMember(&tables().monitorings))
                 ->capture_default_str();
             app.add_option("iterations", arguments.iterations,
                            "Pricings, each of the same low-discrepancy paths")
@@ -41,31 +66,20 @@ namespace RKE::Profile {
                 ->capture_default_str();
             app.add_option("--path-generation", arguments.pathGeneration,
                            "The market's step cache or QuantLib::SingleVariate")
-                ->check(CLI::IsMember({"cached", "uncached"}))
+                ->check(CLI::IsMember(&tables().pathGenerations))
                 ->capture_default_str();
             app.add_option("--market", arguments.market,
                            "Flat curves and volatility, or zero curves and a smile surface")
-                ->check(CLI::IsMember({"flat", "smile-bilinear", "smile-bicubic"}))
+                ->check(CLI::IsMember(&tables().markets))
                 ->capture_default_str();
-        }
-
-        Market toMarket(const std::string& market) {
-            if (market == "smile-bilinear") {
-                return Market::SmileBilinear;
-            }
-            if (market == "smile-bicubic") {
-                return Market::SmileBicubic;
-            }
-            return Market::Flat;
         }
 
         void run(const Arguments& arguments) {
             // Built before the loop, as in the benchmark, so the profile shows pricing only.
-            const auto setup = makeBonusClassicOptionSetup(arguments.monitoring == "discrete",
-                                                           arguments.pathGeneration == "cached" ?
-                                                               PathGeneration::CachedStep :
-                                                               PathGeneration::Uncached,
-                                                           toMarket(arguments.market));
+            const auto setup =
+                makeBonusClassicOptionSetup(tables().monitorings.at(arguments.monitoring),
+                                            tables().pathGenerations.at(arguments.pathGeneration),
+                                            tables().markets.at(arguments.market));
 
             Real npv = Null<Real>();
             for (Size i = 0; i < arguments.iterations; ++i) {
