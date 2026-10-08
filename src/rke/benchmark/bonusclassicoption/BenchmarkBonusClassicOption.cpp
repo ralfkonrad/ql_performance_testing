@@ -29,9 +29,10 @@ namespace RKE::Benchmark {
         void benchmarkBonusClassicOption(benchmark::State& state,
                                          bool isBiased,
                                          PathGeneration pathGeneration,
-                                         Market market = Market::Flat) {
+                                         Market market = Market::Flat,
+                                         Engine engine = Engine::MonteCarlo) {
             const auto setup =
-                makeBonusClassicOptionSetup(isBiased, pathGeneration, market, samples);
+                makeBonusClassicOptionSetup(isBiased, pathGeneration, market, samples, engine);
 
             for (const auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
                 auto npv = reprice(*setup.option);
@@ -168,6 +169,46 @@ namespace RKE::Benchmark {
             ->Name("BonusClassicOptionSmileBicubicContinuousUncached")
             ->Unit(benchmark::kMillisecond)
             ->Iterations(1);
+
+        // The finite-difference engine on the same certificate and flat market, discretely
+        // monitored on the Monte-Carlo grid and rolled back on fdTimeGrid x fdSpaceGrid, so
+        // its time compares with BonusClassicOption directly. --samples does not apply.
+        void BM_BonusClassicOptionFd(benchmark::State& state) {
+            benchmarkBonusClassicOption(state, true, PathGeneration::CachedStep, Market::Flat,
+                                        Engine::FiniteDifference);
+        }
+
+        BENCHMARK(BM_BonusClassicOptionFd)
+            ->Name("BonusClassicOptionFd")
+            ->Unit(benchmark::kMillisecond)
+            // A pricing takes milliseconds, so the pin is higher than the Monte-Carlo ones for
+            // a comparable wall time.
+            ->Iterations(100);
+
+        // Continuous monitoring: the knock-out becomes a Dirichlet boundary at the barrier and
+        // the step conditions on the monitoring dates go away.
+        void BM_BonusClassicOptionFdContinuous(benchmark::State& state) {
+            benchmarkBonusClassicOption(state, false, PathGeneration::CachedStep, Market::Flat,
+                                        Engine::FiniteDifference);
+        }
+
+        BENCHMARK(BM_BonusClassicOptionFdContinuous)
+            ->Name("BonusClassicOptionFdContinuous")
+            ->Unit(benchmark::kMillisecond)
+            ->Iterations(100);
+
+        // The binomial engine, treeTimeSteps Cox-Ross-Rubinstein steps raised by Boyle-Lau,
+        // which monitors on every step, so there is no continuous variant; the cheapest of the
+        // three.
+        void BM_BonusClassicOptionBinomial(benchmark::State& state) {
+            benchmarkBonusClassicOption(state, true, PathGeneration::CachedStep, Market::Flat,
+                                        Engine::Binomial);
+        }
+
+        BENCHMARK(BM_BonusClassicOptionBinomial)
+            ->Name("BonusClassicOptionBinomial")
+            ->Unit(benchmark::kMillisecond)
+            ->Iterations(1000);
     }
 }
 
