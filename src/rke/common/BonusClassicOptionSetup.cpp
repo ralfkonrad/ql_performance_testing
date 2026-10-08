@@ -56,8 +56,11 @@ namespace RKE::Common {
                    Size timeStepsPerYear,
                    Size samples,
                    bool isBiased) {
+            // maxSamples is McSimulation's own no-bound default; samples + 1 would wrap for the
+            // largest count the --samples options admit.
             return ext::make_shared<MCBonusClassicEngine<LowDiscrepancyJoeKuoD7, Statistics, MC>>(
-                process, timeStepsPerYear, samples, samples + 1, Null<Real>(), isBiased, true, 42);
+                process, timeStepsPerYear, samples, QL_MAX_INTEGER, Null<Real>(), isBiased, true,
+                42);
         }
 
         struct OptionData {
