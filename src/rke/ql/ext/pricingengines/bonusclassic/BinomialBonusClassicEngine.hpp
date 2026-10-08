@@ -90,6 +90,7 @@ namespace RKE::QL::Ext {
             \param maxTimeSteps cap on the Boyle-Lau count; 0 means
                                 max(1000, 5 * timeSteps), and timeSteps
                                 disables Boyle-Lau
+            \pre \p process is not null; QL_REQUIRE checks this.
         */
         BinomialBonusClassicEngine(
             QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process,
@@ -99,6 +100,8 @@ namespace RKE::QL::Ext {
         void calculate() const override;
 
         //! the lattice's grid, one monitoring time per step, after Boyle-Lau and odd rounding
+        /*! \pre the instrument has set up the arguments, i.e. NPV() has run once;
+                 QL_REQUIRE checks this. */
         [[nodiscard]] QuantLib::TimeGrid timeGrid() const;
 
       private:
@@ -198,6 +201,8 @@ namespace RKE::QL::Ext {
 
     template <class Tree>
     QuantLib::TimeGrid BinomialBonusClassicEngine<Tree>::timeGrid() const {
+        // Empty until the instrument's setupArguments() has run, i.e. before the first NPV().
+        QL_REQUIRE(arguments_.exercise, "no exercise given");
         const auto flat = flatten();
         // QuantLib::TimeGrid has an initializer_list<Time> constructor, which a braced
         // return selects over TimeGrid(Time, Size), narrowing steps to a Time.

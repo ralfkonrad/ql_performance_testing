@@ -100,6 +100,7 @@ namespace RKE::QL::Ext {
             \param xGrid                 nodes of the log-spot grid
             \param dampingSteps          implicit Euler steps after maturity
             \param schemeDesc            the time-stepping scheme
+            \pre \p process is not null; QL_REQUIRE checks this.
         */
         explicit FdBlackScholesBonusClassicEngine(
             QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process,
@@ -112,6 +113,8 @@ namespace RKE::QL::Ext {
         void calculate() const override;
 
         //! the monitoring grid; QL_FAIL when the barrier is monitored continuously
+        /*! \pre the instrument has set up the arguments, i.e. NPV() has run once;
+                 QL_REQUIRE checks this. */
         [[nodiscard]] QuantLib::TimeGrid timeGrid() const;
         //! whether the barrier is monitored continuously, i.e. no monitoring step was given
         [[nodiscard]] bool monitorsContinuously() const;

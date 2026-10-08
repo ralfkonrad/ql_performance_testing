@@ -33,6 +33,8 @@ namespace RKE::QL::Ext {
     */
     class BlackScholesStepCache {
       public:
+        /*! \pre \p process is not null and \p grid has at least one step;
+                 QL_REQUIRE checks both. */
         BlackScholesStepCache(
             const QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess>& process,
             const QuantLib::TimeGrid& grid);

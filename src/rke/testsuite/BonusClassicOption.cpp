@@ -211,6 +211,35 @@ namespace RKE::TestSuite {
         BOOST_CHECK_EQUAL(bonusClassicOption->bonusLevel(), data.bonusLevel);
     }
 
+    BOOST_AUTO_TEST_CASE(testBonusClassicOptionEngineGuards) { // NOLINT(misc-use-internal-linkage):
+                                                               // the struct is the macro's
+        BOOST_TEST_MESSAGE("BonusClassicOption engines fail with a QuantLib::Error on a null "
+                           "process and on timeGrid() before the first NPV()");
+
+        auto market_data = MarketData();
+
+        const auto today = Date(22, Jun, 2025);
+        Settings::instance().evaluationDate() = today;
+
+        const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
+
+        BOOST_CHECK_THROW(MCBonusClassicEngine<LowDiscrepancy>(nullptr, mcTimeStepsPerYear, 1'000,
+                                                               1'001, Null<Real>(), true, true, 42),
+                          Error);
+        BOOST_CHECK_THROW(FdBlackScholesBonusClassicEngine(nullptr, mcTimeStepsPerYear), Error);
+        BOOST_CHECK_THROW(BinomialBonusClassicEngine<CoxRossRubinstein>(nullptr, treeTimeSteps),
+                          Error);
+
+        // The arguments, the exercise among them, are empty until an instrument sets them up.
+        const MCBonusClassicEngine<LowDiscrepancy> mcEngine(process, mcTimeStepsPerYear, 1'000,
+                                                            1'001, Null<Real>(), true, true, 42);
+        BOOST_CHECK_THROW(static_cast<void>(mcEngine.timeGrid()), Error);
+        const FdBlackScholesBonusClassicEngine fdEngine(process, mcTimeStepsPerYear);
+        BOOST_CHECK_THROW(static_cast<void>(fdEngine.timeGrid()), Error);
+        const BinomialBonusClassicEngine<CoxRossRubinstein> treeEngine(process, treeTimeSteps);
+        BOOST_CHECK_THROW(static_cast<void>(treeEngine.timeGrid()), Error);
+    }
+
     BOOST_AUTO_TEST_CASE(testBonusClassicOptionValuation) { // NOLINT(misc-use-internal-linkage):
                                                             // the struct is the macro's
         BOOST_TEST_MESSAGE("BonusClassicOption valuation test");

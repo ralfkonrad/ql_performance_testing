@@ -266,6 +266,17 @@ namespace RKE::TestSuite {
         checkRefused(externalLocalVolProcess());
     }
 
+    BOOST_AUTO_TEST_CASE(testEmptyGrid) { // NOLINT(misc-use-internal-linkage): the struct is
+                                          // the macro's
+        BOOST_TEST_MESSAGE("BlackScholesStepCache and LocalVolStepCache refuse an empty grid");
+        Settings::instance().evaluationDate() = today();
+
+        // A QuantLib::Error, not the std::length_error of reserving SIZE_MAX steps.
+        const TimeGrid empty;
+        BOOST_CHECK_THROW(BlackScholesStepCache(constantVolProcess(), empty), Error);
+        BOOST_CHECK_THROW(LocalVolStepCache(forcedDiscretizationProcess(), empty), Error);
+    }
+
     BOOST_AUTO_TEST_SUITE_END()
 
     BOOST_AUTO_TEST_SUITE(LocalVolStepPathGeneratorTests)

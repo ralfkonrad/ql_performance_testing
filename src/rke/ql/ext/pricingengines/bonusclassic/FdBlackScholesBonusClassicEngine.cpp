@@ -127,6 +127,8 @@ namespace RKE::QL::Ext {
     }
 
     TimeGrid FdBlackScholesBonusClassicEngine::timeGrid() const {
+        // Empty until the instrument's setupArguments() has run, i.e. before the first NPV().
+        QL_REQUIRE(arguments_.exercise, "no exercise given");
         const auto residualTime = process_->time(arguments_.exercise->lastDate());
         if (!monitorsContinuously()) {
             // MCBonusClassicEngine's rule, so that both engines price the same product. A short

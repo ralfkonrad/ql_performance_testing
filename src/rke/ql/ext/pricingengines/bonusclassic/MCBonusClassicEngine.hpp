@@ -101,6 +101,7 @@ namespace RKE::QL::Ext {
                                     bridge (affects path construction, not the
                                     barrier check)
             \param seed             seed of the sequence generator
+            \pre \p process is not null; QL_REQUIRE checks this.
         */
         MCBonusClassicEngine(
             QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process,
@@ -114,6 +115,9 @@ namespace RKE::QL::Ext {
 
         void calculate() const override;
         QuantLib::ext::shared_ptr<path_pricer_type> pathPricer() const override;
+        //! the monitoring grid
+        /*! \pre the instrument has set up the arguments, i.e. NPV() has run once;
+                 QL_REQUIRE checks this. */
         QuantLib::TimeGrid timeGrid() const override;
 
       private:
@@ -252,6 +256,8 @@ namespace RKE::QL::Ext {
       timeStepsPerYear_(timeStepsPerYear), requiredSamples_(requiredSamples),
       maxSamples_(maxSamples), requiredTolerance_(requiredTolerance), isBiased_(isBiased),
       brownianBridge_(brownianBridge), seed_(seed) {
+        // registerWith() accepts a null pointer; calculate() would be the first to dereference it.
+        QL_REQUIRE(process_, "null process given");
         // Without this, NPV() keeps returning the first price.
         registerWith(process_);
     }
@@ -301,6 +307,8 @@ namespace RKE::QL::Ext {
 
     template <class RNG, class S, template <class> class MC>
     QuantLib::TimeGrid MCBonusClassicEngine<RNG, S, MC>::timeGrid() const {
+        // Empty until the instrument's setupArguments() has run, i.e. before the first NPV().
+        QL_REQUIRE(arguments_.exercise, "no exercise given");
         const auto residualTime = process_->time(arguments_.exercise->lastDate());
         if (timeStepsPerYear_ != QuantLib::Null<QuantLib::Size>()) {
             // A short residual time truncates steps to 0, and TimeGrid(end, 0) divides by zero;

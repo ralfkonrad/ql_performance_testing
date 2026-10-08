@@ -51,6 +51,8 @@ namespace RKE::QL::Ext {
             with gcc and clang at -march=x86-64-v3; this leaves 250 times that. */
         static constexpr QuantLib::Real stepTolerance = 1.0e-13;
 
+        /*! \pre \p process is not null and \p grid has at least one step;
+                 QL_REQUIRE checks both. */
         LocalVolStepCache(
             const QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess>& process,
             const QuantLib::TimeGrid& grid);

@@ -12,6 +12,8 @@ namespace RKE::QL::Ext {
     LocalVolStepCache::LocalVolStepCache(
         const ext::shared_ptr<GeneralizedBlackScholesProcess>& process, const TimeGrid& grid) {
         QL_REQUIRE(process, "null process given");
+        // grid.size() - 1 wraps on an empty grid, and reserve() then throws a std::length_error.
+        QL_REQUIRE(grid.size() > 1, "the time grid needs at least one step");
 
         // The link the process evaluates: LocalVolSurface under a smile, LocalConstantVol or
         // LocalVolCurve under a forced discretization, or the external one it was given.
