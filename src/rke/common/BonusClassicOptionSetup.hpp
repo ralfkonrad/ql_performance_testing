@@ -8,6 +8,7 @@
 #include <ql/instrument.hpp>
 #include <ql/pricingengine.hpp>
 #include <ql/processes/blackscholesprocess.hpp>
+#include <ql/time/date.hpp>
 #include <ql/time/period.hpp>
 #include <cstdint>
 
@@ -30,6 +31,11 @@ namespace RKE::Common {
     // with the surface bilinear or bicubic in time and strike. The bicubic surface rebuilds a
     // spline on every lookup, which dominates its profile.
     enum class Market : std::uint8_t { Flat, SmileBilinear, SmileBicubic };
+
+    // The reference date every test, benchmark and profile prices as of.
+    [[nodiscard]] inline QuantLib::Date evaluationDate() {
+        return {22, QuantLib::Jun, 2025};
+    }
 
     struct OptionData {
         QuantLib::Real barrier = 90.0;

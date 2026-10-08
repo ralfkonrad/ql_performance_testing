@@ -152,7 +152,7 @@ namespace RKE::TestSuite {
 
         FlatCase makeFlatCase(bool forceDiscretization = false) {
             auto flat = FlatCase();
-            flat.today = Date(22, Jun, 2025);
+            flat.today = RKE::Common::evaluationDate();
             Settings::instance().evaluationDate() = flat.today;
             flat.optionData.ttm = Period(5, Months);
             flat.exerciseDate = flat.today + flat.optionData.ttm;
@@ -388,7 +388,7 @@ namespace RKE::TestSuite {
         BOOST_TEST_MESSAGE("BonusClassicOption prices the Euler step under "
                            "LocalVolStepSingleVariate as under SingleVariate");
 
-        const auto today = Date(22, Jun, 2025);
+        const auto today = RKE::Common::evaluationDate();
         Settings::instance().evaluationDate() = today;
 
         // The forced discretization takes the Euler step through LocalConstantVol, where the

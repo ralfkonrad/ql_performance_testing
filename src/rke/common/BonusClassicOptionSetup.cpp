@@ -142,7 +142,7 @@ namespace RKE::Common {
         const auto option_data = OptionData();
         const auto market_data = MarketData();
 
-        const auto today = Date(22, Jun, 2025);
+        const auto today = evaluationDate();
         Settings::instance().evaluationDate() = today;
 
         const auto exerciseDate = today + option_data.ttm;
