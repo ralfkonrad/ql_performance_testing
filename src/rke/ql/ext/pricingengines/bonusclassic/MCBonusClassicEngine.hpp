@@ -10,6 +10,7 @@
 #include <ql/pricingengines/barrier/mcbarrierengine.hpp>
 #include <ql/pricingengines/mcsimulation.hpp>
 #include <ql/processes/blackscholesprocess.hpp>
+#include <algorithm>
 #include <type_traits>
 
 namespace RKE::QL::Ext {

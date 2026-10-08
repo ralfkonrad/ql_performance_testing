@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include <rke/ql/ext/instruments/BonusClassicOption.hpp>
+#include <algorithm>
 
 using namespace QuantLib;
 

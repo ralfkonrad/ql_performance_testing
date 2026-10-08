@@ -7,6 +7,7 @@
 #include <ql/exercise.hpp>
 #include <ql/instruments/oneassetoption.hpp>
 #include <ql/instruments/payoffs.hpp>
+#include <string>
 
 namespace RKE::QL::Ext {
     //! Terminal payoff of a bonus certificate ("Bonus Classic")
