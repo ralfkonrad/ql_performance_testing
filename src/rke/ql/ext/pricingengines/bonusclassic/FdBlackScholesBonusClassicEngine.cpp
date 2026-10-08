@@ -16,7 +16,6 @@
 #include <ql/methods/finitedifferences/utilities/fdminnervaluecalculator.hpp>
 #include <boost/range/algorithm/find.hpp>
 #include <boost/range/algorithm/min_element.hpp>
-#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <list>
@@ -129,16 +128,9 @@ namespace RKE::QL::Ext {
     TimeGrid FdBlackScholesBonusClassicEngine::timeGrid() const {
         // Empty until the instrument's setupArguments() has run, i.e. before the first NPV().
         QL_REQUIRE(arguments_.exercise, "no exercise given");
-        const auto residualTime = process_->time(arguments_.exercise->lastDate());
         if (!monitorsContinuously()) {
-            // MCBonusClassicEngine's rule, so that both engines price the same product. A short
-            // residual time truncates steps to 0, and TimeGrid(end, 0) divides by zero.
-            const auto steps =
-                static_cast<Size>(static_cast<Real>(monitoringStepsPerYear_) * residualTime);
-            // QuantLib::TimeGrid has an initializer_list<Time> constructor, which a braced
-            // return selects over TimeGrid(Time, Size), narrowing steps to a Time.
-            return TimeGrid( // NOLINT(modernize-return-braced-init-list)
-                residualTime, std::max<Size>(steps, 1));
+            return monitoringGrid(process_->time(arguments_.exercise->lastDate()),
+                                  monitoringStepsPerYear_);
         }
         QL_FAIL("the barrier is monitored continuously, on no time grid");
     }

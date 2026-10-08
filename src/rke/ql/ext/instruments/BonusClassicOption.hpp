@@ -7,6 +7,7 @@
 #include <ql/exercise.hpp>
 #include <ql/instruments/oneassetoption.hpp>
 #include <ql/instruments/payoffs.hpp>
+#include <ql/timegrid.hpp>
 #include <string>
 
 namespace RKE::QL::Ext {
@@ -128,6 +129,11 @@ namespace RKE::QL::Ext {
       protected:
         //! whether \p underlying is at or below the barrier, the same inclusive test as the payoff
         bool triggered(QuantLib::Real underlying) const;
+        //! the grid of max(floor(stepsPerYear * residualTime), 1) equal steps to \p residualTime
+        /*! The one rule for discrete monitoring, so that every engine taking a
+            stepsPerYear monitors the same product. */
+        [[nodiscard]] static QuantLib::TimeGrid monitoringGrid(QuantLib::Time residualTime,
+                                                               QuantLib::Size stepsPerYear);
     };
 }
 

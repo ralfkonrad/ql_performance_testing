@@ -38,8 +38,9 @@ Under `src/rke/ql/ext/instruments/`, derived from the fitting QuantLib base
    in `validate()` call the base and `QL_REQUIRE` each field against its `Null`.
    That sentinel pair is what turns a forgotten field into an error message
    instead of a silent zero.
-4. `engine`: `GenericEngine<arguments, results>`, holding whatever predicates the
-   engines share (`triggered()` in the example).
+4. `engine`: `GenericEngine<arguments, results>`, holding whatever the engines
+   share (`triggered()` and the monitoring-grid rule `monitoringGrid()` in the
+   example).
 
 ## 3. A New Pricing Engine
 
