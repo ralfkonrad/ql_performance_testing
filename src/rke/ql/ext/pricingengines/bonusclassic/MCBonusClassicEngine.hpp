@@ -40,15 +40,22 @@ namespace RKE::QL::Ext {
         which takes the process's exact step from terms computed once per
         grid and refuses a process whose step is not exact: a smile, a
         forced discretization or an external local volatility. Such a
-        process takes QuantLib::SingleVariate, i.e. QuantLib::PathGenerator.
-        Both produce the same doubles, so the choice moves no price. The
-        continuous path pricer follows the traits: under
-        CachedStepSingleVariate it takes the step variance from the same
-        cache, otherwise from the process.
+        process takes LocalVolStepSingleVariate, whose generator takes the
+        Euler step through LocalVolStepCache, evaluating the local
+        volatility once per step instead of twice, and refuses an exact
+        step in turn. QuantLib::SingleVariate, i.e. QuantLib::PathGenerator,
+        takes every process and is the reference the other two are checked
+        against: the exact step gives the same doubles, the Euler step the
+        same up to LocalVolStepCache::stepTolerance per step, so the choice
+        moves no price beyond rounding. The continuous path pricer follows
+        the traits: under CachedStepSingleVariate it takes the step variance
+        from the same cache, otherwise from the process.
 
         \tparam MC Monte Carlo traits naming the path generator:
                    CachedStepSingleVariate for a process whose step is
-                   exact, QuantLib::SingleVariate for any other.
+                   exact, LocalVolStepSingleVariate for one taking the Euler
+                   step through a local volatility, QuantLib::SingleVariate
+                   for any process.
 
         \warning calculate() requires the spot above the barrier in either
                  mode and throws otherwise. With isBiased = true that is a
@@ -79,6 +86,10 @@ namespace RKE::QL::Ext {
               count and grid under QuantLib::LowDiscrepancy.
         \test the continuously monitored value is checked to lie below the
               discretely monitored one on the same grid and seed.
+        \test both values are checked to be the same double under
+              CachedStepSingleVariate and QuantLib::SingleVariate, and the
+              same up to rounding under LocalVolStepSingleVariate and
+              QuantLib::SingleVariate.
     */
     template <class RNG = QuantLib::PseudoRandom,
               class S = QuantLib::Statistics,
