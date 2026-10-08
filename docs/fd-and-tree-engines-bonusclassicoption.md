@@ -347,7 +347,7 @@ Decisions:
 Boyle-Lau in the test market (`v² T / ln²(s0 / H) = 1.5314`): 100 steps become 124, 200
 become 220, 400 become 442, 1000 become 1035. The layer `m` steps below spot then lands
 at or just below `H` (89.9938 at 442 steps) and is knocked out by `<=` and `<` alike.
-Without Boyle-Lau, 400 steps put the first knocked-out layer at 89.50, an effective
+Without Boyle-Lau, 400 steps put the first knocked-out layer at 89.51, an effective
 barrier 0.55% low.
 
 ## 5. Tests
