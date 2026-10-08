@@ -13,6 +13,7 @@
 // -F 999; one iteration is enough under callgrind, which counts instructions exactly, and
 // fewer paths keep a smile market countable there, since Ir per step does not depend on them.
 
+#include <rke/cli/SamplesOption.hpp>
 #include <rke/common/BonusClassicOptionSetup.hpp>
 #include <CLI/CLI.hpp>
 #include <exception>
@@ -75,9 +76,7 @@ namespace RKE::Profile {
                            "Flat curves and volatility, or zero curves and a smile surface")
                 ->check(CLI::IsMember(&tables().markets))
                 ->capture_default_str();
-            app.add_option("--samples", arguments.samples, "Paths per pricing")
-                ->check(CLI::Range(Size{1}, std::numeric_limits<Size>::max()))
-                ->capture_default_str();
+            RKE::Cli::addSamplesOption(app, arguments.samples);
         }
 
         void run(const Arguments& arguments) {

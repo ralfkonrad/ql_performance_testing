@@ -72,8 +72,8 @@ inside. `BM_BonusClassicOption` is the pattern.
 
 When a workload is also profiled, its setup and loop body live in `rke_common`
 (`src/rke/common/`), and the benchmark calls them rather than holding a copy, so
-the profile executable measures exactly the same work. Changing that setup moves
-both. See [`profiling.md`](profiling.md).
+the profile executable measures exactly the same work, and the tests price the
+same instrument and markets. Changing that setup moves all three. See [`profiling.md`](profiling.md).
 
 ## 4. Running
 

@@ -8,16 +8,10 @@
 #include <rke/ql/ext/pricingengines/bonusclassic/FdBlackScholesBonusClassicEngine.hpp>
 #include <rke/ql/ext/pricingengines/bonusclassic/MCBonusClassicEngine.hpp>
 #include <ql/instruments/barrieroption.hpp>
-#include <ql/math/matrix.hpp>
 #include <ql/methods/lattices/binomialtree.hpp>
 #include <ql/methods/montecarlo/mctraits.hpp>
 #include <ql/pricingengines/barrier/analyticbarrierengine.hpp>
 #include <ql/processes/blackscholesprocess.hpp>
-#include <ql/quotes/simplequote.hpp>
-#include <ql/termstructures/volatility/equityfx/blackvariancesurface.hpp>
-#include <ql/termstructures/yield/zerocurve.hpp>
-#include <ql/time/calendars/nullcalendar.hpp>
-#include <ql/time/daycounters/actual360.hpp>
 #include <boost/test/unit_test.hpp>
 #include <cmath>
 #include <utility>
@@ -36,62 +30,14 @@ namespace RKE::TestSuite {
     constexpr Size treeTimeSteps = 400;
 
     namespace {
-        struct OptionData {
-            Real barrier = 90.0;
-            Real bonusLevel = 120.00;
-            Period ttm = Period(5, Months);
-        };
-
-        // The Euler step through LocalVolSurface: zero curves linear between the nodes,
-        // continuously compounded, and a bilinear Black variance surface with
-        // sigma(K) = 0.20 - 0.08 ln(K / 100) on every date. The strikes reach far beyond any
-        // path, so the flat strike extrapolation's kink, which LocalVolSurface turns into a
-        // negative local variance, is never reached.
-        ext::shared_ptr<GeneralizedBlackScholesProcess> makeSmileProcess(Date today) {
-            const auto dc = Actual360();
-            const std::vector<Date> curveDates = {
-                today,
-                today + Period(3, Months),
-                today + Period(1, Years),
-                today + Period(2, Years),
-            };
-            const auto rTS = Handle<YieldTermStructure>(ext::make_shared<ZeroCurve>(
-                curveDates, std::vector<Rate>{0.008, 0.009, 0.010, 0.012}, dc, NullCalendar()));
-            const auto qTS = Handle<YieldTermStructure>(ext::make_shared<ZeroCurve>(
-                curveDates, std::vector<Rate>{0.032, 0.031, 0.030, 0.028}, dc, NullCalendar()));
-
-            const std::vector<Date> volDates = {
-                today + Period(1, Months),
-                today + Period(6, Months),
-                today + Period(1, Years),
-            };
-            const std::vector<Real> strikes = {
-                10.0, 25.0, 50.0, 70.0, 85.0, 100.0, 115.0, 130.0, 160.0, 220.0, 400.0,
-            };
-            // Rows are strikes, columns dates.
-            Matrix vols(strikes.size(), volDates.size());
-            for (Size i = 0; i < strikes.size(); ++i) {
-                for (Size j = 0; j < volDates.size(); ++j) {
-                    vols(i, j) = 0.20 - (0.08 * std::log(strikes[i] / 100.0));
-                }
-            }
-            const auto volTS = Handle<BlackVolTermStructure>(ext::make_shared<BlackVarianceSurface>(
-                today, NullCalendar(), volDates, strikes, vols, dc,
-                BlackVarianceSurface::ConstantExtrapolation,
-                BlackVarianceSurface::ConstantExtrapolation));
-
-            return ext::make_shared<BlackScholesMertonProcess>(
-                Handle<Quote>(ext::make_shared<SimpleQuote>(100.0)), qTS, rTS, volTS);
-        }
-
         // Prices under LocalVolStepSingleVariate and SingleVariate, both monitoring modes, and
         // requires them within the relative tolerance.
         void checkLocalVolStepPrices(Date today,
                                      const ext::shared_ptr<GeneralizedBlackScholesProcess>& process,
                                      Real tolerance) {
-            const auto option_data = OptionData();
-            const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
-                option_data.barrier, option_data.bonusLevel, today + option_data.ttm);
+            auto option_data = RKE::Common::OptionData();
+            option_data.ttm = Period(5, Months);
+            const auto bonusClassicOption = RKE::Common::makeBonusClassicOption(option_data, today);
 
             for (const bool isBiased : {true, false}) {
                 bonusClassicOption->setPricingEngine(
@@ -130,7 +76,7 @@ namespace RKE::TestSuite {
         // worth spot * exp(-q * T); AnalyticBarrierEngine prices the put under continuous
         // monitoring of the barrier given here.
         Real replicationPrice(const ext::shared_ptr<GeneralizedBlackScholesProcess>& process,
-                              const OptionData& data,
+                              const RKE::Common::OptionData& data,
                               Date exerciseDate,
                               Real barrier) {
             const auto assetLeg = process->x0() * process->dividendYield()->discount(exerciseDate);
@@ -144,10 +90,10 @@ namespace RKE::TestSuite {
             return assetLeg + downOutPut.NPV();
         }
 
-        // The flat market every case prices: the option with its 5M maturity and the process as
-        // of 22 Jun 2025, which the helper also makes the evaluation date.
+        // The flat market every case prices: the option with its maturity cut to 5M and the
+        // process as of 22 Jun 2025, which the helper also makes the evaluation date.
         struct FlatCase {
-            OptionData optionData;
+            RKE::Common::OptionData optionData;
             RKE::Common::MarketData marketData;
             Date today;
             Date exerciseDate;
@@ -157,13 +103,13 @@ namespace RKE::TestSuite {
 
         FlatCase makeFlatCase(bool forceDiscretization = false) {
             auto flat = FlatCase();
-            flat.today = Date(22, Jun, 2025);
+            flat.today = RKE::Common::evaluationDate();
             Settings::instance().evaluationDate() = flat.today;
-            flat.exerciseDate = flat.today + flat.optionData.ttm;
+            flat.optionData.ttm = Period(5, Months);
             flat.process =
                 flat.marketData.makeGeneralizedBlackScholesProcess(flat.today, forceDiscretization);
-            flat.option = ext::make_shared<BonusClassicOption>(
-                flat.optionData.barrier, flat.optionData.bonusLevel, flat.exerciseDate);
+            flat.option = RKE::Common::makeBonusClassicOption(flat.optionData, flat.today);
+            flat.exerciseDate = flat.option->exercise()->lastDate();
             return flat;
         }
     }
@@ -176,7 +122,7 @@ namespace RKE::TestSuite {
         testBonusClassicPayoff) { // NOLINT(misc-use-internal-linkage): the struct is the macro's
         BOOST_TEST_MESSAGE("BonusClassicPayoff test");
 
-        const auto data = OptionData();
+        const auto data = RKE::Common::OptionData();
         const auto payoff = BonusClassicPayoff(data.barrier, data.bonusLevel);
 
         BOOST_CHECK_EQUAL(payoff(80.00), 80.00);
@@ -392,7 +338,7 @@ namespace RKE::TestSuite {
         BOOST_TEST_MESSAGE("BonusClassicOption prices the Euler step under "
                            "LocalVolStepSingleVariate as under SingleVariate");
 
-        const auto today = Date(22, Jun, 2025);
+        const auto today = RKE::Common::evaluationDate();
         Settings::instance().evaluationDate() = today;
 
         // The forced discretization takes the Euler step through LocalConstantVol, where the
@@ -400,11 +346,13 @@ namespace RKE::TestSuite {
         checkLocalVolStepPrices(
             today, RKE::Common::MarketData().makeGeneralizedBlackScholesProcess(today, true),
             1.0e-12);
-        // Under a smile LocalVolSurface amplifies a last bit along a path. Where the compiler
-        // contracts to FMAs the prices then differ by up to 1.3e-8 relative, measured with gcc
-        // and clang at -march=x86-64-v3, far inside the Monte Carlo error; without contraction
-        // they are the same double.
-        checkLocalVolStepPrices(today, makeSmileProcess(today), 1.0e-6);
+        // The benchmarks' bilinear smile. Under it LocalVolSurface amplifies a last bit along a
+        // path: without contraction the prices are the same double; where the compiler
+        // contracts to FMAs they differ, by up to 2e-6 relative at production sample counts,
+        // as PathGeneration in the common header records.
+        checkLocalVolStepPrices(
+            today, RKE::Common::SmileMarketData().makeGeneralizedBlackScholesProcess(today, false),
+            1.0e-6);
     }
 
     BOOST_AUTO_TEST_CASE(testBonusClassicOptionInexactStep) { // NOLINT(misc-use-internal-linkage):
@@ -453,8 +401,10 @@ namespace RKE::TestSuite {
         // std::exp(std::log(85.0)) lies above 85, so a grid starting at std::log(85.0) would pay
         // the bonus on its first node at maturity; 90 maps back to itself.
         for (const Real barrier : {flat.optionData.barrier, 85.0}) {
-            const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
-                barrier, flat.optionData.bonusLevel, flat.exerciseDate);
+            auto optionData = flat.optionData;
+            optionData.barrier = barrier;
+            const auto bonusClassicOption =
+                RKE::Common::makeBonusClassicOption(optionData, flat.today);
             bonusClassicOption->setPricingEngine(ext::make_shared<FdBlackScholesBonusClassicEngine>(
                 flat.process, Null<Size>(), fdTimeGrid, fdSpaceGrid));
             const auto npv = bonusClassicOption->NPV();
