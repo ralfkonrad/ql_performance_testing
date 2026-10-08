@@ -11,6 +11,7 @@
 #include <ql/time/date.hpp>
 #include <ql/time/period.hpp>
 #include <cstdint>
+#include <vector>
 
 namespace RKE::Common {
     struct BonusClassicOptionSetup {
@@ -57,6 +58,41 @@ namespace RKE::Common {
         [[nodiscard]] QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess>
         makeGeneralizedBlackScholesProcess(QuantLib::Date today,
                                            bool forceDiscretization = false) const;
+    };
+
+    // Around MarketData's levels, shaped so every call in the Euler step does real work: zero
+    // rates linear between the nodes, continuously compounded, and a Black variance surface
+    // bilinear or bicubic in time and strike. Actual360 and NullCalendar throughout.
+    struct SmileMarketData {
+        QuantLib::Real spot = 100.00;
+        std::vector<QuantLib::Period> curveTenors = {
+            QuantLib::Period(3, QuantLib::Months),
+            QuantLib::Period(6, QuantLib::Months),
+            QuantLib::Period(1, QuantLib::Years),
+            QuantLib::Period(2, QuantLib::Years),
+        };
+        std::vector<QuantLib::Rate> riskfreeRates = {0.008, 0.009, 0.010, 0.011, 0.012};
+        std::vector<QuantLib::Rate> dividendYields = {0.032, 0.031, 0.030, 0.029, 0.028};
+
+        std::vector<QuantLib::Period> volTenors = {
+            QuantLib::Period(1, QuantLib::Months),  QuantLib::Period(3, QuantLib::Months),
+            QuantLib::Period(6, QuantLib::Months),  QuantLib::Period(1, QuantLib::Years),
+            QuantLib::Period(18, QuantLib::Months), QuantLib::Period(2, QuantLib::Years),
+        };
+        // Far beyond any path, so the surface's flat strike extrapolation, whose kink
+        // LocalVolSurface's finite differences would turn into a negative local variance, is
+        // never reached.
+        std::vector<QuantLib::Real> strikes = {
+            10.0, 25.0, 50.0, 70.0, 85.0, 100.0, 115.0, 130.0, 160.0, 220.0, 400.0,
+        };
+        // sigma(K) = atmVolatility - skew * ln(K / spot) on every date. Total variance
+        // sigma(K)^2 * T rises in time, and the skew is mild enough that LocalVolSurface's
+        // Dupire denominator stays positive on every strike a path reaches.
+        QuantLib::Volatility atmVolatility = 0.20;
+        QuantLib::Real skew = 0.08;
+
+        [[nodiscard]] QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess>
+        makeGeneralizedBlackScholesProcess(QuantLib::Date today, bool isBicubic) const;
     };
 
     // The certificate on data's levels, exercisable at today + data.ttm, with no engine set.
