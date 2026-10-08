@@ -3,6 +3,7 @@
 
 #include "TestSuiteFixture.hpp"
 #include <rke/ql/ext/instruments/BonusClassicOption.hpp>
+#include <rke/ql/ext/pricingengines/bonusclassic/FdBlackScholesBonusClassicEngine.hpp>
 #include <rke/ql/ext/pricingengines/bonusclassic/MCBonusClassicEngine.hpp>
 #include <ql/instruments/barrieroption.hpp>
 #include <ql/math/matrix.hpp>
@@ -26,6 +27,9 @@ using namespace QuantLib;
 namespace RKE::TestSuite {
     // Barrier monitoring dates of the MC engine are its time grid points.
     constexpr Size mcTimeStepsPerYear = 100;
+    // The FD grid QuantLib's own barrier tests price Haug's table on.
+    constexpr Size fdTimeGrid = 200;
+    constexpr Size fdSpaceGrid = 400;
 
     namespace {
         struct OptionData {
@@ -447,6 +451,70 @@ namespace RKE::TestSuite {
             ext::make_shared<MCBonusClassicEngine<LowDiscrepancy, Statistics, SingleVariate>>(
                 process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(), false, true, 42));
         BOOST_CHECK_NO_THROW(bonusClassicOption->NPV());
+    }
+
+    BOOST_AUTO_TEST_CASE(
+        testBonusClassicOptionFdContinuousValuation) { // NOLINT(misc-use-internal-linkage):
+                                                       // the struct is the macro's
+        BOOST_TEST_MESSAGE("BonusClassicOption FD continuous valuation test");
+
+        const auto option_data = OptionData();
+        auto market_data = MarketData();
+
+        const auto today = Date(22, Jun, 2025);
+        Settings::instance().evaluationDate() = today;
+
+        const auto exerciseDate = today + option_data.ttm;
+
+        const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
+            option_data.barrier, option_data.bonusLevel, exerciseDate);
+
+        const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
+        bonusClassicOption->setPricingEngine(ext::make_shared<FdBlackScholesBonusClassicEngine>(
+            process, Null<Size>(), fdTimeGrid, fdSpaceGrid));
+        const auto npv = bonusClassicOption->NPV();
+
+        // Regression lock: the engine's own output on this grid and scheme, not an externally
+        // validated price. See testBonusClassicOptionFdContinuousReplication for that.
+        BOOST_CHECK_CLOSE_FRACTION(105.89059304496158, npv, 1e-8);
+    }
+
+    BOOST_AUTO_TEST_CASE(
+        testBonusClassicOptionFdContinuousReplication) { // NOLINT(misc-use-internal-linkage):
+                                                         // the struct is the macro's
+        BOOST_TEST_MESSAGE("BonusClassicOption FD continuous replication test");
+
+        const auto option_data = OptionData();
+        auto market_data = MarketData();
+
+        const auto today = Date(22, Jun, 2025);
+        Settings::instance().evaluationDate() = today;
+
+        const auto exerciseDate = today + option_data.ttm;
+
+        const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
+
+        // std::exp(std::log(85.0)) lies above 85, so a grid starting at std::log(85.0) would pay
+        // the bonus on its first node at maturity; 90 maps back to itself.
+        for (const Real barrier : {option_data.barrier, 85.0}) {
+            const auto bonusClassicOption =
+                ext::make_shared<BonusClassicOption>(barrier, option_data.bonusLevel, exerciseDate);
+            bonusClassicOption->setPricingEngine(ext::make_shared<FdBlackScholesBonusClassicEngine>(
+                process, Null<Size>(), fdTimeGrid, fdSpaceGrid));
+            const auto npv = bonusClassicOption->NPV();
+
+            // Both sides monitor continuously, so the put takes the barrier itself.
+            const auto replication = replicationPrice(process, option_data, exerciseDate, barrier);
+
+            // Measured residuals 4.3e-6 relative at barrier 90 and 3.2e-6 at 85. They fall
+            // linearly in the time steps, to 1.1e-6 and 4.5e-7 at 800 steps: QuantLib imposes
+            // the Dirichlet value on the barrier node after each implicit solve, so the next
+            // node is coupled to the unconstrained one. A first node above 85 was 2.1e-4 off.
+            // The bound leaves three times the larger residual.
+            BOOST_TEST_MESSAGE("barrier " << barrier << ": " << npv << ", relative residual "
+                                          << std::fabs(npv - replication) / replication);
+            BOOST_CHECK_CLOSE_FRACTION(replication, npv, 1.5e-5);
+        }
     }
 
     BOOST_AUTO_TEST_SUITE_END()
