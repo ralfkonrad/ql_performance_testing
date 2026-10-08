@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "TestSuiteFixture.hpp"
+#include <rke/common/BonusClassicOptionSetup.hpp>
 #include <rke/ql/ext/instruments/BonusClassicOption.hpp>
 #include <rke/ql/ext/pricingengines/bonusclassic/BinomialBonusClassicEngine.hpp>
 #include <rke/ql/ext/pricingengines/bonusclassic/FdBlackScholesBonusClassicEngine.hpp>
@@ -12,7 +13,6 @@
 #include <ql/methods/montecarlo/mctraits.hpp>
 #include <ql/pricingengines/barrier/analyticbarrierengine.hpp>
 #include <ql/processes/blackscholesprocess.hpp>
-#include <ql/processes/eulerdiscretization.hpp>
 #include <ql/quotes/simplequote.hpp>
 #include <ql/termstructures/volatility/equityfx/blackvariancesurface.hpp>
 #include <ql/termstructures/yield/zerocurve.hpp>
@@ -20,7 +20,6 @@
 #include <ql/time/daycounters/actual360.hpp>
 #include <boost/test/unit_test.hpp>
 #include <cmath>
-#include <test-suite/utilities.hpp>
 #include <utility>
 #include <vector>
 
@@ -41,34 +40,6 @@ namespace RKE::TestSuite {
             Real barrier = 90.0;
             Real bonusLevel = 120.00;
             Period ttm = Period(5, Months);
-        };
-
-        struct MarketData {
-            Real spot = 100.00;
-            Real riskfreeRate = 0.01;
-            Real dividendYield = 0.03;
-            Real volatility = 0.20;
-
-            // forceDiscretization = true makes evolve() take Euler steps over the flat
-            // volatility, which BlackScholesStepCache cannot reproduce.
-            ext::shared_ptr<GeneralizedBlackScholesProcess>
-            makeGeneralizedBlackScholesProcess(Date today, bool forceDiscretization = false) {
-                const auto dc = Actual360();
-                const auto spotQuote = ext::make_shared<SimpleQuote>(spot);
-
-                const auto qH_SME = ext::make_shared<SimpleQuote>(dividendYield);
-                const auto qTS = flatRate(today, qH_SME, dc);
-
-                const auto rH_SME = ext::make_shared<SimpleQuote>(riskfreeRate);
-                const auto rTS = flatRate(today, rH_SME, dc);
-
-                const auto volaQuote = ext::make_shared<SimpleQuote>(volatility);
-                const auto volTS = flatVol(today, volaQuote, dc);
-
-                return ext::make_shared<BlackScholesMertonProcess>(
-                    Handle<Quote>(spotQuote), Handle(qTS), Handle(rTS), Handle(volTS),
-                    ext::make_shared<EulerDiscretization>(), forceDiscretization);
-            }
         };
 
         // The Euler step through LocalVolSurface: zero curves linear between the nodes,
@@ -177,7 +148,7 @@ namespace RKE::TestSuite {
         // of 22 Jun 2025, which the helper also makes the evaluation date.
         struct FlatCase {
             OptionData optionData;
-            MarketData marketData;
+            RKE::Common::MarketData marketData;
             Date today;
             Date exerciseDate;
             ext::shared_ptr<GeneralizedBlackScholesProcess> process;
@@ -426,8 +397,9 @@ namespace RKE::TestSuite {
 
         // The forced discretization takes the Euler step through LocalConstantVol, where the
         // paths agree to their rounding.
-        checkLocalVolStepPrices(today, MarketData().makeGeneralizedBlackScholesProcess(today, true),
-                                1.0e-12);
+        checkLocalVolStepPrices(
+            today, RKE::Common::MarketData().makeGeneralizedBlackScholesProcess(today, true),
+            1.0e-12);
         // Under a smile LocalVolSurface amplifies a last bit along a path. Where the compiler
         // contracts to FMAs the prices then differ by up to 1.3e-8 relative, measured with gcc
         // and clang at -march=x86-64-v3, far inside the Monte Carlo error; without contraction

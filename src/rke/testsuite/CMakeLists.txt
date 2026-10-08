@@ -27,6 +27,7 @@ set_source_files_properties(
 
 target_link_libraries(rke_testsuite PRIVATE
         rke_ql_ext
+        rke_common
         rke::warnings
 )
 
