@@ -105,18 +105,23 @@ namespace RKE::QL::Ext {
         [[nodiscard]] QuantLib::TimeGrid timeGrid() const;
 
       private:
-        //! the process with rate, yield and volatility flattened at maturity
-        struct FlatMarket {
-            QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process_;
+        //! rate, yield and volatility flattened at maturity, and the maturity itself
+        struct FlatTerms {
             QuantLib::Rate r_ = 0.0;
             QuantLib::Rate q_ = 0.0;
             QuantLib::Volatility v_ = 0.0;
             QuantLib::Time maturity_ = 0.0;
         };
+        //! the terms and the process built from them
+        struct FlatMarket : FlatTerms {
+            QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process_;
+        };
 
         [[nodiscard]] QuantLib::ext::shared_ptr<BonusClassicPayoff> checkedPayoff() const;
+        //! the terms alone: all the step count needs, without the process and its observers
+        [[nodiscard]] FlatTerms flatTerms() const;
         [[nodiscard]] FlatMarket flatten() const;
-        [[nodiscard]] QuantLib::Size effectiveTimeSteps(const FlatMarket& flat) const;
+        [[nodiscard]] QuantLib::Size effectiveTimeSteps(const FlatTerms& flat) const;
         static QuantLib::Size resolvedMaxTimeSteps(QuantLib::Size timeSteps,
                                                    QuantLib::Size maxTimeSteps);
         static QuantLib::Size boyleLauSteps(QuantLib::Size timeSteps,
@@ -203,7 +208,7 @@ namespace RKE::QL::Ext {
     QuantLib::TimeGrid BinomialBonusClassicEngine<Tree>::timeGrid() const {
         // Empty until the instrument's setupArguments() has run, i.e. before the first NPV().
         QL_REQUIRE(arguments_.exercise, "no exercise given");
-        const auto flat = flatten();
+        const auto flat = flatTerms();
         // QuantLib::TimeGrid has an initializer_list<Time> constructor, which a braced
         // return selects over TimeGrid(Time, Size), narrowing steps to a Time.
         return QuantLib::TimeGrid( // NOLINT(modernize-return-braced-init-list)
@@ -226,8 +231,8 @@ namespace RKE::QL::Ext {
     }
 
     template <class Tree>
-    typename BinomialBonusClassicEngine<Tree>::FlatMarket
-    BinomialBonusClassicEngine<Tree>::flatten() const {
+    typename BinomialBonusClassicEngine<Tree>::FlatTerms
+    BinomialBonusClassicEngine<Tree>::flatTerms() const {
         const auto& riskFree = process_->riskFreeRate();
         const auto& dividends = process_->dividendYield();
         const auto& volatility = process_->blackVolatility();
@@ -237,36 +242,45 @@ namespace RKE::QL::Ext {
         const auto maturityDate = arguments_.exercise->lastDate();
         const auto referenceDate = riskFree->referenceDate();
         // QuantLib::BinomialBarrierEngine's choices: the date overload, read at the spot.
-        const auto v = volatility->blackVol(maturityDate, process_->x0());
-        const auto r =
-            riskFree->zeroRate(maturityDate, rfdc, QuantLib::Continuous, QuantLib::NoFrequency)
-                .rate();
-        const auto q =
-            dividends->zeroRate(maturityDate, divdc, QuantLib::Continuous, QuantLib::NoFrequency)
-                .rate();
-
-        const QuantLib::Handle<QuantLib::YieldTermStructure> flatRiskFree(
-            QuantLib::ext::make_shared<QuantLib::FlatForward>(referenceDate, r, rfdc));
-        const QuantLib::Handle<QuantLib::YieldTermStructure> flatDividends(
-            QuantLib::ext::make_shared<QuantLib::FlatForward>(referenceDate, q, divdc));
-        const QuantLib::Handle<QuantLib::BlackVolTermStructure> flatVolatility(
-            QuantLib::ext::make_shared<QuantLib::BlackConstantVol>(
-                referenceDate, volatility->calendar(), v, volatility->dayCounter()));
-
         return {
-            QuantLib::ext::make_shared<QuantLib::GeneralizedBlackScholesProcess>(
-                process_->stateVariable(), flatDividends, flatRiskFree, flatVolatility),
-            r,
-            q,
-            v,
+            riskFree->zeroRate(maturityDate, rfdc, QuantLib::Continuous, QuantLib::NoFrequency)
+                .rate(),
+            dividends->zeroRate(maturityDate, divdc, QuantLib::Continuous, QuantLib::NoFrequency)
+                .rate(),
+            volatility->blackVol(maturityDate, process_->x0()),
             // The same number as process_->time(maturityDate).
             rfdc.yearFraction(referenceDate, maturityDate),
         };
     }
 
     template <class Tree>
+    typename BinomialBonusClassicEngine<Tree>::FlatMarket
+    BinomialBonusClassicEngine<Tree>::flatten() const {
+        const auto terms = flatTerms();
+        const auto& riskFree = process_->riskFreeRate();
+        const auto& volatility = process_->blackVolatility();
+        const auto referenceDate = riskFree->referenceDate();
+
+        const QuantLib::Handle<QuantLib::YieldTermStructure> flatRiskFree(
+            QuantLib::ext::make_shared<QuantLib::FlatForward>(referenceDate, terms.r_,
+                                                              riskFree->dayCounter()));
+        const QuantLib::Handle<QuantLib::YieldTermStructure> flatDividends(
+            QuantLib::ext::make_shared<QuantLib::FlatForward>(
+                referenceDate, terms.q_, process_->dividendYield()->dayCounter()));
+        const QuantLib::Handle<QuantLib::BlackVolTermStructure> flatVolatility(
+            QuantLib::ext::make_shared<QuantLib::BlackConstantVol>(
+                referenceDate, volatility->calendar(), terms.v_, volatility->dayCounter()));
+
+        return {
+            terms,
+            QuantLib::ext::make_shared<QuantLib::GeneralizedBlackScholesProcess>(
+                process_->stateVariable(), flatDividends, flatRiskFree, flatVolatility),
+        };
+    }
+
+    template <class Tree>
     QuantLib::Size
-    BinomialBonusClassicEngine<Tree>::effectiveTimeSteps(const FlatMarket& flat) const {
+    BinomialBonusClassicEngine<Tree>::effectiveTimeSteps(const FlatTerms& flat) const {
         if constexpr (std::is_base_of_v<QuantLib::CoxRossRubinstein, Tree>) {
             return (maxTimeSteps_ > timeSteps_) ?
                        boyleLauSteps(timeSteps_, maxTimeSteps_, process_->x0(), arguments_.barrier,
