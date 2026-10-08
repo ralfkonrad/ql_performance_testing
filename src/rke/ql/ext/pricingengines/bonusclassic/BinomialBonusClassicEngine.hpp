@@ -107,11 +107,11 @@ namespace RKE::QL::Ext {
       private:
         //! the process with rate, yield and volatility flattened at maturity
         struct FlatMarket {
-            QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process;
-            QuantLib::Rate r = 0.0;
-            QuantLib::Rate q = 0.0;
-            QuantLib::Volatility v = 0.0;
-            QuantLib::Time maturity = 0.0;
+            QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process_;
+            QuantLib::Rate r_ = 0.0;
+            QuantLib::Rate q_ = 0.0;
+            QuantLib::Volatility v_ = 0.0;
+            QuantLib::Time maturity_ = 0.0;
         };
 
         [[nodiscard]] QuantLib::ext::shared_ptr<BonusClassicPayoff> checkedPayoff() const;
@@ -149,16 +149,16 @@ namespace RKE::QL::Ext {
         const auto payoff = checkedPayoff();
         const auto flat = flatten();
         const auto steps = effectiveTimeSteps(flat);
-        const QuantLib::TimeGrid grid(flat.maturity, steps);
+        const QuantLib::TimeGrid grid(flat.maturity_, steps);
 
         // The bonus level is the strike LeisenReimer and Joshi4 centre their nodes on.
-        const auto tree = QuantLib::ext::make_shared<Tree>(flat.process, flat.maturity, steps,
+        const auto tree = QuantLib::ext::make_shared<Tree>(flat.process_, flat.maturity_, steps,
                                                            payoff->bonusLevel());
         const auto lattice = QuantLib::ext::make_shared<QuantLib::BlackScholesLattice<Tree>>(
-            tree, flat.r, flat.maturity, steps);
+            tree, flat.r_, flat.maturity_, steps);
 
-        DiscretizedBonusClassicOption option(arguments_, flat.q, flat.maturity);
-        option.initialize(lattice, flat.maturity);
+        DiscretizedBonusClassicOption option(arguments_, flat.q_, flat.maturity_);
+        option.initialize(lattice, flat.maturity_);
 
         // Delta and gamma from the nodes of the first and second step, as in
         // QuantLib::BinomialVanillaEngine.
@@ -196,7 +196,7 @@ namespace RKE::QL::Ext {
             (delta == QuantLib::Null<QuantLib::Real>() ||
              gamma == QuantLib::Null<QuantLib::Real>()) ?
                 QuantLib::Null<QuantLib::Real>() :
-                QuantLib::blackScholesTheta(flat.process, results_.value, delta, gamma);
+                QuantLib::blackScholesTheta(flat.process_, results_.value, delta, gamma);
     }
 
     template <class Tree>
@@ -207,7 +207,7 @@ namespace RKE::QL::Ext {
         // QuantLib::TimeGrid has an initializer_list<Time> constructor, which a braced
         // return selects over TimeGrid(Time, Size), narrowing steps to a Time.
         return QuantLib::TimeGrid( // NOLINT(modernize-return-braced-init-list)
-            flat.maturity, effectiveTimeSteps(flat));
+            flat.maturity_, effectiveTimeSteps(flat));
     }
 
     template <class Tree>
@@ -270,7 +270,7 @@ namespace RKE::QL::Ext {
         if constexpr (std::is_base_of_v<QuantLib::CoxRossRubinstein, Tree>) {
             return (maxTimeSteps_ > timeSteps_) ?
                        boyleLauSteps(timeSteps_, maxTimeSteps_, process_->x0(), arguments_.barrier,
-                                     flat.v, flat.maturity) :
+                                     flat.v_, flat.maturity_) :
                        timeSteps_;
         } else if constexpr (std::is_base_of_v<QuantLib::LeisenReimer, Tree> ||
                              std::is_base_of_v<QuantLib::Joshi4, Tree>) {
