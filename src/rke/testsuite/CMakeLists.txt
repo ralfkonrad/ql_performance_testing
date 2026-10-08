@@ -10,10 +10,19 @@ add_executable(rke_testsuite
         ${PROJECT_SOURCE_DIR}/external/QuantLib/test-suite/utilities.hpp
 )
 
-# Required for every upstream source compiled into one of our targets.
+# Required for every upstream source compiled into one of our targets: neither linted nor
+# warning-gated, since rke::warnings and CMAKE_COMPILE_WARNING_AS_ERROR would otherwise fail
+# the build on an upstream line nothing in this repository may edit.
+if (MSVC)
+    set(RKE_NO_WARNINGS /w)
+else ()
+    set(RKE_NO_WARNINGS -w)
+endif ()
 set_source_files_properties(
         ${PROJECT_SOURCE_DIR}/external/QuantLib/test-suite/utilities.cpp
-        PROPERTIES SKIP_LINTING TRUE
+        PROPERTIES
+        SKIP_LINTING TRUE
+        COMPILE_OPTIONS ${RKE_NO_WARNINGS}
 )
 
 target_link_libraries(rke_testsuite PRIVATE

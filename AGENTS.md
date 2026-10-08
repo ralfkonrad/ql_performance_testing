@@ -57,10 +57,12 @@ itself. QuantLib, google-benchmark and CLI11 are git submodules under `external/
   `src/rke/benchmark/<workload>/CMakeLists.txt` and `src/rke/profile/<workload>/CMakeLists.txt`
   name every file. An unlisted header still compiles, so nothing will tell you it is
   missing.
-- **An upstream source compiled into one of our targets must not be linted.**
-  `src/rke/testsuite/CMakeLists.txt` pulls in
-  `external/QuantLib/test-suite/utilities.cpp` and sets `SKIP_LINTING TRUE` on
-  it. Any further upstream file added this way needs the same property.
+- **An upstream source compiled into one of our targets is neither linted nor
+  warning-gated.** `src/rke/testsuite/CMakeLists.txt` pulls in
+  `external/QuantLib/test-suite/utilities.cpp` and sets `SKIP_LINTING TRUE` and
+  `COMPILE_OPTIONS -w` (`/w` under MSVC) on it, because `rke::warnings` with
+  warnings as errors would otherwise fail the build on a line nothing here may
+  edit. Any further upstream file added this way needs both properties.
 
 ## 2. Task Guides
 
