@@ -283,7 +283,7 @@ the spot, which holds for CRR and Trigeorgis only.
 ```cpp
 class DiscretizedBonusClassicOption : public QuantLib::DiscretizedAsset {
   public:
-    DiscretizedBonusClassicOption(const BonusClassicOption::arguments& arguments,
+    DiscretizedBonusClassicOption(const BonusClassicOption::arguments& args,
                                   QuantLib::Rate dividendYield, // the flattened yield the tree uses
                                   QuantLib::Time maturity);
     void reset(QuantLib::Size size) override;
