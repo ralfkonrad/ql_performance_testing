@@ -134,6 +134,35 @@ namespace RKE::TestSuite {
                 BOOST_CHECK_CLOSE_FRACTION(cached, plain, tolerance);
             }
         }
+
+        // Broadie, Glasserman and Kou (1997), "A continuity correction for discrete barrier
+        // options", Mathematical Finance 7(4), 325-349: a down barrier monitored every dt prices
+        // like a continuously monitored one at H * exp(-beta * sigma * sqrt(dt)), with
+        // beta = -zeta(1/2) / sqrt(2 * pi).
+        Real bgkShiftedBarrier(Real barrier, Volatility volatility, Time dt) {
+            constexpr Real beta = 0.5826;
+            return barrier * std::exp(-beta * volatility * std::sqrt(dt));
+        }
+
+        // The certificate pays S_T once the barrier has been touched and max(S_T, bonusLevel)
+        // otherwise, i.e. S_T + 1{never touched} * max(bonusLevel - S_T, 0): the asset itself
+        // plus a down-and-out put struck at the bonus level. Receiving the asset at maturity is
+        // worth spot * exp(-q * T); AnalyticBarrierEngine prices the put under continuous
+        // monitoring of the barrier given here.
+        Real replicationPrice(const ext::shared_ptr<GeneralizedBlackScholesProcess>& process,
+                              const OptionData& data,
+                              Date exerciseDate,
+                              Real barrier) {
+            const auto assetLeg = process->x0() * process->dividendYield()->discount(exerciseDate);
+
+            auto downOutPut =
+                BarrierOption(Barrier::DownOut, barrier, 0.0,
+                              ext::make_shared<PlainVanillaPayoff>(Option::Put, data.bonusLevel),
+                              ext::make_shared<EuropeanExercise>(exerciseDate));
+            downOutPut.setPricingEngine(ext::make_shared<AnalyticBarrierEngine>(process));
+
+            return assetLeg + downOutPut.NPV();
+        }
     }
 
     BOOST_FIXTURE_TEST_SUITE(RkeQLExtTestSuite, TestSuiteFixture)
@@ -226,32 +255,14 @@ namespace RKE::TestSuite {
         bonusClassicOption->setPricingEngine(mcEngine);
         const auto npv = bonusClassicOption->NPV();
 
-        // The pricer pays S_T once the barrier has been touched and max(S_T, bonusLevel)
-        // otherwise, i.e. S_T + 1{never touched} * max(bonusLevel - S_T, 0): the asset
-        // itself plus a down-and-out put struck at the bonus level.
-        //
-        // AnalyticBarrierEngine assumes continuous monitoring, while the engine monitors
-        // on its time grid only. Broadie, Glasserman and Kou (1997), "A continuity
-        // correction for discrete barrier options", Mathematical Finance 7(4), 325-349,
-        // give the correction as a shift of a down barrier to H * exp(-beta * sigma *
-        // sqrt(dt)) with beta = -zeta(1/2) / sqrt(2 * pi).
+        // AnalyticBarrierEngine assumes continuous monitoring, while the engine monitors on
+        // its time grid only, so the replication takes the Broadie-Glasserman-Kou barrier.
         // Read from the engine's own grid, so the correction always uses the step the paths
         // were monitored on.
         const auto dt = mcEngine->timeGrid().dt(0);
-        constexpr Real beta = 0.5826;
-        const auto correctedBarrier =
-            option_data.barrier * std::exp(-beta * market_data.volatility * std::sqrt(dt));
-
-        // Receiving the asset at maturity is worth spot * exp(-q * T).
-        const auto assetLeg = process->x0() * process->dividendYield()->discount(exerciseDate);
-
-        auto downOutPut =
-            BarrierOption(Barrier::DownOut, correctedBarrier, 0.0,
-                          ext::make_shared<PlainVanillaPayoff>(Option::Put, option_data.bonusLevel),
-                          ext::make_shared<EuropeanExercise>(exerciseDate));
-        downOutPut.setPricingEngine(ext::make_shared<AnalyticBarrierEngine>(process));
-
-        const auto replication = assetLeg + downOutPut.NPV();
+        const auto replication =
+            replicationPrice(process, option_data, exerciseDate,
+                             bgkShiftedBarrier(option_data.barrier, market_data.volatility, dt));
 
         // Measured residual 3.8e-4 relative; the correction is O(1 / sqrt(steps)) and the
         // grid has 42 steps. Both sides are deterministic, so this is model error, not noise.
@@ -309,19 +320,10 @@ namespace RKE::TestSuite {
         bonusClassicOption->setPricingEngine(mcEngine);
         const auto npv = bonusClassicOption->NPV();
 
-        // The same decomposition as testBonusClassicOptionReplication: the asset plus a
-        // down-and-out put struck at the bonus level. The engine now monitors continuously,
-        // as AnalyticBarrierEngine assumes, so the put takes the barrier itself and no
-        // Broadie-Glasserman-Kou shift applies.
-        const auto assetLeg = process->x0() * process->dividendYield()->discount(exerciseDate);
-
-        auto downOutPut =
-            BarrierOption(Barrier::DownOut, option_data.barrier, 0.0,
-                          ext::make_shared<PlainVanillaPayoff>(Option::Put, option_data.bonusLevel),
-                          ext::make_shared<EuropeanExercise>(exerciseDate));
-        downOutPut.setPricingEngine(ext::make_shared<AnalyticBarrierEngine>(process));
-
-        const auto replication = assetLeg + downOutPut.NPV();
+        // The engine now monitors continuously, as AnalyticBarrierEngine assumes, so the put
+        // takes the barrier itself and no Broadie-Glasserman-Kou shift applies.
+        const auto replication =
+            replicationPrice(process, option_data, exerciseDate, option_data.barrier);
 
         // With flat r, q and sigma the bridge is exact, so the residual is sampling error
         // alone: measured 6.5e-5 relative at 50,000 paths, 1.5e-5 at 200,000 and 2.3e-5 at
