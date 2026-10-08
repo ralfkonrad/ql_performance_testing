@@ -23,11 +23,10 @@ using namespace QuantLib;
 namespace RKE::TestSuite {
     // Barrier monitoring dates of the MC engine are its time grid points.
     constexpr Size mcTimeStepsPerYear = 100;
-    // The FD grid QuantLib's own barrier tests price Haug's table on.
-    constexpr Size fdTimeGrid = 200;
-    constexpr Size fdSpaceGrid = 400;
-    // The step count QuantLib's own barrier tests price Haug's table with.
-    constexpr Size treeTimeSteps = 400;
+    // The FD grid and the tree's step count the benchmarks and profiles measure.
+    using RKE::Common::fdSpaceGrid;
+    using RKE::Common::fdTimeGrid;
+    using RKE::Common::treeTimeSteps;
 
     namespace {
         // Prices under LocalVolStepSingleVariate and SingleVariate, both monitoring modes, and

@@ -33,6 +33,15 @@ namespace RKE::Common {
     // spline on every lookup, which dominates its profile.
     enum class Market : std::uint8_t { Flat, SmileBilinear, SmileBicubic };
 
+    // MonteCarlo is MCBonusClassicEngine under LowDiscrepancy on monitoringStepsPerYear, in
+    // either monitoring mode and on every market, and the only engine that reads pathGeneration
+    // and samples. FiniteDifference is FdBlackScholesBonusClassicEngine on fdTimeGrid x
+    // fdSpaceGrid, monitored continuously or on the Monte-Carlo grid. Binomial is
+    // BinomialBonusClassicEngine<QuantLib::CoxRossRubinstein> on treeTimeSteps with Boyle-Lau,
+    // monitoring on every step, so discretely only. Neither of the last two supports local
+    // volatility, so both price the flat market only.
+    enum class Engine : std::uint8_t { MonteCarlo, FiniteDifference, Binomial };
+
     // The reference date every test, benchmark and profile prices as of.
     [[nodiscard]] inline QuantLib::Date evaluationDate() {
         return {22, QuantLib::Jun, 2025};
@@ -104,14 +113,36 @@ namespace RKE::Common {
     // swapped.
     inline constexpr QuantLib::Size productionSamples = QuantLib::Size{1} << 16U;
 
-    // Sets the evaluation date to 22 Jun 2025 and prices with MCBonusClassicEngine under
-    // LowDiscrepancy; isBiased selects discrete monitoring, otherwise continuous. A smoke test
-    // passes fewer samples than productionSamples, on the same time grid.
+    // The Monte-Carlo monitoring grid, and the finite-difference engine's under discrete
+    // monitoring: about one step per business day, 255 over the Actual360 year fraction
+    // 365/360, though not on the business days themselves.
+    inline constexpr QuantLib::Size monitoringStepsPerYear = 252;
+
+    // The FD grid QuantLib's own barrier tests price Haug's table on.
+    inline constexpr QuantLib::Size fdTimeGrid = 200;
+    inline constexpr QuantLib::Size fdSpaceGrid = 400;
+
+    // The step count QuantLib's own barrier tests price Haug's table with, before Boyle-Lau.
+    inline constexpr QuantLib::Size treeTimeSteps = 400;
+
+    // Sets the evaluation date to 22 Jun 2025 and prices with the engine on the market;
+    // isBiased selects discrete monitoring, otherwise continuous. pathGeneration and samples
+    // are read by MonteCarlo only; a smoke test passes fewer samples than productionSamples,
+    // on the same time grid. QL_REQUIRE rejects FiniteDifference and Binomial off the flat
+    // market, and Binomial under continuous monitoring.
     [[nodiscard]] BonusClassicOptionSetup
     makeBonusClassicOptionSetup(bool isBiased,
                                 PathGeneration pathGeneration = PathGeneration::CachedStep,
                                 Market market = Market::Flat,
-                                QuantLib::Size samples = productionSamples);
+                                QuantLib::Size samples = productionSamples,
+                                Engine engine = Engine::MonteCarlo);
+
+    // The steps of the engine's monitoring grid: the finite-difference engine's discrete grid,
+    // or the lattice after Boyle-Lau. Null<Size>() where there is nothing to report, i.e. under
+    // continuous monitoring and for the Monte-Carlo engine, whose grid is monitoringStepsPerYear
+    // by construction. The engines build the grid from the instrument's arguments, so the setup
+    // has to have priced once.
+    [[nodiscard]] QuantLib::Size monitoringSteps(const BonusClassicOptionSetup& setup);
 
     // The measured work. recalculate() is the point: NPV() alone returns the cached value, so a
     // loop would time one pricing and the rest cache reads.
