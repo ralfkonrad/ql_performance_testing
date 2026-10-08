@@ -59,6 +59,10 @@ namespace RKE::Common {
                                            bool forceDiscretization = false) const;
     };
 
+    // The certificate on data's levels, exercisable at today + data.ttm, with no engine set.
+    [[nodiscard]] QuantLib::ext::shared_ptr<RKE::QL::Ext::BonusClassicOption>
+    makeBonusClassicOption(const OptionData& data, QuantLib::Date today);
+
     // A production run's path count: a power of two, where a Sobol sequence is balanced.
     // SobolRsg skips the zero point, so these are points 1 to 2^16, the net with one point
     // swapped.

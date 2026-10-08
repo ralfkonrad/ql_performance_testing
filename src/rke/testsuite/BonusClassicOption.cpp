@@ -85,8 +85,7 @@ namespace RKE::TestSuite {
                                      Real tolerance) {
             auto option_data = RKE::Common::OptionData();
             option_data.ttm = Period(5, Months);
-            const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
-                option_data.barrier, option_data.bonusLevel, today + option_data.ttm);
+            const auto bonusClassicOption = RKE::Common::makeBonusClassicOption(option_data, today);
 
             for (const bool isBiased : {true, false}) {
                 bonusClassicOption->setPricingEngine(
@@ -155,11 +154,10 @@ namespace RKE::TestSuite {
             flat.today = RKE::Common::evaluationDate();
             Settings::instance().evaluationDate() = flat.today;
             flat.optionData.ttm = Period(5, Months);
-            flat.exerciseDate = flat.today + flat.optionData.ttm;
             flat.process =
                 flat.marketData.makeGeneralizedBlackScholesProcess(flat.today, forceDiscretization);
-            flat.option = ext::make_shared<BonusClassicOption>(
-                flat.optionData.barrier, flat.optionData.bonusLevel, flat.exerciseDate);
+            flat.option = RKE::Common::makeBonusClassicOption(flat.optionData, flat.today);
+            flat.exerciseDate = flat.option->exercise()->lastDate();
             return flat;
         }
     }
@@ -449,8 +447,10 @@ namespace RKE::TestSuite {
         // std::exp(std::log(85.0)) lies above 85, so a grid starting at std::log(85.0) would pay
         // the bonus on its first node at maturity; 90 maps back to itself.
         for (const Real barrier : {flat.optionData.barrier, 85.0}) {
-            const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
-                barrier, flat.optionData.bonusLevel, flat.exerciseDate);
+            auto optionData = flat.optionData;
+            optionData.barrier = barrier;
+            const auto bonusClassicOption =
+                RKE::Common::makeBonusClassicOption(optionData, flat.today);
             bonusClassicOption->setPricingEngine(ext::make_shared<FdBlackScholesBonusClassicEngine>(
                 flat.process, Null<Size>(), fdTimeGrid, fdSpaceGrid));
             const auto npv = bonusClassicOption->NPV();

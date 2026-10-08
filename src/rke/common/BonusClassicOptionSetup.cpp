@@ -38,6 +38,11 @@ namespace RKE::Common {
             forceDiscretization);
     }
 
+    ext::shared_ptr<BonusClassicOption> makeBonusClassicOption(const OptionData& data, Date today) {
+        return ext::make_shared<BonusClassicOption>(data.barrier, data.bonusLevel,
+                                                    today + data.ttm);
+    }
+
     namespace {
         // LowDiscrepancy with Joe-Kuo D7 direction integers, tabulated up to dimension 1898,
         // instead of SobolRsg's default Jaeckel ones, tabulated up to 32 and drawn from the seed
@@ -145,8 +150,6 @@ namespace RKE::Common {
         const auto today = evaluationDate();
         Settings::instance().evaluationDate() = today;
 
-        const auto exerciseDate = today + option_data.ttm;
-
         const auto process = market == Market::Flat ?
                                  market_data.makeGeneralizedBlackScholesProcess(today) :
                                  SmileMarketData().makeGeneralizedBlackScholesProcess(
@@ -168,9 +171,7 @@ namespace RKE::Common {
                                                              isBiased);
         }();
 
-        const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
-            option_data.barrier, option_data.bonusLevel, exerciseDate);
-
+        const auto bonusClassicOption = makeBonusClassicOption(option_data, today);
         bonusClassicOption->setPricingEngine(mcEngine);
 
         return {process, mcEngine, bonusClassicOption};
