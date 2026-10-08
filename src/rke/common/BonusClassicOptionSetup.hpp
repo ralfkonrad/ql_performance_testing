@@ -8,6 +8,7 @@
 #include <ql/instrument.hpp>
 #include <ql/pricingengine.hpp>
 #include <ql/processes/blackscholesprocess.hpp>
+#include <ql/time/period.hpp>
 #include <cstdint>
 
 namespace RKE::Common {
@@ -29,6 +30,13 @@ namespace RKE::Common {
     // with the surface bilinear or bicubic in time and strike. The bicubic surface rebuilds a
     // spline on every lookup, which dominates its profile.
     enum class Market : std::uint8_t { Flat, SmileBilinear, SmileBicubic };
+
+    struct OptionData {
+        QuantLib::Real barrier = 90.0;
+        QuantLib::Real bonusLevel = 120.00;
+        // The low end of a bonus certificate's usual one to two years; the tests price 5M.
+        QuantLib::Period ttm = QuantLib::Period(1, QuantLib::Years);
+    };
 
     // The flat reference market: the tests validate it, the benchmarks and profiles measure it.
     // Flat forward curves and a constant Black volatility, Actual360 and NullCalendar

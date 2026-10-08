@@ -36,12 +36,6 @@ namespace RKE::TestSuite {
     constexpr Size treeTimeSteps = 400;
 
     namespace {
-        struct OptionData {
-            Real barrier = 90.0;
-            Real bonusLevel = 120.00;
-            Period ttm = Period(5, Months);
-        };
-
         // The Euler step through LocalVolSurface: zero curves linear between the nodes,
         // continuously compounded, and a bilinear Black variance surface with
         // sigma(K) = 0.20 - 0.08 ln(K / 100) on every date. The strikes reach far beyond any
@@ -89,7 +83,8 @@ namespace RKE::TestSuite {
         void checkLocalVolStepPrices(Date today,
                                      const ext::shared_ptr<GeneralizedBlackScholesProcess>& process,
                                      Real tolerance) {
-            const auto option_data = OptionData();
+            auto option_data = RKE::Common::OptionData();
+            option_data.ttm = Period(5, Months);
             const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
                 option_data.barrier, option_data.bonusLevel, today + option_data.ttm);
 
@@ -130,7 +125,7 @@ namespace RKE::TestSuite {
         // worth spot * exp(-q * T); AnalyticBarrierEngine prices the put under continuous
         // monitoring of the barrier given here.
         Real replicationPrice(const ext::shared_ptr<GeneralizedBlackScholesProcess>& process,
-                              const OptionData& data,
+                              const RKE::Common::OptionData& data,
                               Date exerciseDate,
                               Real barrier) {
             const auto assetLeg = process->x0() * process->dividendYield()->discount(exerciseDate);
@@ -144,10 +139,10 @@ namespace RKE::TestSuite {
             return assetLeg + downOutPut.NPV();
         }
 
-        // The flat market every case prices: the option with its 5M maturity and the process as
-        // of 22 Jun 2025, which the helper also makes the evaluation date.
+        // The flat market every case prices: the option with its maturity cut to 5M and the
+        // process as of 22 Jun 2025, which the helper also makes the evaluation date.
         struct FlatCase {
-            OptionData optionData;
+            RKE::Common::OptionData optionData;
             RKE::Common::MarketData marketData;
             Date today;
             Date exerciseDate;
@@ -159,6 +154,7 @@ namespace RKE::TestSuite {
             auto flat = FlatCase();
             flat.today = Date(22, Jun, 2025);
             Settings::instance().evaluationDate() = flat.today;
+            flat.optionData.ttm = Period(5, Months);
             flat.exerciseDate = flat.today + flat.optionData.ttm;
             flat.process =
                 flat.marketData.makeGeneralizedBlackScholesProcess(flat.today, forceDiscretization);
@@ -176,7 +172,7 @@ namespace RKE::TestSuite {
         testBonusClassicPayoff) { // NOLINT(misc-use-internal-linkage): the struct is the macro's
         BOOST_TEST_MESSAGE("BonusClassicPayoff test");
 
-        const auto data = OptionData();
+        const auto data = RKE::Common::OptionData();
         const auto payoff = BonusClassicPayoff(data.barrier, data.bonusLevel);
 
         BOOST_CHECK_EQUAL(payoff(80.00), 80.00);

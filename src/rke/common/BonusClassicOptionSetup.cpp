@@ -63,13 +63,6 @@ namespace RKE::Common {
                 42);
         }
 
-        struct OptionData {
-            Real barrier = 90.0;
-            Real bonusLevel = 120.00;
-            // The low end of a bonus certificate's usual one to two years; the tests price 5M.
-            Period ttm = Period(1, Years);
-        };
-
         // Around MarketData's levels, shaped so every call in the Euler step does real work:
         // zero rates linear between the nodes, continuously compounded, and a Black variance
         // surface bilinear or bicubic in time and strike. Actual360 and NullCalendar throughout.
