@@ -7,9 +7,11 @@
 //     rke_profile_bonusclassicoption [discrete|continuous] [iterations]
 //                                    [--path-generation cached|uncached]
 //                                    [--market flat|smile-bilinear|smile-bicubic]
+//                                    [--samples=<paths per pricing>]
 //
-// Defaults are discrete, 10, cached and flat, about 20,000 samples under perf -F 999; one
-// iteration is enough under callgrind, which counts instructions exactly.
+// Defaults are discrete, 10, cached, flat and 2^16 paths, about 20,000 samples under perf
+// -F 999; one iteration is enough under callgrind, which counts instructions exactly, and
+// fewer paths keep a smile market countable there, since Ir per step does not depend on them.
 
 #include <rke/common/BonusClassicOptionSetup.hpp>
 #include <CLI/CLI.hpp>
@@ -30,6 +32,7 @@ namespace RKE::Profile {
             Size iterations = 10;
             std::string pathGeneration = "cached";
             std::string market = "flat";
+            Size samples = productionSamples;
         };
 
         // One table per option: CLI::IsMember validates against the keys, run() looks the value
@@ -72,14 +75,17 @@ namespace RKE::Profile {
                            "Flat curves and volatility, or zero curves and a smile surface")
                 ->check(CLI::IsMember(&tables().markets))
                 ->capture_default_str();
+            app.add_option("--samples", arguments.samples, "Paths per pricing")
+                ->check(CLI::Range(Size{1}, std::numeric_limits<Size>::max()))
+                ->capture_default_str();
         }
 
         void run(const Arguments& arguments) {
             // Built before the loop, as in the benchmark, so the profile shows pricing only.
-            const auto setup =
-                makeBonusClassicOptionSetup(tables().monitorings.at(arguments.monitoring),
-                                            tables().pathGenerations.at(arguments.pathGeneration),
-                                            tables().markets.at(arguments.market));
+            const auto setup = makeBonusClassicOptionSetup(
+                tables().monitorings.at(arguments.monitoring),
+                tables().pathGenerations.at(arguments.pathGeneration),
+                tables().markets.at(arguments.market), arguments.samples);
 
             Real npv = Null<Real>();
             for (Size i = 0; i < arguments.iterations; ++i) {
@@ -87,8 +93,9 @@ namespace RKE::Profile {
             }
 
             std::cout << arguments.monitoring << ", " << arguments.pathGeneration << ", "
-                      << arguments.market << ", " << arguments.iterations << " iterations, NPV "
-                      << std::setprecision(17) << npv << '\n';
+                      << arguments.market << ", " << arguments.samples << " paths, "
+                      << arguments.iterations << " iterations, NPV " << std::setprecision(17) << npv
+                      << '\n';
         }
     }
 }
