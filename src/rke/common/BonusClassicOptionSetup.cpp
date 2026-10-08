@@ -10,6 +10,7 @@
 #include <ql/math/randomnumbers/sobolrsg.hpp>
 #include <ql/math/statistics/statistics.hpp>
 #include <ql/methods/montecarlo/mctraits.hpp>
+#include <ql/processes/eulerdiscretization.hpp>
 #include <ql/quotes/simplequote.hpp>
 #include <ql/settings.hpp>
 #include <ql/termstructures/volatility/equityfx/blackconstantvol.hpp>
@@ -25,26 +26,37 @@ using namespace RKE::QL::Ext;
 using namespace QuantLib;
 
 namespace RKE::Common {
+    ext::shared_ptr<GeneralizedBlackScholesProcess>
+    MarketData::makeGeneralizedBlackScholesProcess(Date today, bool forceDiscretization) const {
+        const auto dc = Actual360();
+        const auto spotQuote = ext::make_shared<SimpleQuote>(spot);
+
+        const auto qH_SME = ext::make_shared<SimpleQuote>(dividendYield);
+        const auto qTS = Handle<YieldTermStructure>(
+            ext::make_shared<FlatForward>(today, Handle<Quote>(qH_SME), dc));
+
+        const auto rH_SME = ext::make_shared<SimpleQuote>(riskfreeRate);
+        const auto rTS = Handle<YieldTermStructure>(
+            ext::make_shared<FlatForward>(today, Handle<Quote>(rH_SME), dc));
+
+        const auto volaQuote = ext::make_shared<SimpleQuote>(volatility);
+        const auto volTS = Handle<BlackVolTermStructure>(ext::make_shared<BlackConstantVol>(
+            today, NullCalendar(), Handle<Quote>(volaQuote), dc));
+
+        return ext::make_shared<BlackScholesMertonProcess>(
+            Handle<Quote>(spotQuote), qTS, rTS, volTS, ext::make_shared<EulerDiscretization>(),
+            forceDiscretization);
+    }
+
     namespace {
-        // Duplicates test-suite/utilities.hpp, which compiles into the test target only; the
-        // market and its conventions are the tests', the maturity and the simulation are not.
-        ext::shared_ptr<YieldTermStructure>
-        flatRate(const Date& today, const ext::shared_ptr<Quote>& forward, const DayCounter& dc) {
-            return ext::make_shared<FlatForward>(today, Handle<Quote>(forward), dc);
-        }
-
-        ext::shared_ptr<BlackVolTermStructure>
-        flatVol(const Date& today, const ext::shared_ptr<Quote>& vol, const DayCounter& dc) {
-            return ext::make_shared<BlackConstantVol>(today, NullCalendar(), Handle<Quote>(vol),
-                                                      dc);
-        }
-
         // LowDiscrepancy with Joe-Kuo D7 direction integers, tabulated up to dimension 1898,
         // instead of SobolRsg's default Jaeckel ones, tabulated up to 32 and drawn from the seed
-        // beyond. One dimension per time step, so a daily grid needs the former.
+        // beyond. One dimension per time step, so a daily grid needs the former. Otherwise the
+        // factory is GenericLowDiscrepancy's, icInstance included.
         struct LowDiscrepancyJoeKuoD7 : LowDiscrepancy {
             static rsg_type make_sequence_generator(Size dimension, BigNatural seed) {
-                return rsg_type(SobolRsg(dimension, seed, SobolRsg::JoeKuoD7));
+                const auto g = SobolRsg(dimension, seed, SobolRsg::JoeKuoD7);
+                return icInstance ? rsg_type(g, *icInstance) : rsg_type(g);
             }
         };
 
@@ -54,8 +66,11 @@ namespace RKE::Common {
                    Size timeStepsPerYear,
                    Size samples,
                    bool isBiased) {
+            // maxSamples is McSimulation's own no-bound default; samples + 1 would wrap for the
+            // largest count the --samples options admit.
             return ext::make_shared<MCBonusClassicEngine<LowDiscrepancyJoeKuoD7, Statistics, MC>>(
-                process, timeStepsPerYear, samples, samples + 1, Null<Real>(), isBiased, true, 42);
+                process, timeStepsPerYear, samples, QL_MAX_INTEGER, Null<Real>(), isBiased, true,
+                42);
         }
 
         struct OptionData {
@@ -63,31 +78,6 @@ namespace RKE::Common {
             Real bonusLevel = 120.00;
             // The low end of a bonus certificate's usual one to two years; the tests price 5M.
             Period ttm = Period(1, Years);
-        };
-
-        struct MarketData {
-            Real spot = 100.00;
-            Real riskfreeRate = 0.01;
-            Real dividendYield = 0.03;
-            Real volatility = 0.20;
-
-            ext::shared_ptr<GeneralizedBlackScholesProcess>
-            makeGeneralizedBlackScholesProcess(Date today) {
-                const auto dc = Actual360();
-                const auto spotQuote = ext::make_shared<SimpleQuote>(spot);
-
-                const auto qH_SME = ext::make_shared<SimpleQuote>(dividendYield);
-                const auto qTS = flatRate(today, qH_SME, dc);
-
-                const auto rH_SME = ext::make_shared<SimpleQuote>(riskfreeRate);
-                const auto rTS = flatRate(today, rH_SME, dc);
-
-                const auto volaQuote = ext::make_shared<SimpleQuote>(volatility);
-                const auto volTS = flatVol(today, volaQuote, dc);
-
-                return ext::make_shared<BlackScholesMertonProcess>(
-                    Handle<Quote>(spotQuote), Handle(qTS), Handle(rTS), Handle(volTS));
-            }
         };
 
         // Around MarketData's levels, shaped so every call in the Euler step does real work:
@@ -167,7 +157,7 @@ namespace RKE::Common {
                                                         Market market,
                                                         Size samples) {
         const auto option_data = OptionData();
-        auto market_data = MarketData();
+        const auto market_data = MarketData();
 
         const auto today = Date(22, Jun, 2025);
         Settings::instance().evaluationDate() = today;

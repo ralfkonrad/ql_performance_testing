@@ -30,6 +30,21 @@ namespace RKE::Common {
     // spline on every lookup, which dominates its profile.
     enum class Market : std::uint8_t { Flat, SmileBilinear, SmileBicubic };
 
+    // The flat reference market: the tests validate it, the benchmarks and profiles measure it.
+    // Flat forward curves and a constant Black volatility, Actual360 and NullCalendar
+    // throughout, under EulerDiscretization. forceDiscretization = true makes evolve() take
+    // Euler steps over the flat volatility, which BlackScholesStepCache cannot reproduce.
+    struct MarketData {
+        QuantLib::Real spot = 100.00;
+        QuantLib::Real riskfreeRate = 0.01;
+        QuantLib::Real dividendYield = 0.03;
+        QuantLib::Volatility volatility = 0.20;
+
+        [[nodiscard]] QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess>
+        makeGeneralizedBlackScholesProcess(QuantLib::Date today,
+                                           bool forceDiscretization = false) const;
+    };
+
     // A production run's path count: a power of two, where a Sobol sequence is balanced.
     // SobolRsg skips the zero point, so these are points 1 to 2^16, the net with one point
     // swapped.

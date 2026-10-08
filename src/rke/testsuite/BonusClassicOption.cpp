@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "TestSuiteFixture.hpp"
+#include <rke/common/BonusClassicOptionSetup.hpp>
 #include <rke/ql/ext/instruments/BonusClassicOption.hpp>
 #include <rke/ql/ext/pricingengines/bonusclassic/BinomialBonusClassicEngine.hpp>
 #include <rke/ql/ext/pricingengines/bonusclassic/FdBlackScholesBonusClassicEngine.hpp>
@@ -12,7 +13,6 @@
 #include <ql/methods/montecarlo/mctraits.hpp>
 #include <ql/pricingengines/barrier/analyticbarrierengine.hpp>
 #include <ql/processes/blackscholesprocess.hpp>
-#include <ql/processes/eulerdiscretization.hpp>
 #include <ql/quotes/simplequote.hpp>
 #include <ql/termstructures/volatility/equityfx/blackvariancesurface.hpp>
 #include <ql/termstructures/yield/zerocurve.hpp>
@@ -20,7 +20,6 @@
 #include <ql/time/daycounters/actual360.hpp>
 #include <boost/test/unit_test.hpp>
 #include <cmath>
-#include <test-suite/utilities.hpp>
 #include <utility>
 #include <vector>
 
@@ -41,34 +40,6 @@ namespace RKE::TestSuite {
             Real barrier = 90.0;
             Real bonusLevel = 120.00;
             Period ttm = Period(5, Months);
-        };
-
-        struct MarketData {
-            Real spot = 100.00;
-            Real riskfreeRate = 0.01;
-            Real dividendYield = 0.03;
-            Real volatility = 0.20;
-
-            // forceDiscretization = true makes evolve() take Euler steps over the flat
-            // volatility, which BlackScholesStepCache cannot reproduce.
-            ext::shared_ptr<GeneralizedBlackScholesProcess>
-            makeGeneralizedBlackScholesProcess(Date today, bool forceDiscretization = false) {
-                const auto dc = Actual360();
-                const auto spotQuote = ext::make_shared<SimpleQuote>(spot);
-
-                const auto qH_SME = ext::make_shared<SimpleQuote>(dividendYield);
-                const auto qTS = flatRate(today, qH_SME, dc);
-
-                const auto rH_SME = ext::make_shared<SimpleQuote>(riskfreeRate);
-                const auto rTS = flatRate(today, rH_SME, dc);
-
-                const auto volaQuote = ext::make_shared<SimpleQuote>(volatility);
-                const auto volTS = flatVol(today, volaQuote, dc);
-
-                return ext::make_shared<BlackScholesMertonProcess>(
-                    Handle<Quote>(spotQuote), Handle(qTS), Handle(rTS), Handle(volTS),
-                    ext::make_shared<EulerDiscretization>(), forceDiscretization);
-            }
         };
 
         // The Euler step through LocalVolSurface: zero curves linear between the nodes,
@@ -172,6 +143,29 @@ namespace RKE::TestSuite {
 
             return assetLeg + downOutPut.NPV();
         }
+
+        // The flat market every case prices: the option with its 5M maturity and the process as
+        // of 22 Jun 2025, which the helper also makes the evaluation date.
+        struct FlatCase {
+            OptionData optionData;
+            RKE::Common::MarketData marketData;
+            Date today;
+            Date exerciseDate;
+            ext::shared_ptr<GeneralizedBlackScholesProcess> process;
+            ext::shared_ptr<BonusClassicOption> option;
+        };
+
+        FlatCase makeFlatCase(bool forceDiscretization = false) {
+            auto flat = FlatCase();
+            flat.today = Date(22, Jun, 2025);
+            Settings::instance().evaluationDate() = flat.today;
+            flat.exerciseDate = flat.today + flat.optionData.ttm;
+            flat.process =
+                flat.marketData.makeGeneralizedBlackScholesProcess(flat.today, forceDiscretization);
+            flat.option = ext::make_shared<BonusClassicOption>(
+                flat.optionData.barrier, flat.optionData.bonusLevel, flat.exerciseDate);
+            return flat;
+        }
     }
 
     BOOST_FIXTURE_TEST_SUITE(RkeQLExtTestSuite, TestSuiteFixture)
@@ -196,20 +190,12 @@ namespace RKE::TestSuite {
         testBonusClassicOption) { // NOLINT(misc-use-internal-linkage): the struct is the macro's
         BOOST_TEST_MESSAGE("BonusClassicOption test");
 
-        const auto data = OptionData();
+        const auto flat = makeFlatCase();
 
-        const auto today = Date(22, Jun, 2025);
-        Settings::instance().evaluationDate() = today;
-
-        const auto exerciseDate = today + data.ttm;
-
-        const auto bonusClassicOption =
-            ext::make_shared<BonusClassicOption>(data.barrier, data.bonusLevel, exerciseDate);
-
-        BOOST_CHECK_EQUAL(bonusClassicOption->exercise()->type(), Exercise::European);
-        BOOST_CHECK_EQUAL(bonusClassicOption->exercise()->lastDate(), Date(22, Nov, 2025));
-        BOOST_CHECK_EQUAL(bonusClassicOption->barrier(), data.barrier);
-        BOOST_CHECK_EQUAL(bonusClassicOption->bonusLevel(), data.bonusLevel);
+        BOOST_CHECK_EQUAL(flat.option->exercise()->type(), Exercise::European);
+        BOOST_CHECK_EQUAL(flat.option->exercise()->lastDate(), Date(22, Nov, 2025));
+        BOOST_CHECK_EQUAL(flat.option->barrier(), flat.optionData.barrier);
+        BOOST_CHECK_EQUAL(flat.option->bonusLevel(), flat.optionData.bonusLevel);
     }
 
     BOOST_AUTO_TEST_CASE(testBonusClassicOptionEngineGuards) { // NOLINT(misc-use-internal-linkage):
@@ -217,12 +203,7 @@ namespace RKE::TestSuite {
         BOOST_TEST_MESSAGE("BonusClassicOption engines fail with a QuantLib::Error on a null "
                            "process and on timeGrid() before the first NPV()");
 
-        auto market_data = MarketData();
-
-        const auto today = Date(22, Jun, 2025);
-        Settings::instance().evaluationDate() = today;
-
-        const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
+        const auto flat = makeFlatCase();
 
         BOOST_CHECK_THROW(MCBonusClassicEngine<LowDiscrepancy>(nullptr, mcTimeStepsPerYear, 1'000,
                                                                1'001, Null<Real>(), true, true, 42),
@@ -232,12 +213,12 @@ namespace RKE::TestSuite {
                           Error);
 
         // The arguments, the exercise among them, are empty until an instrument sets them up.
-        const MCBonusClassicEngine<LowDiscrepancy> mcEngine(process, mcTimeStepsPerYear, 1'000,
+        const MCBonusClassicEngine<LowDiscrepancy> mcEngine(flat.process, mcTimeStepsPerYear, 1'000,
                                                             1'001, Null<Real>(), true, true, 42);
         BOOST_CHECK_THROW(static_cast<void>(mcEngine.timeGrid()), Error);
-        const FdBlackScholesBonusClassicEngine fdEngine(process, mcTimeStepsPerYear);
+        const FdBlackScholesBonusClassicEngine fdEngine(flat.process, mcTimeStepsPerYear);
         BOOST_CHECK_THROW(static_cast<void>(fdEngine.timeGrid()), Error);
-        const BinomialBonusClassicEngine<CoxRossRubinstein> treeEngine(process, treeTimeSteps);
+        const BinomialBonusClassicEngine<CoxRossRubinstein> treeEngine(flat.process, treeTimeSteps);
         BOOST_CHECK_THROW(static_cast<void>(treeEngine.timeGrid()), Error);
     }
 
@@ -247,27 +228,23 @@ namespace RKE::TestSuite {
         BOOST_TEST_MESSAGE("BonusClassicOption rejects a barrier or bonus level at or below "
                            "zero before any engine runs");
 
-        const auto option_data = OptionData();
-        auto market_data = MarketData();
-
-        const auto today = Date(22, Jun, 2025);
-        Settings::instance().evaluationDate() = today;
-
-        const auto exerciseDate = today + option_data.ttm;
-        const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
+        const auto flat = makeFlatCase();
 
         // One engine per method; the FD engine in continuous mode is the one whose grid would
         // otherwise take log(0) and fail deep inside the solver.
         const std::vector<ext::shared_ptr<PricingEngine>> engines = {
             ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-                process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(), true, true, 42),
-            ext::make_shared<FdBlackScholesBonusClassicEngine>(process),
-            ext::make_shared<BinomialBonusClassicEngine<CoxRossRubinstein>>(process, treeTimeSteps),
+                flat.process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(), true, true, 42),
+            ext::make_shared<FdBlackScholesBonusClassicEngine>(flat.process),
+            ext::make_shared<BinomialBonusClassicEngine<CoxRossRubinstein>>(flat.process,
+                                                                            treeTimeSteps),
         };
         for (const auto& engine : engines) {
-            for (const auto& [barrier, bonusLevel] :
-                 {std::pair{0.0, option_data.bonusLevel}, std::pair{option_data.barrier, 0.0}}) {
-                BonusClassicOption option(barrier, bonusLevel, exerciseDate);
+            for (const auto& [barrier, bonusLevel] : {
+                     std::pair{0.0, flat.optionData.bonusLevel},
+                     std::pair{flat.optionData.barrier, 0.0},
+                 }) {
+                BonusClassicOption option(barrier, bonusLevel, flat.exerciseDate);
                 option.setPricingEngine(engine);
                 BOOST_CHECK_THROW(static_cast<void>(option.NPV()), Error);
             }
@@ -278,26 +255,16 @@ namespace RKE::TestSuite {
                                                             // the struct is the macro's
         BOOST_TEST_MESSAGE("BonusClassicOption valuation test");
 
-        const auto option_data = OptionData();
-        auto market_data = MarketData();
+        const auto flat = makeFlatCase();
 
-        const auto today = Date(22, Jun, 2025);
-        Settings::instance().evaluationDate() = today;
-
-        const auto exerciseDate = today + option_data.ttm;
-
-        const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
-            option_data.barrier, option_data.bonusLevel, exerciseDate);
-
-        const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
         // The Null<Real>() tolerance is mandatory, not a default: with no error estimate under
         // LowDiscrepancy, McSimulation::calculate takes the fixed-sample branch and maxSamples
         // never applies.
         const auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-            process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), true, true, 42);
+            flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), true, true, 42);
 
-        bonusClassicOption->setPricingEngine(mcEngine);
-        const auto npv = bonusClassicOption->NPV();
+        flat.option->setPricingEngine(mcEngine);
+        const auto npv = flat.option->NPV();
 
         // Regression lock. The low-discrepancy sequence is deterministic for a fixed seed
         // and time grid, so this pins the engine to its own output; it is not an
@@ -309,31 +276,21 @@ namespace RKE::TestSuite {
                                                               // the struct is the macro's
         BOOST_TEST_MESSAGE("BonusClassicOption replication test");
 
-        const auto option_data = OptionData();
-        auto market_data = MarketData();
+        const auto flat = makeFlatCase();
 
-        const auto today = Date(22, Jun, 2025);
-        Settings::instance().evaluationDate() = today;
-
-        const auto exerciseDate = today + option_data.ttm;
-
-        const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
-
-        const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
-            option_data.barrier, option_data.bonusLevel, exerciseDate);
         const auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-            process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), true, true, 42);
-        bonusClassicOption->setPricingEngine(mcEngine);
-        const auto npv = bonusClassicOption->NPV();
+            flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), true, true, 42);
+        flat.option->setPricingEngine(mcEngine);
+        const auto npv = flat.option->NPV();
 
         // AnalyticBarrierEngine assumes continuous monitoring, while the engine monitors on
         // its time grid only, so the replication takes the Broadie-Glasserman-Kou barrier.
         // Read from the engine's own grid, so the correction always uses the step the paths
         // were monitored on.
         const auto dt = mcEngine->timeGrid().dt(0);
-        const auto replication =
-            replicationPrice(process, option_data, exerciseDate,
-                             bgkShiftedBarrier(option_data.barrier, market_data.volatility, dt));
+        const auto replication = replicationPrice(
+            flat.process, flat.optionData, flat.exerciseDate,
+            bgkShiftedBarrier(flat.optionData.barrier, flat.marketData.volatility, dt));
 
         // Measured residual 3.8e-4 relative; the correction is O(1 / sqrt(steps)) and the
         // grid has 42 steps. Both sides are deterministic, so this is model error, not noise.
@@ -345,23 +302,13 @@ namespace RKE::TestSuite {
                                                      // the struct is the macro's
         BOOST_TEST_MESSAGE("BonusClassicOption continuous valuation test");
 
-        const auto option_data = OptionData();
-        auto market_data = MarketData();
+        const auto flat = makeFlatCase();
 
-        const auto today = Date(22, Jun, 2025);
-        Settings::instance().evaluationDate() = today;
-
-        const auto exerciseDate = today + option_data.ttm;
-
-        const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
-            option_data.barrier, option_data.bonusLevel, exerciseDate);
-
-        const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
         const auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-            process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), false, true, 42);
+            flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), false, true, 42);
 
-        bonusClassicOption->setPricingEngine(mcEngine);
-        const auto npv = bonusClassicOption->NPV();
+        flat.option->setPricingEngine(mcEngine);
+        const auto npv = flat.option->NPV();
 
         // Regression lock, as in testBonusClassicOptionValuation: the engine's own output for
         // a fixed seed and grid, not an externally validated price. See
@@ -374,27 +321,17 @@ namespace RKE::TestSuite {
                                                        // the struct is the macro's
         BOOST_TEST_MESSAGE("BonusClassicOption continuous replication test");
 
-        const auto option_data = OptionData();
-        auto market_data = MarketData();
+        const auto flat = makeFlatCase();
 
-        const auto today = Date(22, Jun, 2025);
-        Settings::instance().evaluationDate() = today;
-
-        const auto exerciseDate = today + option_data.ttm;
-
-        const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
-
-        const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
-            option_data.barrier, option_data.bonusLevel, exerciseDate);
         const auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-            process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), false, true, 42);
-        bonusClassicOption->setPricingEngine(mcEngine);
-        const auto npv = bonusClassicOption->NPV();
+            flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), false, true, 42);
+        flat.option->setPricingEngine(mcEngine);
+        const auto npv = flat.option->NPV();
 
         // The engine now monitors continuously, as AnalyticBarrierEngine assumes, so the put
         // takes the barrier itself and no Broadie-Glasserman-Kou shift applies.
-        const auto replication =
-            replicationPrice(process, option_data, exerciseDate, option_data.barrier);
+        const auto replication = replicationPrice(flat.process, flat.optionData, flat.exerciseDate,
+                                                  flat.optionData.barrier);
 
         // With flat r, q and sigma the bridge is exact, so the residual is sampling error
         // alone: measured 6.5e-5 relative at 50,000 paths, 1.5e-5 at 200,000 and 2.3e-5 at
@@ -407,26 +344,15 @@ namespace RKE::TestSuite {
                                                  // the struct is the macro's
         BOOST_TEST_MESSAGE("BonusClassicOption monitoring order test");
 
-        const auto option_data = OptionData();
-        auto market_data = MarketData();
+        const auto flat = makeFlatCase();
 
-        const auto today = Date(22, Jun, 2025);
-        Settings::instance().evaluationDate() = today;
+        flat.option->setPricingEngine(ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
+            flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), true, true, 42));
+        const auto discrete = flat.option->NPV();
 
-        const auto exerciseDate = today + option_data.ttm;
-
-        const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
-
-        const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
-            option_data.barrier, option_data.bonusLevel, exerciseDate);
-
-        bonusClassicOption->setPricingEngine(ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-            process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), true, true, 42));
-        const auto discrete = bonusClassicOption->NPV();
-
-        bonusClassicOption->setPricingEngine(ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-            process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), false, true, 42));
-        const auto continuous = bonusClassicOption->NPV();
+        flat.option->setPricingEngine(ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
+            flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), false, true, 42));
+        const auto continuous = flat.option->NPV();
 
         // Continuous monitoring sees every crossing the grid sees and more, and a knock-out
         // only removes the bonus put, so on the same paths the continuous price is lower.
@@ -440,29 +366,19 @@ namespace RKE::TestSuite {
         BOOST_TEST_MESSAGE("BonusClassicOption prices the same under CachedStepSingleVariate and "
                            "SingleVariate");
 
-        const auto option_data = OptionData();
-        auto market_data = MarketData();
-
-        const auto today = Date(22, Jun, 2025);
-        Settings::instance().evaluationDate() = today;
-
-        const auto exerciseDate = today + option_data.ttm;
-
-        const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
-
-        const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
-            option_data.barrier, option_data.bonusLevel, exerciseDate);
+        const auto flat = makeFlatCase();
 
         for (const bool isBiased : {true, false}) {
-            bonusClassicOption->setPricingEngine(
-                ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-                    process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), isBiased, true, 42));
-            const auto cached = bonusClassicOption->NPV();
+            flat.option->setPricingEngine(ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
+                flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), isBiased, true,
+                42));
+            const auto cached = flat.option->NPV();
 
-            bonusClassicOption->setPricingEngine(
+            flat.option->setPricingEngine(
                 ext::make_shared<MCBonusClassicEngine<LowDiscrepancy, Statistics, SingleVariate>>(
-                    process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), isBiased, true, 42));
-            const auto plain = bonusClassicOption->NPV();
+                    flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), isBiased, true,
+                    42));
+            const auto plain = flat.option->NPV();
 
             // Exact on purpose: the cached step is the double QuantLib::PathGenerator evolves,
             // so the traits move no price.
@@ -481,8 +397,9 @@ namespace RKE::TestSuite {
 
         // The forced discretization takes the Euler step through LocalConstantVol, where the
         // paths agree to their rounding.
-        checkLocalVolStepPrices(today, MarketData().makeGeneralizedBlackScholesProcess(today, true),
-                                1.0e-12);
+        checkLocalVolStepPrices(
+            today, RKE::Common::MarketData().makeGeneralizedBlackScholesProcess(today, true),
+            1.0e-12);
         // Under a smile LocalVolSurface amplifies a last bit along a path. Where the compiler
         // contracts to FMAs the prices then differ by up to 1.3e-8 relative, measured with gcc
         // and clang at -march=x86-64-v3, far inside the Monte Carlo error; without contraction
@@ -495,29 +412,18 @@ namespace RKE::TestSuite {
         BOOST_TEST_MESSAGE("BonusClassicOption refuses an inexact step under "
                            "CachedStepSingleVariate and prices it under SingleVariate");
 
-        const auto option_data = OptionData();
-        auto market_data = MarketData();
-
-        const auto today = Date(22, Jun, 2025);
-        Settings::instance().evaluationDate() = today;
-
-        const auto exerciseDate = today + option_data.ttm;
-
-        const auto process = market_data.makeGeneralizedBlackScholesProcess(today, true);
-
-        const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
-            option_data.barrier, option_data.bonusLevel, exerciseDate);
+        const auto flat = makeFlatCase(true);
 
         // The volatility's type alone passes for exact; only the probe against evolve()
         // catches the forced discretization, and the engine fails loud instead of falling back.
-        bonusClassicOption->setPricingEngine(ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-            process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(), false, true, 42));
-        BOOST_CHECK_THROW(bonusClassicOption->NPV(), Error);
+        flat.option->setPricingEngine(ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
+            flat.process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(), false, true, 42));
+        BOOST_CHECK_THROW(flat.option->NPV(), Error);
 
-        bonusClassicOption->setPricingEngine(
+        flat.option->setPricingEngine(
             ext::make_shared<MCBonusClassicEngine<LowDiscrepancy, Statistics, SingleVariate>>(
-                process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(), false, true, 42));
-        BOOST_CHECK_NO_THROW(bonusClassicOption->NPV());
+                flat.process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(), false, true, 42));
+        BOOST_CHECK_NO_THROW(flat.option->NPV());
     }
 
     BOOST_AUTO_TEST_CASE(
@@ -525,21 +431,11 @@ namespace RKE::TestSuite {
                                                        // the struct is the macro's
         BOOST_TEST_MESSAGE("BonusClassicOption FD continuous valuation test");
 
-        const auto option_data = OptionData();
-        auto market_data = MarketData();
+        const auto flat = makeFlatCase();
 
-        const auto today = Date(22, Jun, 2025);
-        Settings::instance().evaluationDate() = today;
-
-        const auto exerciseDate = today + option_data.ttm;
-
-        const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
-            option_data.barrier, option_data.bonusLevel, exerciseDate);
-
-        const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
-        bonusClassicOption->setPricingEngine(ext::make_shared<FdBlackScholesBonusClassicEngine>(
-            process, Null<Size>(), fdTimeGrid, fdSpaceGrid));
-        const auto npv = bonusClassicOption->NPV();
+        flat.option->setPricingEngine(ext::make_shared<FdBlackScholesBonusClassicEngine>(
+            flat.process, Null<Size>(), fdTimeGrid, fdSpaceGrid));
+        const auto npv = flat.option->NPV();
 
         // Regression lock: the engine's own output on this grid and the default TrBDF2 scheme,
         // not an externally validated price. See testBonusClassicOptionFdContinuousReplication
@@ -552,27 +448,20 @@ namespace RKE::TestSuite {
                                                          // the struct is the macro's
         BOOST_TEST_MESSAGE("BonusClassicOption FD continuous replication test");
 
-        const auto option_data = OptionData();
-        auto market_data = MarketData();
-
-        const auto today = Date(22, Jun, 2025);
-        Settings::instance().evaluationDate() = today;
-
-        const auto exerciseDate = today + option_data.ttm;
-
-        const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
+        const auto flat = makeFlatCase();
 
         // std::exp(std::log(85.0)) lies above 85, so a grid starting at std::log(85.0) would pay
         // the bonus on its first node at maturity; 90 maps back to itself.
-        for (const Real barrier : {option_data.barrier, 85.0}) {
-            const auto bonusClassicOption =
-                ext::make_shared<BonusClassicOption>(barrier, option_data.bonusLevel, exerciseDate);
+        for (const Real barrier : {flat.optionData.barrier, 85.0}) {
+            const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
+                barrier, flat.optionData.bonusLevel, flat.exerciseDate);
             bonusClassicOption->setPricingEngine(ext::make_shared<FdBlackScholesBonusClassicEngine>(
-                process, Null<Size>(), fdTimeGrid, fdSpaceGrid));
+                flat.process, Null<Size>(), fdTimeGrid, fdSpaceGrid));
             const auto npv = bonusClassicOption->NPV();
 
             // Both sides monitor continuously, so the put takes the barrier itself.
-            const auto replication = replicationPrice(process, option_data, exerciseDate, barrier);
+            const auto replication =
+                replicationPrice(flat.process, flat.optionData, flat.exerciseDate, barrier);
 
             // Measured residuals 5.2e-6 relative at barrier 90 and 4.9e-6 at 85 under the
             // default TrBDF2 scheme. They halve per doubling of both grids, to 1.4e-6 and 1.0e-6
@@ -590,21 +479,11 @@ namespace RKE::TestSuite {
                                                               // the struct is the macro's
         BOOST_TEST_MESSAGE("BonusClassicOption FD valuation test");
 
-        const auto option_data = OptionData();
-        auto market_data = MarketData();
+        const auto flat = makeFlatCase();
 
-        const auto today = Date(22, Jun, 2025);
-        Settings::instance().evaluationDate() = today;
-
-        const auto exerciseDate = today + option_data.ttm;
-
-        const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
-            option_data.barrier, option_data.bonusLevel, exerciseDate);
-
-        const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
-        bonusClassicOption->setPricingEngine(ext::make_shared<FdBlackScholesBonusClassicEngine>(
-            process, mcTimeStepsPerYear, fdTimeGrid, fdSpaceGrid, 0, FdmSchemeDesc::TrBDF2()));
-        const auto npv = bonusClassicOption->NPV();
+        flat.option->setPricingEngine(ext::make_shared<FdBlackScholesBonusClassicEngine>(
+            flat.process, mcTimeStepsPerYear, fdTimeGrid, fdSpaceGrid));
+        const auto npv = flat.option->NPV();
 
         // Regression lock: the engine's own output on this grid and scheme, not an externally
         // validated price. See testBonusClassicOptionFdReplication and
@@ -617,29 +496,19 @@ namespace RKE::TestSuite {
                                                // the struct is the macro's
         BOOST_TEST_MESSAGE("BonusClassicOption FD replication test");
 
-        const auto option_data = OptionData();
-        auto market_data = MarketData();
+        const auto flat = makeFlatCase();
 
-        const auto today = Date(22, Jun, 2025);
-        Settings::instance().evaluationDate() = today;
-
-        const auto exerciseDate = today + option_data.ttm;
-
-        const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
-
-        const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
-            option_data.barrier, option_data.bonusLevel, exerciseDate);
         const auto fdEngine = ext::make_shared<FdBlackScholesBonusClassicEngine>(
-            process, mcTimeStepsPerYear, fdTimeGrid, fdSpaceGrid, 0, FdmSchemeDesc::TrBDF2());
-        bonusClassicOption->setPricingEngine(fdEngine);
-        const auto npv = bonusClassicOption->NPV();
+            flat.process, mcTimeStepsPerYear, fdTimeGrid, fdSpaceGrid);
+        flat.option->setPricingEngine(fdEngine);
+        const auto npv = flat.option->NPV();
 
         // The engine monitors on its time grid, so the replication takes the
         // Broadie-Glasserman-Kou barrier for the grid's step.
         const auto dt = fdEngine->timeGrid().dt(0);
-        const auto replication =
-            replicationPrice(process, option_data, exerciseDate,
-                             bgkShiftedBarrier(option_data.barrier, market_data.volatility, dt));
+        const auto replication = replicationPrice(
+            flat.process, flat.optionData, flat.exerciseDate,
+            bgkShiftedBarrier(flat.optionData.barrier, flat.marketData.volatility, dt));
 
         // Measured residual 4.7e-4 relative. The engine at 6,400 nodes and 3,200 steps, 2.5e-7
         // from its value at half that grid, is 4.5e-4 below the replication, so nearly all of it
@@ -653,29 +522,18 @@ namespace RKE::TestSuite {
                                                              // the struct is the macro's
         BOOST_TEST_MESSAGE("BonusClassicOption FD versus MC test");
 
-        const auto option_data = OptionData();
-        auto market_data = MarketData();
-
-        const auto today = Date(22, Jun, 2025);
-        Settings::instance().evaluationDate() = today;
-
-        const auto exerciseDate = today + option_data.ttm;
-
-        const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
-
-        const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
-            option_data.barrier, option_data.bonusLevel, exerciseDate);
+        const auto flat = makeFlatCase();
 
         const auto fdEngine = ext::make_shared<FdBlackScholesBonusClassicEngine>(
-            process, mcTimeStepsPerYear, fdTimeGrid, fdSpaceGrid, 0, FdmSchemeDesc::TrBDF2());
-        bonusClassicOption->setPricingEngine(fdEngine);
-        const auto fd = bonusClassicOption->NPV();
+            flat.process, mcTimeStepsPerYear, fdTimeGrid, fdSpaceGrid);
+        flat.option->setPricingEngine(fdEngine);
+        const auto fd = flat.option->NPV();
 
         // The configuration of testBonusClassicOptionValuation's lock.
         const auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-            process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), true, true, 42);
-        bonusClassicOption->setPricingEngine(mcEngine);
-        const auto mc = bonusClassicOption->NPV();
+            flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), true, true, 42);
+        flat.option->setPricingEngine(mcEngine);
+        const auto mc = flat.option->NPV();
 
         // Both engines monitor the same product: the same 42 points after t = 0.
         const auto fdGrid = fdEngine->timeGrid();
@@ -700,28 +558,17 @@ namespace RKE::TestSuite {
                                                    // the struct is the macro's
         BOOST_TEST_MESSAGE("BonusClassicOption FD monitoring order test");
 
-        const auto option_data = OptionData();
-        auto market_data = MarketData();
-
-        const auto today = Date(22, Jun, 2025);
-        Settings::instance().evaluationDate() = today;
-
-        const auto exerciseDate = today + option_data.ttm;
-
-        const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
-
-        const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
-            option_data.barrier, option_data.bonusLevel, exerciseDate);
+        const auto flat = makeFlatCase();
 
         const auto discreteEngine = ext::make_shared<FdBlackScholesBonusClassicEngine>(
-            process, mcTimeStepsPerYear, fdTimeGrid, fdSpaceGrid, 0, FdmSchemeDesc::TrBDF2());
-        bonusClassicOption->setPricingEngine(discreteEngine);
-        const auto discrete = bonusClassicOption->NPV();
+            flat.process, mcTimeStepsPerYear, fdTimeGrid, fdSpaceGrid);
+        flat.option->setPricingEngine(discreteEngine);
+        const auto discrete = flat.option->NPV();
 
         const auto continuousEngine = ext::make_shared<FdBlackScholesBonusClassicEngine>(
-            process, Null<Size>(), fdTimeGrid, fdSpaceGrid, 0, FdmSchemeDesc::TrBDF2());
-        bonusClassicOption->setPricingEngine(continuousEngine);
-        const auto continuous = bonusClassicOption->NPV();
+            flat.process, Null<Size>(), fdTimeGrid, fdSpaceGrid);
+        flat.option->setPricingEngine(continuousEngine);
+        const auto continuous = flat.option->NPV();
 
         BOOST_CHECK(!discreteEngine->monitorsContinuously());
         BOOST_CHECK(continuousEngine->monitorsContinuously());
@@ -739,22 +586,12 @@ namespace RKE::TestSuite {
                                                    // the struct is the macro's
         BOOST_TEST_MESSAGE("BonusClassicOption binomial valuation test");
 
-        const auto option_data = OptionData();
-        auto market_data = MarketData();
+        const auto flat = makeFlatCase();
 
-        const auto today = Date(22, Jun, 2025);
-        Settings::instance().evaluationDate() = today;
-
-        const auto exerciseDate = today + option_data.ttm;
-
-        const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
-            option_data.barrier, option_data.bonusLevel, exerciseDate);
-
-        const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
-        const auto engine =
-            ext::make_shared<BinomialBonusClassicEngine<CoxRossRubinstein>>(process, treeTimeSteps);
-        bonusClassicOption->setPricingEngine(engine);
-        const auto npv = bonusClassicOption->NPV();
+        const auto engine = ext::make_shared<BinomialBonusClassicEngine<CoxRossRubinstein>>(
+            flat.process, treeTimeSteps);
+        flat.option->setPricingEngine(engine);
+        const auto npv = flat.option->NPV();
 
         // Boyle-Lau: the first floor(i^2 sigma^2 T / ln^2(S / H)) above 400, at i = 17.
         BOOST_CHECK_EQUAL(engine->timeGrid().size() - 1, Size(442));
@@ -769,28 +606,18 @@ namespace RKE::TestSuite {
                                                      // the struct is the macro's
         BOOST_TEST_MESSAGE("BonusClassicOption binomial replication test");
 
-        const auto option_data = OptionData();
-        auto market_data = MarketData();
+        const auto flat = makeFlatCase();
 
-        const auto today = Date(22, Jun, 2025);
-        Settings::instance().evaluationDate() = today;
-
-        const auto exerciseDate = today + option_data.ttm;
-
-        const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
-
-        const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
-            option_data.barrier, option_data.bonusLevel, exerciseDate);
-        bonusClassicOption->setPricingEngine(
-            ext::make_shared<BinomialBonusClassicEngine<CoxRossRubinstein>>(process,
+        flat.option->setPricingEngine(
+            ext::make_shared<BinomialBonusClassicEngine<CoxRossRubinstein>>(flat.process,
                                                                             treeTimeSteps));
-        const auto npv = bonusClassicOption->NPV();
+        const auto npv = flat.option->NPV();
 
         // The tree monitors on every step, and Boyle-Lau puts a layer of nodes at 89.9938, just
         // below the barrier, so the put takes the barrier itself and no Broadie-Glasserman-Kou
         // shift applies.
-        const auto replication =
-            replicationPrice(process, option_data, exerciseDate, option_data.barrier);
+        const auto replication = replicationPrice(flat.process, flat.optionData, flat.exerciseDate,
+                                                  flat.optionData.barrier);
 
         // Measured residual 5.5e-5 relative at 442 steps. It is discretisation error, not
         // noise, and it does not fall steadily with the steps: from 100 to 1600 requested steps
@@ -807,32 +634,21 @@ namespace RKE::TestSuite {
                                                   // the struct is the macro's
         BOOST_TEST_MESSAGE("BonusClassicOption binomial Boyle-Lau test");
 
-        const auto option_data = OptionData();
-        auto market_data = MarketData();
+        const auto flat = makeFlatCase();
 
-        const auto today = Date(22, Jun, 2025);
-        Settings::instance().evaluationDate() = today;
+        const auto replication = replicationPrice(flat.process, flat.optionData, flat.exerciseDate,
+                                                  flat.optionData.barrier);
 
-        const auto exerciseDate = today + option_data.ttm;
-
-        const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
-
-        const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
-            option_data.barrier, option_data.bonusLevel, exerciseDate);
-        const auto replication =
-            replicationPrice(process, option_data, exerciseDate, option_data.barrier);
-
-        bonusClassicOption->setPricingEngine(
-            ext::make_shared<BinomialBonusClassicEngine<CoxRossRubinstein>>(process,
+        flat.option->setPricingEngine(
+            ext::make_shared<BinomialBonusClassicEngine<CoxRossRubinstein>>(flat.process,
                                                                             treeTimeSteps));
-        const auto withBoyleLau = std::fabs(bonusClassicOption->NPV() - replication) / replication;
+        const auto withBoyleLau = std::fabs(flat.option->NPV() - replication) / replication;
 
         // maxTimeSteps = timeSteps disables Boyle-Lau.
         const auto plainEngine = ext::make_shared<BinomialBonusClassicEngine<CoxRossRubinstein>>(
-            process, treeTimeSteps, treeTimeSteps);
-        bonusClassicOption->setPricingEngine(plainEngine);
-        const auto withoutBoyleLau =
-            std::fabs(bonusClassicOption->NPV() - replication) / replication;
+            flat.process, treeTimeSteps, treeTimeSteps);
+        flat.option->setPricingEngine(plainEngine);
+        const auto withoutBoyleLau = std::fabs(flat.option->NPV() - replication) / replication;
         BOOST_CHECK_EQUAL(plainEngine->timeGrid().size() - 1, treeTimeSteps);
 
         // Without Boyle-Lau the first knocked-out layer at 400 steps sits at 89.51, an effective

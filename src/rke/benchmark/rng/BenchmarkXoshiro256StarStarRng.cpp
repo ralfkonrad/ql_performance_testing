@@ -33,35 +33,35 @@ namespace RKE::Benchmark {
 
         void BM_Xoshiro256StarStarNextInt64(benchmark::State& state) {
             for (const auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
-                xoshiro256StarStar.nextInt64();
+                benchmark::DoNotOptimize(xoshiro256StarStar.nextInt64());
             }
         }
         BENCHMARK(BM_Xoshiro256StarStarNextInt64)->Name("xoshiro256StarStar.nextInt64();");
 
         void BM_MersenneTwisterNextInt32(benchmark::State& state) {
             for (const auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
-                mersenneTwister.nextInt32();
+                benchmark::DoNotOptimize(mersenneTwister.nextInt32());
             }
         }
         BENCHMARK(BM_MersenneTwisterNextInt32)->Name("mersenneTwister.nextInt32();");
 
         void BM_Xoshiro256StarStarNext(benchmark::State& state) {
             for (const auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
-                xoshiro256StarStar.next();
+                benchmark::DoNotOptimize(xoshiro256StarStar.next());
             }
         }
         BENCHMARK(BM_Xoshiro256StarStarNext)->Name("xoshiro256StarStar.next();");
 
         void BM_MersenneTwisterNext(benchmark::State& state) {
             for (const auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
-                mersenneTwister.next();
+                benchmark::DoNotOptimize(mersenneTwister.next());
             }
         }
         BENCHMARK(BM_MersenneTwisterNext)->Name("mersenneTwister.next();");
 
         void BM_Xoshiro256StarStarZigguratGaussianNext(benchmark::State& state) {
             for (const auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
-                xoshiro256StarStarZigguratGaussian.next();
+                benchmark::DoNotOptimize(xoshiro256StarStarZigguratGaussian.next());
             }
         }
         BENCHMARK(BM_Xoshiro256StarStarZigguratGaussianNext)
@@ -69,7 +69,7 @@ namespace RKE::Benchmark {
 
         void BM_Xoshiro256StarStarBoxMullerGaussianNext(benchmark::State& state) {
             for (const auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
-                xoshiro256StarStarBoxMullerGaussian.next();
+                benchmark::DoNotOptimize(xoshiro256StarStarBoxMullerGaussian.next());
             }
         }
         BENCHMARK(BM_Xoshiro256StarStarBoxMullerGaussianNext)
@@ -77,7 +77,7 @@ namespace RKE::Benchmark {
 
         void BM_MersenneTwisterBoxMullerGaussianNext(benchmark::State& state) {
             for (const auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
-                mersenneTwisterBoxMullerGaussian.next();
+                benchmark::DoNotOptimize(mersenneTwisterBoxMullerGaussian.next());
             }
         }
         BENCHMARK(BM_MersenneTwisterBoxMullerGaussianNext)
@@ -85,14 +85,14 @@ namespace RKE::Benchmark {
 
         void BM_InverseCumulativeRngNext(benchmark::State& state) {
             for (const auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
-                inverseCumulativeRng.next();
+                benchmark::DoNotOptimize(inverseCumulativeRng.next());
             }
         }
         BENCHMARK(BM_InverseCumulativeRngNext)->Name("inverseCumulativeRng.next();");
 
         void BM_Xoshiro256StarStarCLGaussianNext(benchmark::State& state) {
             for (const auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
-                xoshiro256StarStarCLGaussian.next();
+                benchmark::DoNotOptimize(xoshiro256StarStarCLGaussian.next());
             }
         }
         BENCHMARK(BM_Xoshiro256StarStarCLGaussianNext)
@@ -100,7 +100,7 @@ namespace RKE::Benchmark {
 
         void BM_MersenneTwisterCLGaussianNext(benchmark::State& state) {
             for (const auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
-                mersenneTwisterCLGaussian.next();
+                benchmark::DoNotOptimize(mersenneTwisterCLGaussian.next());
             }
         }
         BENCHMARK(BM_MersenneTwisterCLGaussianNext)->Name("mersenneTwisterCLGaussian.next();");

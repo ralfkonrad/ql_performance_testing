@@ -3,25 +3,26 @@
 
 #include <ql/time/calendars/target.hpp>
 #include <benchmark/benchmark.h>
+#include <cstddef>
 #include <vector>
 
 namespace RKE::Benchmark {
     namespace {
         void BM_TestCalendar(benchmark::State& state) {
+            // All TARGET instances share one static Impl, and the result vector is allocated
+            // once here, so only isBusinessDay is timed. The loop runs over serial numbers
+            // because incrementing a Date past maxDate() throws.
+            const auto target = QuantLib::TARGET();
+            const auto first = QuantLib::Date::minDate().serialNumber();
+            const auto last = QuantLib::Date::maxDate().serialNumber();
+            auto isBusinessDate = std::vector<bool>(static_cast<std::size_t>(last - first + 1));
+
             for (const auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
-                // Not setup leaking into the measurement: all TARGET instances share one static
-                // Impl, so only isBusinessDay is timed.
-                const auto target = QuantLib::TARGET();
-
-                const auto numberOfDates =
-                    QuantLib::Date::maxDate() - QuantLib::Date::minDate() + 1;
-                auto isBusinessDate = std::vector<bool>(numberOfDates);
-
-                auto i = 0;
-                for (auto date = QuantLib::Date::minDate(); date < QuantLib::Date::maxDate();) {
-                    isBusinessDate[i++] = target.isBusinessDay(date);
-                    date++;
+                for (auto serial = first; serial <= last; ++serial) {
+                    isBusinessDate[static_cast<std::size_t>(serial - first)] =
+                        target.isBusinessDay(QuantLib::Date(serial));
                 }
+                benchmark::DoNotOptimize(isBusinessDate);
             }
         }
 
