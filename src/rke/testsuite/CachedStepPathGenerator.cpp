@@ -266,6 +266,40 @@ namespace RKE::TestSuite {
         checkRefused(externalLocalVolProcess());
     }
 
+    BOOST_AUTO_TEST_CASE(testSharedCache) { // NOLINT(misc-use-internal-linkage): the struct is
+                                            // the macro's
+        BOOST_TEST_MESSAGE("CachedStepPathGenerator with a shared cache produces the paths of "
+                           "its own, and refuses a cache on another grid");
+        Settings::instance().evaluationDate() = today();
+
+        const auto process = constantVolProcess();
+        const TimeGrid grid(maturity, timeSteps);
+        const auto cache = ext::make_shared<const BlackScholesStepCache>(process, grid);
+        const CachedStepPathGenerator<rsg_type> own(
+            process, grid, LowDiscrepancy::make_sequence_generator(timeSteps, seed), true);
+        const CachedStepPathGenerator<rsg_type> shared(
+            process, grid, LowDiscrepancy::make_sequence_generator(timeSteps, seed), true, cache);
+        for (Size j = 0; j < paths; ++j) {
+            const auto& expected = own.next();
+            const auto& actual = shared.next();
+            for (Size i = 0; i < expected.value.length(); ++i) {
+                BOOST_CHECK_EQUAL(actual.value[i], expected.value[i]);
+            }
+        }
+
+        const TimeGrid otherGrid(maturity, timeSteps + 1);
+        BOOST_CHECK_THROW(
+            (CachedStepPathGenerator<rsg_type>(
+                process, otherGrid, LowDiscrepancy::make_sequence_generator(timeSteps + 1, seed),
+                true, cache)),
+            Error);
+        BOOST_CHECK_THROW(
+            (CachedStepPathGenerator<rsg_type>(
+                process, grid, LowDiscrepancy::make_sequence_generator(timeSteps, seed), true,
+                nullptr)),
+            Error);
+    }
+
     BOOST_AUTO_TEST_CASE(testEmptyGrid) { // NOLINT(misc-use-internal-linkage): the struct is
                                           // the macro's
         BOOST_TEST_MESSAGE("BlackScholesStepCache and LocalVolStepCache refuse an empty grid");

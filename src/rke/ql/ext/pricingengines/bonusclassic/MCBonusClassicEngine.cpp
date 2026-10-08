@@ -92,10 +92,11 @@ namespace RKE::QL::Ext {
     CachedStepBonusClassicPathPricer::CachedStepBonusClassicPathPricer(
         BonusClassicPayoff payoff,
         DiscountFactor discountFactor,
-        const ext::shared_ptr<GeneralizedBlackScholesProcess>& process,
-        const TimeGrid& grid)
-    : BonusClassicPathPricerBase(std::move(payoff), discountFactor), stepCache_(process, grid) {
-        QL_REQUIRE(stepCache_.reproducesEvolve(),
+        ext::shared_ptr<const BlackScholesStepCache> stepCache)
+    : BonusClassicPathPricerBase(std::move(payoff), discountFactor),
+      stepCache_(std::move(stepCache)) {
+        QL_REQUIRE(stepCache_, "null step cache given");
+        QL_REQUIRE(stepCache_->reproducesEvolve(),
                    "the process's step on this grid is not the exact "
                    "Black-Scholes step; use BonusClassicPathPricer");
     }
@@ -104,10 +105,10 @@ namespace RKE::QL::Ext {
         if (knockedOut(path)) {
             return path.back() * discountFactor_;
         }
-        QL_REQUIRE(stepCache_.size() == path.length() - 1, "path has " << path.length() - 1
-                                                                       << " steps, the step cache "
-                                                                       << stepCache_.size());
+        QL_REQUIRE(stepCache_->size() == path.length() - 1, "path has " << path.length() - 1
+                                                                        << " steps, the step cache "
+                                                                        << stepCache_->size());
         return continuousValue(path, payoff_, discountFactor_,
-                               [this](Size i, const Path&) { return stepCache_.variance(i); });
+                               [this](Size i, const Path&) { return stepCache_->variance(i); });
     }
 }

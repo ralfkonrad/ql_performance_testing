@@ -140,11 +140,22 @@ namespace RKE::QL::Ext {
         QuantLib::ext::shared_ptr<path_generator_type> pathGenerator() const override {
             const QuantLib::TimeGrid grid = timeGrid();
             const typename RNG::rsg_type gen = RNG::make_sequence_generator(grid.size() - 1, seed_);
-            return QuantLib::ext::make_shared<path_generator_type>(process_, grid, gen,
-                                                                   brownianBridge_);
+            if constexpr (sharesStepCache) {
+                return QuantLib::ext::make_shared<path_generator_type>(process_, grid, gen,
+                                                                       brownianBridge_, stepCache_);
+            } else {
+                return QuantLib::ext::make_shared<path_generator_type>(process_, grid, gen,
+                                                                       brownianBridge_);
+            }
         }
 
+        // Under CachedStepSingleVariate the generator and the continuous path pricer read one
+        // BlackScholesStepCache, built per calculation; under the other traits nothing shares.
+        static constexpr bool sharesStepCache =
+            std::is_same_v<MC<RNG>, CachedStepSingleVariate<RNG>>;
+
         QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process_;
+        mutable QuantLib::ext::shared_ptr<const BlackScholesStepCache> stepCache_;
         QuantLib::Size timeStepsPerYear_;
         QuantLib::Size requiredSamples_;
         QuantLib::Size maxSamples_;
@@ -255,30 +266,29 @@ namespace RKE::QL::Ext {
     //! BonusClassicPathPricer with the step variance from a BlackScholesStepCache
     /*! The same value as BonusClassicPathPricer for paths from
         CachedStepPathGenerator over the same grid: \f$ v_i \f$ is the
-        variance the generator evolved step \f$ i \f$ with, read from a
-        cache built once instead of from the process on every step.
+        variance the generator evolved step \f$ i \f$ with, read from the
+        cache the generator shares instead of from the process on every
+        step.
     */
     class CachedStepBonusClassicPathPricer : public BonusClassicPathPricerBase {
       public:
         /*! \param discountFactor risk-free discount factor from maturity to
                                   the evaluation date
-            \param process        the process the paths were generated with
-            \param grid           the paths' time grid
+            \param stepCache      the cache the paths were generated from
             \pre barrier and bonus level of \p payoff are positive, as
                  BonusClassicOption::arguments::validate() ensures; not
                  checked here.
-            \pre the process's step on \p grid is exact, as
-                 CachedStepPathGenerator requires; QL_REQUIRE checks this.
+            \pre \p stepCache is not null and reproduces the process's step,
+                 as CachedStepPathGenerator requires; QL_REQUIRE checks both.
         */
         CachedStepBonusClassicPathPricer(
             BonusClassicPayoff payoff,
             QuantLib::DiscountFactor discountFactor,
-            const QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess>& process,
-            const QuantLib::TimeGrid& grid);
+            QuantLib::ext::shared_ptr<const BlackScholesStepCache> stepCache);
         QuantLib::Real operator()(const QuantLib::Path& path) const override;
 
       private:
-        BlackScholesStepCache stepCache_;
+        QuantLib::ext::shared_ptr<const BlackScholesStepCache> stepCache_;
     };
 
 
@@ -310,6 +320,11 @@ namespace RKE::QL::Ext {
         // the continuous one because its bridge needs log(S_0 / H) > 0. Refused in both modes;
         // see the class warning.
         QL_REQUIRE(!triggered(spot), "barrier touched");
+        if constexpr (sharesStepCache) {
+            // Once per calculation, for pathGenerator() and pathPricer() below; the process
+            // may have changed since the last one.
+            stepCache_ = QuantLib::ext::make_shared<BlackScholesStepCache>(process_, timeGrid());
+        }
         QuantLib::McSimulation<MC, RNG, S>::calculate(requiredTolerance_, requiredSamples_,
                                                       maxSamples_);
         results_.value = this->mcModel_->sampleAccumulator().mean();
@@ -338,9 +353,9 @@ namespace RKE::QL::Ext {
         }
         // The traits decide where the bridge's step variance comes from: the cache the
         // paths were built from, or the process the paths were evolved with.
-        if constexpr (std::is_same_v<MC<RNG>, CachedStepSingleVariate<RNG>>) {
+        if constexpr (sharesStepCache) {
             return QuantLib::ext::shared_ptr<path_pricer_type>(
-                new CachedStepBonusClassicPathPricer(*payoff, discountFactor, process_, grid));
+                new CachedStepBonusClassicPathPricer(*payoff, discountFactor, stepCache_));
         }
         return QuantLib::ext::shared_ptr<path_pricer_type>(
             new BonusClassicPathPricer(*payoff, discountFactor, process_));

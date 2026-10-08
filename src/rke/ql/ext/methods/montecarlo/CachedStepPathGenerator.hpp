@@ -34,14 +34,25 @@ namespace RKE::QL::Ext {
       public:
         using sample_type = QuantLib::Sample<QuantLib::Path>;
 
+        //! builds its own StepCache of \p process on \p timeGrid
         /*! \pre the StepCache reproduces the process's evolve() on \p timeGrid,
                  see BlackScholesStepCache::reproducesEvolve() and
-                 LocalVolStepCache::reproducesEvolve(). */
+                 LocalVolStepCache::reproducesEvolve(); QL_REQUIRE checks this. */
+        CachedStepPathGenerator(
+            const QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess>& process,
+            const QuantLib::TimeGrid& timeGrid,
+            GSG generator,
+            bool brownianBridge);
+
+        //! takes a StepCache built elsewhere, to share with a path pricer
+        /*! \pre \p cache reproduces the process's evolve() on \p timeGrid and
+                 has one entry per step of it; QL_REQUIRE checks both. */
         CachedStepPathGenerator(
             QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process,
             QuantLib::TimeGrid timeGrid,
             GSG generator,
-            bool brownianBridge);
+            bool brownianBridge,
+            QuantLib::ext::shared_ptr<const StepCache> cache);
 
         [[nodiscard]] const sample_type& next() const { return next(false); }
         [[nodiscard]] const sample_type& antithetic() const { return next(true); }
@@ -56,7 +67,7 @@ namespace RKE::QL::Ext {
         QuantLib::Size dimension_;
         QuantLib::TimeGrid timeGrid_;
         QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process_;
-        StepCache cache_;
+        QuantLib::ext::shared_ptr<const StepCache> cache_;
         mutable sample_type next_;
         mutable std::vector<QuantLib::Real> temp_;
         QuantLib::BrownianBridge bb_;
@@ -90,18 +101,36 @@ namespace RKE::QL::Ext {
         QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process,
         QuantLib::TimeGrid timeGrid,
         GSG generator,
-        bool brownianBridge)
+        bool brownianBridge,
+        QuantLib::ext::shared_ptr<const StepCache> cache)
     : brownianBridge_(brownianBridge), generator_(std::move(generator)),
       dimension_(generator_.dimension()), timeGrid_(std::move(timeGrid)),
-      process_(std::move(process)), cache_(process_, timeGrid_),
-      next_(QuantLib::Path(timeGrid_), 1.0), temp_(dimension_), bb_(timeGrid_) {
+      process_(std::move(process)), cache_(std::move(cache)), next_(QuantLib::Path(timeGrid_), 1.0),
+      temp_(dimension_), bb_(timeGrid_) {
         QL_REQUIRE(dimension_ == timeGrid_.size() - 1, "sequence generator dimensionality ("
                                                            << dimension_ << ") != timeSteps ("
                                                            << timeGrid_.size() - 1 << ")");
-        QL_REQUIRE(cache_.reproducesEvolve(),
+        QL_REQUIRE(cache_, "null step cache given");
+        QL_REQUIRE(cache_->reproducesEvolve(),
                    "the step cache does not reproduce the process's step on "
                    "this grid; use QuantLib::PathGenerator");
+        // A cache built on another grid would evolve every step with the wrong terms.
+        QL_REQUIRE(cache_->size() == timeGrid_.size() - 1,
+                   "the step cache holds " << cache_->size() << " steps, the grid "
+                                           << timeGrid_.size() - 1);
     }
+
+    template <class GSG, class StepCache>
+    CachedStepPathGenerator<GSG, StepCache>::CachedStepPathGenerator(
+        const QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess>& process,
+        const QuantLib::TimeGrid& timeGrid,
+        GSG generator,
+        bool brownianBridge)
+    : CachedStepPathGenerator(process,
+                              timeGrid,
+                              std::move(generator),
+                              brownianBridge,
+                              QuantLib::ext::make_shared<StepCache>(process, timeGrid)) {}
 
     template <class GSG, class StepCache>
     const typename CachedStepPathGenerator<GSG, StepCache>::sample_type&
@@ -119,8 +148,8 @@ namespace RKE::QL::Ext {
         QuantLib::Path& path = next_.value;
         path.front() = process_->x0();
         for (QuantLib::Size i = 1; i < path.length(); i++) {
-            path[i] = cache_.evolve(i - 1, path[i - 1],
-                                    antithetic ? -increments[i - 1] : increments[i - 1]);
+            path[i] = cache_->evolve(i - 1, path[i - 1],
+                                     antithetic ? -increments[i - 1] : increments[i - 1]);
         }
 
         return next_;
