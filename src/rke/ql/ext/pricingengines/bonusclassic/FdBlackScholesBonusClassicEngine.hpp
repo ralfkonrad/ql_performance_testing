@@ -59,10 +59,17 @@ namespace RKE::QL::Ext {
                  the average of its cell there; a barrier between nodes moves
                  by up to a cell.
         \warning with discrete monitoring each knock-out re-creates a jump at
-                 the barrier, which Crank-Nicolson, i.e. the default Douglas
-                 scheme in one dimension, damps only slowly: its prices then
-                 converge erratically in time. QuantLib::FdmSchemeDesc::TrBDF2()
-                 is L-stable and converges at second order there.
+                 the barrier, which Crank-Nicolson, i.e. QuantLib's default
+                 Douglas scheme in one dimension, damps only slowly: its
+                 prices then converge erratically in time. The default here
+                 is therefore QuantLib::FdmSchemeDesc::TrBDF2(), which is
+                 L-stable and converges at second order there.
+        \warning calculate() requires the spot above the barrier in either
+                 mode and throws otherwise. With discrete monitoring that is
+                 a restriction, not a knock-out: \f$ t = 0 \f$ is no
+                 monitoring time, so a certificate alive today with its spot
+                 at or below the barrier has a price, which this engine does
+                 not compute.
         \warning with discrete monitoring the barrier has to lie inside
                  QuantLib::FdmBlackScholesMesher's range; calculate() fails
                  otherwise.
@@ -99,7 +106,10 @@ namespace RKE::QL::Ext {
             \param tGrid                 time steps of the rollback
             \param xGrid                 nodes of the log-spot grid
             \param dampingSteps          implicit Euler steps after maturity
-            \param schemeDesc            the time-stepping scheme
+            \param schemeDesc            the time-stepping scheme; TrBDF2 by
+                                         default, not QuantLib's Douglas, see
+                                         the warning above
+            \pre \p process is not null; QL_REQUIRE checks this.
         */
         explicit FdBlackScholesBonusClassicEngine(
             QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process,
@@ -107,11 +117,13 @@ namespace RKE::QL::Ext {
             QuantLib::Size tGrid = 100,
             QuantLib::Size xGrid = 100,
             QuantLib::Size dampingSteps = 0,
-            const QuantLib::FdmSchemeDesc& schemeDesc = QuantLib::FdmSchemeDesc::Douglas());
+            const QuantLib::FdmSchemeDesc& schemeDesc = QuantLib::FdmSchemeDesc::TrBDF2());
 
         void calculate() const override;
 
         //! the monitoring grid; QL_FAIL when the barrier is monitored continuously
+        /*! \pre the instrument has set up the arguments, i.e. NPV() has run once;
+                 QL_REQUIRE checks this. */
         [[nodiscard]] QuantLib::TimeGrid timeGrid() const;
         //! whether the barrier is monitored continuously, i.e. no monitoring step was given
         [[nodiscard]] bool monitorsContinuously() const;

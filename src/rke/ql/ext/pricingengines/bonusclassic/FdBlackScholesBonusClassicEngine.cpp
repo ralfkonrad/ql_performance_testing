@@ -16,7 +16,6 @@
 #include <ql/methods/finitedifferences/utilities/fdminnervaluecalculator.hpp>
 #include <boost/range/algorithm/find.hpp>
 #include <boost/range/algorithm/min_element.hpp>
-#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <list>
@@ -127,16 +126,11 @@ namespace RKE::QL::Ext {
     }
 
     TimeGrid FdBlackScholesBonusClassicEngine::timeGrid() const {
-        const auto residualTime = process_->time(arguments_.exercise->lastDate());
+        // Empty until the instrument's setupArguments() has run, i.e. before the first NPV().
+        QL_REQUIRE(arguments_.exercise, "no exercise given");
         if (!monitorsContinuously()) {
-            // MCBonusClassicEngine's rule, so that both engines price the same product. A short
-            // residual time truncates steps to 0, and TimeGrid(end, 0) divides by zero.
-            const auto steps =
-                static_cast<Size>(static_cast<Real>(monitoringStepsPerYear_) * residualTime);
-            // QuantLib::TimeGrid has an initializer_list<Time> constructor, which a braced
-            // return selects over TimeGrid(Time, Size), narrowing steps to a Time.
-            return TimeGrid( // NOLINT(modernize-return-braced-init-list)
-                residualTime, std::max<Size>(steps, 1));
+            return monitoringGrid(process_->time(arguments_.exercise->lastDate()),
+                                  monitoringStepsPerYear_);
         }
         QL_FAIL("the barrier is monitored continuously, on no time grid");
     }
@@ -144,12 +138,13 @@ namespace RKE::QL::Ext {
     void FdBlackScholesBonusClassicEngine::calculate() const {
         const auto payoff = ext::dynamic_pointer_cast<BonusClassicPayoff>(arguments_.payoff);
         QL_REQUIRE(payoff, "non-bonus-classic payoff given");
-        QL_REQUIRE(payoff->bonusLevel() > 0.0, "bonus level less/equal zero not allowed");
         QL_REQUIRE(arguments_.exercise->type() == Exercise::European,
                    "only european style option are supported");
 
         const auto spot = process_->x0();
         QL_REQUIRE(spot > 0.0, "negative or null underlying given");
+        // In discrete mode t = 0 is no monitoring time, so this is a restriction rather than a
+        // knock-out; see the class warning.
         QL_REQUIRE(!triggered(spot), "barrier touched");
 
         const auto maturity = process_->time(arguments_.exercise->lastDate());

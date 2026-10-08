@@ -21,6 +21,7 @@
 #include <boost/test/unit_test.hpp>
 #include <cmath>
 #include <test-suite/utilities.hpp>
+#include <utility>
 #include <vector>
 
 using namespace RKE::QL::Ext;
@@ -209,6 +210,68 @@ namespace RKE::TestSuite {
         BOOST_CHECK_EQUAL(bonusClassicOption->exercise()->lastDate(), Date(22, Nov, 2025));
         BOOST_CHECK_EQUAL(bonusClassicOption->barrier(), data.barrier);
         BOOST_CHECK_EQUAL(bonusClassicOption->bonusLevel(), data.bonusLevel);
+    }
+
+    BOOST_AUTO_TEST_CASE(testBonusClassicOptionEngineGuards) { // NOLINT(misc-use-internal-linkage):
+                                                               // the struct is the macro's
+        BOOST_TEST_MESSAGE("BonusClassicOption engines fail with a QuantLib::Error on a null "
+                           "process and on timeGrid() before the first NPV()");
+
+        auto market_data = MarketData();
+
+        const auto today = Date(22, Jun, 2025);
+        Settings::instance().evaluationDate() = today;
+
+        const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
+
+        BOOST_CHECK_THROW(MCBonusClassicEngine<LowDiscrepancy>(nullptr, mcTimeStepsPerYear, 1'000,
+                                                               1'001, Null<Real>(), true, true, 42),
+                          Error);
+        BOOST_CHECK_THROW(FdBlackScholesBonusClassicEngine(nullptr, mcTimeStepsPerYear), Error);
+        BOOST_CHECK_THROW(BinomialBonusClassicEngine<CoxRossRubinstein>(nullptr, treeTimeSteps),
+                          Error);
+
+        // The arguments, the exercise among them, are empty until an instrument sets them up.
+        const MCBonusClassicEngine<LowDiscrepancy> mcEngine(process, mcTimeStepsPerYear, 1'000,
+                                                            1'001, Null<Real>(), true, true, 42);
+        BOOST_CHECK_THROW(static_cast<void>(mcEngine.timeGrid()), Error);
+        const FdBlackScholesBonusClassicEngine fdEngine(process, mcTimeStepsPerYear);
+        BOOST_CHECK_THROW(static_cast<void>(fdEngine.timeGrid()), Error);
+        const BinomialBonusClassicEngine<CoxRossRubinstein> treeEngine(process, treeTimeSteps);
+        BOOST_CHECK_THROW(static_cast<void>(treeEngine.timeGrid()), Error);
+    }
+
+    BOOST_AUTO_TEST_CASE(
+        testBonusClassicOptionNonPositiveLevels) { // NOLINT(misc-use-internal-linkage):
+                                                   // the struct is the macro's
+        BOOST_TEST_MESSAGE("BonusClassicOption rejects a barrier or bonus level at or below "
+                           "zero before any engine runs");
+
+        const auto option_data = OptionData();
+        auto market_data = MarketData();
+
+        const auto today = Date(22, Jun, 2025);
+        Settings::instance().evaluationDate() = today;
+
+        const auto exerciseDate = today + option_data.ttm;
+        const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
+
+        // One engine per method; the FD engine in continuous mode is the one whose grid would
+        // otherwise take log(0) and fail deep inside the solver.
+        const std::vector<ext::shared_ptr<PricingEngine>> engines = {
+            ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
+                process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(), true, true, 42),
+            ext::make_shared<FdBlackScholesBonusClassicEngine>(process),
+            ext::make_shared<BinomialBonusClassicEngine<CoxRossRubinstein>>(process, treeTimeSteps),
+        };
+        for (const auto& engine : engines) {
+            for (const auto& [barrier, bonusLevel] :
+                 {std::pair{0.0, option_data.bonusLevel}, std::pair{option_data.barrier, 0.0}}) {
+                BonusClassicOption option(barrier, bonusLevel, exerciseDate);
+                option.setPricingEngine(engine);
+                BOOST_CHECK_THROW(static_cast<void>(option.NPV()), Error);
+            }
+        }
     }
 
     BOOST_AUTO_TEST_CASE(testBonusClassicOptionValuation) { // NOLINT(misc-use-internal-linkage):
@@ -478,9 +541,10 @@ namespace RKE::TestSuite {
             process, Null<Size>(), fdTimeGrid, fdSpaceGrid));
         const auto npv = bonusClassicOption->NPV();
 
-        // Regression lock: the engine's own output on this grid and scheme, not an externally
-        // validated price. See testBonusClassicOptionFdContinuousReplication for that.
-        BOOST_CHECK_CLOSE_FRACTION(105.89059304496158, npv, 1e-8);
+        // Regression lock: the engine's own output on this grid and the default TrBDF2 scheme,
+        // not an externally validated price. See testBonusClassicOptionFdContinuousReplication
+        // for that.
+        BOOST_CHECK_CLOSE_FRACTION(105.88958719924801, npv, 1e-8);
     }
 
     BOOST_AUTO_TEST_CASE(
@@ -510,11 +574,12 @@ namespace RKE::TestSuite {
             // Both sides monitor continuously, so the put takes the barrier itself.
             const auto replication = replicationPrice(process, option_data, exerciseDate, barrier);
 
-            // Measured residuals 4.3e-6 relative at barrier 90 and 3.2e-6 at 85. They fall
-            // linearly in the time steps, to 1.1e-6 and 4.5e-7 at 800 steps: QuantLib imposes
-            // the Dirichlet value on the barrier node after each implicit solve, so the next
-            // node is coupled to the unconstrained one. A first node above 85 was 2.1e-4 off.
-            // The bound leaves three times the larger residual.
+            // Measured residuals 5.2e-6 relative at barrier 90 and 4.9e-6 at 85 under the
+            // default TrBDF2 scheme. They halve per doubling of both grids, to 1.4e-6 and 1.0e-6
+            // at 800 steps and 1,600 nodes: QuantLib imposes the Dirichlet value on the barrier
+            // node after each implicit solve, so the next node is coupled to the unconstrained
+            // one. A first node above 85 was 2.1e-4 off. The bound leaves nearly three times
+            // the larger residual.
             BOOST_TEST_MESSAGE("barrier " << barrier << ": " << npv << ", relative residual "
                                           << std::fabs(npv - replication) / replication);
             BOOST_CHECK_CLOSE_FRACTION(replication, npv, 1.5e-5);

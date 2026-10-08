@@ -38,8 +38,9 @@ Under `src/rke/ql/ext/instruments/`, derived from the fitting QuantLib base
    in `validate()` call the base and `QL_REQUIRE` each field against its `Null`.
    That sentinel pair is what turns a forgotten field into an error message
    instead of a silent zero.
-4. `engine`: `GenericEngine<arguments, results>`, holding whatever predicates the
-   engines share (`triggered()` in the example).
+4. `engine`: `GenericEngine<arguments, results>`, holding whatever the engines
+   share (`triggered()` and the monitoring-grid rule `monitoringGrid()` in the
+   example).
 
 ## 3. A New Pricing Engine
 
@@ -90,9 +91,9 @@ calculator into an `FdmSolverDesc` for `FdmBlackScholesSolver`, as
   cell, a first-order error. `FdmLogInnerValue` averages at maturity.
 - Checks that a node meant to sit on a level maps back to the right side of it:
   `std::exp(std::log(H))` exceeds `H` for about a third of all levels.
-- Expects a knock-out on monitoring dates to make Crank-Nicolson, the default
-  `Douglas` scheme, converge erratically in time; `FdmSchemeDesc::TrBDF2()`
-  converges at second order there.
+- Expects a knock-out on monitoring dates to make Crank-Nicolson, QuantLib's
+  default `Douglas` scheme, converge erratically in time; `FdmSchemeDesc::TrBDF2()`
+  converges at second order there and is the engine's default.
 - Exposes monitoring times as `timeGrid()`, as the Monte Carlo engine does: they
   define the product.
 

@@ -7,6 +7,8 @@
 #include <ql/exercise.hpp>
 #include <ql/instruments/oneassetoption.hpp>
 #include <ql/instruments/payoffs.hpp>
+#include <ql/timegrid.hpp>
+#include <string>
 
 namespace RKE::QL::Ext {
     //! Terminal payoff of a bonus certificate ("Bonus Classic")
@@ -46,7 +48,7 @@ namespace RKE::QL::Ext {
         //@{
         [[nodiscard]] std::string name() const override { return "BonusClassic"; }
         QuantLib::Real operator()(QuantLib::Real price) const override;
-        void accept(QuantLib::AcyclicVisitor& /*unused*/) override;
+        void accept(QuantLib::AcyclicVisitor& acyclic_visitor) override;
         //@}
 
 
@@ -93,7 +95,7 @@ namespace RKE::QL::Ext {
         BonusClassicOption(QuantLib::ext::shared_ptr<BonusClassicPayoff> payoff,
                            QuantLib::ext::shared_ptr<QuantLib::EuropeanExercise> exercise);
 
-        void setupArguments(QuantLib::PricingEngine::arguments* /*unused*/) const override;
+        void setupArguments(QuantLib::PricingEngine::arguments* arguments) const override;
 
         //! \name Inspectors
         //@{
@@ -110,7 +112,9 @@ namespace RKE::QL::Ext {
     //! %Arguments for bonus certificate calculation
     /*! barrier and bonusLevel repeat the payoff's values so that an engine
         can read them without a cast. Both start at Null<Real>(), and
-        validate() rejects them while they still are.
+        validate() rejects them while they still are, as well as a value
+        that is not positive: every engine takes the logarithm of the
+        barrier, so none checks it again.
     */
     class BonusClassicOption::arguments : public OneAssetOption::arguments {
       public:
@@ -125,6 +129,11 @@ namespace RKE::QL::Ext {
       protected:
         //! whether \p underlying is at or below the barrier, the same inclusive test as the payoff
         bool triggered(QuantLib::Real underlying) const;
+        //! the grid of max(floor(stepsPerYear * residualTime), 1) equal steps to \p residualTime
+        /*! The one rule for discrete monitoring, so that every engine taking a
+            stepsPerYear monitors the same product. */
+        [[nodiscard]] static QuantLib::TimeGrid monitoringGrid(QuantLib::Time residualTime,
+                                                               QuantLib::Size stepsPerYear);
     };
 }
 

@@ -73,7 +73,7 @@ class FdBlackScholesBonusClassicEngine : public BonusClassicOption::engine {
         QuantLib::Size tGrid = 100,
         QuantLib::Size xGrid = 100,
         QuantLib::Size dampingSteps = 0,
-        const QuantLib::FdmSchemeDesc& schemeDesc = QuantLib::FdmSchemeDesc::Douglas());
+        const QuantLib::FdmSchemeDesc& schemeDesc = QuantLib::FdmSchemeDesc::TrBDF2());
 
     void calculate() const override;
     //! the monitoring grid, by the MC rule; QL_FAIL in continuous mode
@@ -209,8 +209,8 @@ at first order in time: 4.3e-6 relative off the replication at `tGrid 200`, 1.1e
 
   Douglas moves non-monotonically, and two damping steps at maturity do not remove it.
   TrBDF2 is second order and L-stable: its differences shrink by about four per doubling.
-  The discrete tests price with TrBDF2; the engine keeps QuantLib's `Douglas` default and
-  warns. A Rannacher restart after every monitoring date would need the QuantLib change in
+  The engine therefore defaults to TrBDF2, not to QuantLib's `Douglas`, and warns. A
+  Rannacher restart after every monitoring date would need the QuantLib change in
   section 3.5, and the price does not need it.
 
 ### 3.4 Documentation Block

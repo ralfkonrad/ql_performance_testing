@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include <rke/ql/ext/instruments/BonusClassicOption.hpp>
+#include <algorithm>
 
 using namespace QuantLib;
 
@@ -56,10 +57,24 @@ namespace RKE::QL::Ext {
 
         QL_REQUIRE(barrier != Null<Real>(), "no barrier given");
         QL_REQUIRE(bonusLevel != Null<Real>(), "no bonus level given");
+        // Checked once here for every engine: the log-distances of the Brownian bridge, the
+        // log-spot grid and Boyle-Lau all take log(barrier).
+        QL_REQUIRE(barrier > 0.0, "barrier less/equal zero not allowed");
+        QL_REQUIRE(bonusLevel > 0.0, "bonus level less/equal zero not allowed");
     }
 
     bool BonusClassicOption::engine::triggered(Real underlying) const {
         QL_REQUIRE(arguments_.barrier != Null<Real>(), "no barrier given");
         return underlying <= arguments_.barrier;
+    }
+
+    TimeGrid BonusClassicOption::engine::monitoringGrid(Time residualTime, Size stepsPerYear) {
+        // A short residual time truncates steps to 0, and TimeGrid(end, 0) divides by zero;
+        // hence the std::max below.
+        const auto steps = static_cast<Size>(static_cast<Real>(stepsPerYear) * residualTime);
+        // QuantLib::TimeGrid has an initializer_list<Time> constructor, which a braced
+        // return selects over TimeGrid(Time, Size), narrowing steps to a Time.
+        return TimeGrid( // NOLINT(modernize-return-braced-init-list)
+            residualTime, std::max<Size>(steps, 1));
     }
 }
