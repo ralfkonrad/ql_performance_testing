@@ -90,9 +90,9 @@ calculator into an `FdmSolverDesc` for `FdmBlackScholesSolver`, as
   cell, a first-order error. `FdmLogInnerValue` averages at maturity.
 - Checks that a node meant to sit on a level maps back to the right side of it:
   `std::exp(std::log(H))` exceeds `H` for about a third of all levels.
-- Expects a knock-out on monitoring dates to make Crank-Nicolson, the default
-  `Douglas` scheme, converge erratically in time; `FdmSchemeDesc::TrBDF2()`
-  converges at second order there.
+- Expects a knock-out on monitoring dates to make Crank-Nicolson, QuantLib's
+  default `Douglas` scheme, converge erratically in time; `FdmSchemeDesc::TrBDF2()`
+  converges at second order there and is the engine's default.
 - Exposes monitoring times as `timeGrid()`, as the Monte Carlo engine does: they
   define the product.
 
