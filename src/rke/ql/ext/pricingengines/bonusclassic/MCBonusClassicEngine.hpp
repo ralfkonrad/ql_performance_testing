@@ -154,6 +154,31 @@ namespace RKE::QL::Ext {
         QuantLib::BigNatural seed_;
     };
 
+    //! What the bonus certificate path pricers share
+    /*! The payoff, the discount factor from maturity, and the knock-out test
+        on the grid points after \f$ t = 0 \f$, inclusive at the barrier like
+        the payoff. A knocked-out path pays the discounted final price
+        \f$ S_T \f$ in every pricer.
+    */
+    class BonusClassicPathPricerBase : public QuantLib::PathPricer<QuantLib::Path> {
+      protected:
+        /*! \param discountFactor risk-free discount factor from maturity to
+                                  the evaluation date
+            \pre barrier and bonus level of \p payoff are positive, as
+                 BonusClassicOption::arguments::validate() ensures; not
+                 checked here.
+        */
+        BonusClassicPathPricerBase(BonusClassicPayoff payoff,
+                                   QuantLib::DiscountFactor discountFactor);
+
+        //! whether a grid point after \f$ t = 0 \f$ is at or below the barrier
+        /*! \pre the path has at least one step; QL_REQUIRE checks this. */
+        [[nodiscard]] bool knockedOut(const QuantLib::Path& path) const;
+
+        BonusClassicPayoff payoff_;
+        QuantLib::DiscountFactor discountFactor_;
+    };
+
     //! Path pricer for bonus certificates monitored on the path's grid points
     /*! Returns the discounted final price \f$ S_T \f$ of the path if any point
         after \f$ t = 0 \f$ is at or below the barrier, and the discounted
@@ -161,7 +186,7 @@ namespace RKE::QL::Ext {
         sense of QuantLib::BiasedBarrierPathPricer: crossings between grid
         points go unseen.
     */
-    class BiasedBonusClassicPathPricer : public QuantLib::PathPricer<QuantLib::Path> {
+    class BiasedBonusClassicPathPricer : public BonusClassicPathPricerBase {
       public:
         /*! \param discountFactor risk-free discount factor from maturity to
                                   the evaluation date
@@ -172,10 +197,6 @@ namespace RKE::QL::Ext {
         BiasedBonusClassicPathPricer(BonusClassicPayoff payoff,
                                      QuantLib::DiscountFactor discountFactor);
         QuantLib::Real operator()(const QuantLib::Path& path) const override;
-
-      private:
-        BonusClassicPayoff payoff_;
-        QuantLib::DiscountFactor discountFactor_;
     };
 
     //! Path pricer for bonus certificates monitored continuously
@@ -210,7 +231,7 @@ namespace RKE::QL::Ext {
         Financial Analysts Journal; Jan/Feb 1997; 53, 1. pg. 62-68
         </i>
     */
-    class BonusClassicPathPricer : public QuantLib::PathPricer<QuantLib::Path> {
+    class BonusClassicPathPricer : public BonusClassicPathPricerBase {
       public:
         /*! \param discountFactor risk-free discount factor from maturity to
                                   the evaluation date
@@ -228,8 +249,6 @@ namespace RKE::QL::Ext {
         QuantLib::Real operator()(const QuantLib::Path& path) const override;
 
       private:
-        BonusClassicPayoff payoff_;
-        QuantLib::DiscountFactor discountFactor_;
         QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process_;
     };
 
@@ -239,7 +258,7 @@ namespace RKE::QL::Ext {
         variance the generator evolved step \f$ i \f$ with, read from a
         cache built once instead of from the process on every step.
     */
-    class CachedStepBonusClassicPathPricer : public QuantLib::PathPricer<QuantLib::Path> {
+    class CachedStepBonusClassicPathPricer : public BonusClassicPathPricerBase {
       public:
         /*! \param discountFactor risk-free discount factor from maturity to
                                   the evaluation date
@@ -259,8 +278,6 @@ namespace RKE::QL::Ext {
         QuantLib::Real operator()(const QuantLib::Path& path) const override;
 
       private:
-        BonusClassicPayoff payoff_;
-        QuantLib::DiscountFactor discountFactor_;
         BlackScholesStepCache stepCache_;
     };
 
