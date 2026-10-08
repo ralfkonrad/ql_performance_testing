@@ -1,12 +1,12 @@
 // SPDX-FileCopyrightText: 2025 Ralf Konrad Eckel
 // SPDX-License-Identifier: MIT
 
+#include <rke/cli/SamplesOption.hpp>
 #include <rke/common/BonusClassicOptionSetup.hpp>
 #include <CLI/CLI.hpp>
 #include <benchmark/benchmark.h>
 #include <exception>
 #include <iostream>
-#include <limits>
 
 using namespace RKE::Common;
 using namespace QuantLib;
@@ -179,9 +179,7 @@ int main(int argc, char* argv[]) {
         benchmark::Initialize(&argc, argv, RKE::Benchmark::printHelp);
 
         auto app = CLI::App("Times BonusClassicOption pricings with google-benchmark.");
-        app.add_option("--samples", RKE::Benchmark::samples, "Paths per pricing")
-            ->check(CLI::Range(Size{1}, std::numeric_limits<Size>::max()))
-            ->capture_default_str();
+        RKE::Cli::addSamplesOption(app, RKE::Benchmark::samples);
         // Returns from main on a parse error, with CLI11's exit code.
         CLI11_PARSE(app, argc, argv);
 

@@ -10,8 +10,8 @@ add_executable(
 target_link_libraries(
         rke_benchmark_bonusclassicoption PRIVATE
         rke_common
+        rke_cli
         benchmark::benchmark
-        CLI11::CLI11
         rke::warnings
 )
 
