@@ -3,10 +3,12 @@
 
 #include "TestSuiteFixture.hpp"
 #include <rke/ql/ext/instruments/BonusClassicOption.hpp>
+#include <rke/ql/ext/pricingengines/bonusclassic/BinomialBonusClassicEngine.hpp>
 #include <rke/ql/ext/pricingengines/bonusclassic/FdBlackScholesBonusClassicEngine.hpp>
 #include <rke/ql/ext/pricingengines/bonusclassic/MCBonusClassicEngine.hpp>
 #include <ql/instruments/barrieroption.hpp>
 #include <ql/math/matrix.hpp>
+#include <ql/methods/lattices/binomialtree.hpp>
 #include <ql/methods/montecarlo/mctraits.hpp>
 #include <ql/pricingengines/barrier/analyticbarrierengine.hpp>
 #include <ql/processes/blackscholesprocess.hpp>
@@ -30,6 +32,8 @@ namespace RKE::TestSuite {
     // The FD grid QuantLib's own barrier tests price Haug's table on.
     constexpr Size fdTimeGrid = 200;
     constexpr Size fdSpaceGrid = 400;
+    // The step count QuantLib's own barrier tests price Haug's table with.
+    constexpr Size treeTimeSteps = 400;
 
     namespace {
         struct OptionData {
@@ -663,6 +667,115 @@ namespace RKE::TestSuite {
         // knock-out only removes the bonus put, so the continuous price is lower.
         BOOST_TEST_MESSAGE("discrete " << discrete << ", continuous " << continuous);
         BOOST_CHECK_LT(continuous, discrete);
+    }
+
+    BOOST_AUTO_TEST_CASE(
+        testBonusClassicOptionBinomialValuation) { // NOLINT(misc-use-internal-linkage):
+                                                   // the struct is the macro's
+        BOOST_TEST_MESSAGE("BonusClassicOption binomial valuation test");
+
+        const auto option_data = OptionData();
+        auto market_data = MarketData();
+
+        const auto today = Date(22, Jun, 2025);
+        Settings::instance().evaluationDate() = today;
+
+        const auto exerciseDate = today + option_data.ttm;
+
+        const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
+            option_data.barrier, option_data.bonusLevel, exerciseDate);
+
+        const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
+        const auto engine =
+            ext::make_shared<BinomialBonusClassicEngine<CoxRossRubinstein>>(process, treeTimeSteps);
+        bonusClassicOption->setPricingEngine(engine);
+        const auto npv = bonusClassicOption->NPV();
+
+        // Boyle-Lau: the first floor(i^2 sigma^2 T / ln^2(S / H)) above 400, at i = 17.
+        BOOST_CHECK_EQUAL(engine->timeGrid().size() - 1, Size(442));
+
+        // Regression lock: the engine's own output on this lattice, not an externally validated
+        // price. See testBonusClassicOptionBinomialReplication for that.
+        BOOST_CHECK_CLOSE_FRACTION(105.89600347917739, npv, 1e-8);
+    }
+
+    BOOST_AUTO_TEST_CASE(
+        testBonusClassicOptionBinomialReplication) { // NOLINT(misc-use-internal-linkage):
+                                                     // the struct is the macro's
+        BOOST_TEST_MESSAGE("BonusClassicOption binomial replication test");
+
+        const auto option_data = OptionData();
+        auto market_data = MarketData();
+
+        const auto today = Date(22, Jun, 2025);
+        Settings::instance().evaluationDate() = today;
+
+        const auto exerciseDate = today + option_data.ttm;
+
+        const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
+
+        const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
+            option_data.barrier, option_data.bonusLevel, exerciseDate);
+        bonusClassicOption->setPricingEngine(
+            ext::make_shared<BinomialBonusClassicEngine<CoxRossRubinstein>>(process,
+                                                                            treeTimeSteps));
+        const auto npv = bonusClassicOption->NPV();
+
+        // The tree monitors on every step, and Boyle-Lau puts a layer of nodes at 89.9938, just
+        // below the barrier, so the put takes the barrier itself and no Broadie-Glasserman-Kou
+        // shift applies.
+        const auto replication =
+            replicationPrice(process, option_data, exerciseDate, option_data.barrier);
+
+        // Measured residual 5.5e-5 relative at 442 steps. It is discretisation error, not
+        // noise, and it does not fall steadily with the steps: from 100 to 1600 requested steps
+        // it follows how far the Boyle-Lau floor leaves the layer below the barrier, 1.7e-6 at
+        // 810 steps with the layer 7e-4 below it, 2.3e-4 at 220 steps with it 1.1e-2 below.
+        // The bound leaves 3.6 times the 442-step residual.
+        BOOST_TEST_MESSAGE("binomial " << npv << ", relative residual "
+                                       << std::fabs(npv - replication) / replication);
+        BOOST_CHECK_CLOSE_FRACTION(replication, npv, 2e-4);
+    }
+
+    BOOST_AUTO_TEST_CASE(
+        testBonusClassicOptionBinomialBoyleLau) { // NOLINT(misc-use-internal-linkage):
+                                                  // the struct is the macro's
+        BOOST_TEST_MESSAGE("BonusClassicOption binomial Boyle-Lau test");
+
+        const auto option_data = OptionData();
+        auto market_data = MarketData();
+
+        const auto today = Date(22, Jun, 2025);
+        Settings::instance().evaluationDate() = today;
+
+        const auto exerciseDate = today + option_data.ttm;
+
+        const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
+
+        const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
+            option_data.barrier, option_data.bonusLevel, exerciseDate);
+        const auto replication =
+            replicationPrice(process, option_data, exerciseDate, option_data.barrier);
+
+        bonusClassicOption->setPricingEngine(
+            ext::make_shared<BinomialBonusClassicEngine<CoxRossRubinstein>>(process,
+                                                                            treeTimeSteps));
+        const auto withBoyleLau = std::fabs(bonusClassicOption->NPV() - replication) / replication;
+
+        // maxTimeSteps = timeSteps disables Boyle-Lau.
+        const auto plainEngine = ext::make_shared<BinomialBonusClassicEngine<CoxRossRubinstein>>(
+            process, treeTimeSteps, treeTimeSteps);
+        bonusClassicOption->setPricingEngine(plainEngine);
+        const auto withoutBoyleLau =
+            std::fabs(bonusClassicOption->NPV() - replication) / replication;
+        BOOST_CHECK_EQUAL(plainEngine->timeGrid().size() - 1, treeTimeSteps);
+
+        // Without Boyle-Lau the first knocked-out layer at 400 steps sits at 89.51, an effective
+        // barrier 0.55% low; measured residuals 5.5e-5 relative with Boyle-Lau and 4.9e-3
+        // without.
+        BOOST_TEST_MESSAGE("relative residual with Boyle-Lau " << withBoyleLau << ", without "
+                                                               << withoutBoyleLau);
+        BOOST_CHECK_LT(withBoyleLau, withoutBoyleLau);
     }
 
     BOOST_AUTO_TEST_SUITE_END()

@@ -96,6 +96,26 @@ calculator into an `FdmSolverDesc` for `FdmBlackScholesSolver`, as
 - Exposes monitoring times as `timeGrid()`, as the Monte Carlo engine does: they
   define the product.
 
+A tree engine pairs a `QuantLib::DiscretizedAsset` subclass with an engine that
+derives from the instrument's `engine`, as `DiscretizedBonusClassicOption` and
+`BinomialBonusClassicEngine` do after QuantLib's `BinomialBarrierEngine`. Then:
+
+- The asset implements `reset` (zero-fill, then `adjustValues()`),
+  `postAdjustValuesImpl` and `mandatoryTimes`. The lattice adjusts it after every
+  step of a rollback, so a barrier test there monitors every lattice step,
+  `t = 0` included.
+- The engine flattens rate, yield and volatility itself and hands the flattened
+  yield to the asset, so that an asset leg agrees with the tree.
+- Boyle-Lau applies to `CoxRossRubinstein` and derived trees only. Keep the
+  candidate count in `Real` until it is capped: casting it to `Size` first, as
+  QuantLib does, is undefined once it leaves `Size`'s range.
+- `LeisenReimer` and `Joshi4` build `steps + 1` for an even count. Round up to
+  odd before the tree, the lattice and its `TimeGrid` are built, or their `dt`
+  differ.
+- Delta and gamma take the `Null<Real>()` guards of `BinomialVanillaEngine`.
+- `timeGrid()` reports the lattice grid, after Boyle-Lau and rounding: its steps
+  are the monitoring times.
+
 ## 4. Registering the Files
 
 `src/rke/ql/ext/CMakeLists.txt` keeps two lists, `RKE_QL_EXT_SOURCES` and

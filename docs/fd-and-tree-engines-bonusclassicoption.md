@@ -7,8 +7,8 @@ SPDX-License-Identifier: MIT
 
 How to price `BonusClassicOption` with a finite-difference engine and with a binomial
 tree next to `MCBonusClassicEngine`, which QuantLib classes each one is built from, and
-which tests make the numbers checkable. The finite-difference engine of section 3 is
-implemented; the tree engine of section 4 is not.
+which tests make the numbers checkable. Both are implemented: the finite-difference
+engine of section 3 and the tree engine of section 4.
 
 ## 1. The Product and the One Fact Every Engine Needs
 
@@ -35,8 +35,7 @@ The test market is the one in `src/rke/testsuite/BonusClassicOption.cpp`: evalua
 date 22 Jun 2025, maturity 22 Nov 2025 (`T = 153/360` under `Actual360`), spot 100,
 `H = 90`, `B = 120`, risk-free rate 1%, dividend yield 3%, volatility 20%, flat curves,
 `NullCalendar` volatility, `BlackScholesMertonProcess`; the MC grid has 42 steps from
-`mcTimeStepsPerYear = 100`. Nothing under `src/rke` or `.agents` uses finite differences
-or lattices yet.
+`mcTimeStepsPerYear = 100`.
 
 ## 2. Routes Considered
 
@@ -284,7 +283,7 @@ the spot, which holds for CRR and Trigeorgis only.
 ```cpp
 class DiscretizedBonusClassicOption : public QuantLib::DiscretizedAsset {
   public:
-    DiscretizedBonusClassicOption(const BonusClassicOption::arguments& arguments,
+    DiscretizedBonusClassicOption(const BonusClassicOption::arguments& args,
                                   QuantLib::Rate dividendYield, // the flattened yield the tree uses
                                   QuantLib::Time maturity);
     void reset(QuantLib::Size size) override;
@@ -302,6 +301,7 @@ class BinomialBonusClassicEngine : public BonusClassicOption::engine {
         QuantLib::Size timeSteps,
         QuantLib::Size maxTimeSteps = 0); // 0: max(1000, 5 * timeSteps), as QuantLib
     void calculate() const override;
+    [[nodiscard]] QuantLib::TimeGrid timeGrid() const; // the lattice grid, after Boyle-Lau and odd rounding
 };
 ```
 
@@ -347,7 +347,7 @@ Decisions:
 Boyle-Lau in the test market (`v² T / ln²(s0 / H) = 1.5314`): 100 steps become 124, 200
 become 220, 400 become 442, 1000 become 1035. The layer `m` steps below spot then lands
 at or just below `H` (89.9938 at 442 steps) and is knocked out by `<=` and `<` alike.
-Without Boyle-Lau, 400 steps put the first knocked-out layer at 89.50, an effective
+Without Boyle-Lau, 400 steps put the first knocked-out layer at 89.51, an effective
 barrier 0.55% low.
 
 ## 5. Tests
