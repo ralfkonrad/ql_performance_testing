@@ -100,6 +100,7 @@ source tree.
 | -------------------------- | --------------------- | ------------------------------------------------------- |
 | `rke_ql_ext`               | static library        | `src/rke/ql/ext/librke_ql_ext.a`                        |
 | `rke_common`               | static library        | `src/rke/common/librke_common.a`                        |
+| `rke_cli`                  | header-only library   | nothing; its headers are under `src/rke/cli/`           |
 | `rke_testsuite`            | Boost.Test executable | `src/rke/testsuite/rke_testsuite`                       |
 | `rke_benchmark_<workload>` | google-benchmark exe  | `src/rke/benchmark/<workload>/rke_benchmark_<workload>` |
 | `rke_profile_<workload>`   | profile executable    | `src/rke/profile/<workload>/rke_profile_<workload>`     |

@@ -62,7 +62,10 @@ itself. QuantLib, google-benchmark and CLI11 are git submodules under `external/
   submodule's root sits on `ql_library`'s include path, and a source compiled this
   way has to be exempted from `rke::warnings` and clang-tidy by hand, since a
   warning on an upstream line nothing here may edit fails the build. The flat
-  curve and volatility helpers live in `src/rke/common/FlatTermStructures.hpp`.
+  curve and volatility helpers live in `src/rke/common/FlatTermStructures.hpp`;
+  the instrument, the markets and the reference date the tests, benchmarks and
+  profiles share in `src/rke/common/BonusClassicOptionSetup.hpp` and
+  `src/rke/common/StepCacheMarkets.hpp`.
 
 ## 2. Task Guides
 
@@ -96,14 +99,15 @@ Source of truth: `.clang-format`.
 ### 3.2 Naming and Namespaces
 
 - One namespace per component under `src/rke/`, shared by its subdirectories: the
-  library in `RKE::QL::Ext`, the setup that benchmarks and profiles share in
-  `RKE::Common`, benchmarks in `RKE::Benchmark`, the test suite in
-  `RKE::TestSuite`, profile executables in `RKE::Profile`. Every name a file
+  library in `RKE::QL::Ext`, the setup the tests, benchmarks and profiles share
+  in `RKE::Common`, the CLI11 options the benchmarks and profiles share in
+  `RKE::Cli`, benchmarks in `RKE::Benchmark`, the test suite in `RKE::TestSuite`,
+  profile executables in `RKE::Profile`. Every name a file
   declares goes there, test cases and `BENCHMARK(...)` registrations included;
   only `main` stays global, which keeps `BENCHMARK_MAIN()` and `testsuite.cpp`
   outside. Nothing outside `src/rke/ql/ext` goes into `RKE::QL::Ext`.
 - CMake targets follow the same directories: `rke_ql_ext`, `rke_common`,
-  `rke_testsuite`, and one executable per workload directory:
+  `rke_cli`, `rke_testsuite`, and one executable per workload directory:
   `rke_benchmark_<workload>` from `src/rke/benchmark/<workload>/`,
   `rke_profile_<workload>` from `src/rke/profile/<workload>/`. A CTest name starts
   with its target's name; the `rke_` prefix is what the test presets filter on.
