@@ -216,9 +216,6 @@ namespace RKE::QL::Ext {
         const auto payoff =
             QuantLib::ext::dynamic_pointer_cast<BonusClassicPayoff>(arguments_.payoff);
         QL_REQUIRE(payoff, "non-bonus-classic payoff given");
-        QL_REQUIRE(payoff->bonusLevel() > 0.0, "bonus level less/equal zero not allowed");
-        // Boyle-Lau divides by ln^2(s0 / H).
-        QL_REQUIRE(payoff->barrier() > 0.0, "barrier less/equal zero not allowed");
         QL_REQUIRE(arguments_.exercise->type() == QuantLib::Exercise::European,
                    "only european style option are supported");
 

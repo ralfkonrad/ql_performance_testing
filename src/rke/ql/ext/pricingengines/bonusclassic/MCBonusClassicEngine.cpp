@@ -50,10 +50,7 @@ namespace RKE::QL::Ext {
 
     BiasedBonusClassicPathPricer::BiasedBonusClassicPathPricer(BonusClassicPayoff payoff,
                                                                DiscountFactor discountFactor)
-    : payoff_(std::move(payoff)), discountFactor_(discountFactor) {
-        QL_REQUIRE(payoff_.barrier() > 0.0, "barrier less/equal zero not allowed");
-        QL_REQUIRE(payoff_.bonusLevel() > 0.0, "bonus level less/equal zero not allowed");
-    }
+    : payoff_(std::move(payoff)), discountFactor_(discountFactor) {}
 
     Real BiasedBonusClassicPathPricer::operator()(const Path& path) const {
         const Size n = path.length();
@@ -74,8 +71,6 @@ namespace RKE::QL::Ext {
         DiscountFactor discountFactor,
         ext::shared_ptr<GeneralizedBlackScholesProcess> process)
     : payoff_(std::move(payoff)), discountFactor_(discountFactor), process_(std::move(process)) {
-        QL_REQUIRE(payoff_.barrier() > 0.0, "barrier less/equal zero not allowed");
-        QL_REQUIRE(payoff_.bonusLevel() > 0.0, "bonus level less/equal zero not allowed");
         QL_REQUIRE(process_, "null process given");
     }
 
@@ -94,8 +89,6 @@ namespace RKE::QL::Ext {
         const ext::shared_ptr<GeneralizedBlackScholesProcess>& process,
         const TimeGrid& grid)
     : payoff_(std::move(payoff)), discountFactor_(discountFactor), stepCache_(process, grid) {
-        QL_REQUIRE(payoff_.barrier() > 0.0, "barrier less/equal zero not allowed");
-        QL_REQUIRE(payoff_.bonusLevel() > 0.0, "bonus level less/equal zero not allowed");
         QL_REQUIRE(stepCache_.reproducesEvolve(),
                    "the process's step on this grid is not the exact "
                    "Black-Scholes step; use BonusClassicPathPricer");

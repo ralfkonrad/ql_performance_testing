@@ -149,7 +149,9 @@ namespace RKE::QL::Ext {
       public:
         /*! \param discountFactor risk-free discount factor from maturity to
                                   the evaluation date
-            \pre barrier and bonus level of \p payoff are positive.
+            \pre barrier and bonus level of \p payoff are positive, as
+                 BonusClassicOption::arguments::validate() ensures; not
+                 checked here.
         */
         BiasedBonusClassicPathPricer(BonusClassicPayoff payoff,
                                      QuantLib::DiscountFactor discountFactor);
@@ -198,7 +200,10 @@ namespace RKE::QL::Ext {
                                   the evaluation date
             \param process        the process the paths were generated with;
                                   its variance() gives \f$ v_i \f$
-            \pre barrier and bonus level of \p payoff are positive.
+            \pre barrier and bonus level of \p payoff are positive, as
+                 BonusClassicOption::arguments::validate() ensures; not
+                 checked here.
+            \pre \p process is not null; QL_REQUIRE checks this.
         */
         BonusClassicPathPricer(
             BonusClassicPayoff payoff,
@@ -224,9 +229,11 @@ namespace RKE::QL::Ext {
                                   the evaluation date
             \param process        the process the paths were generated with
             \param grid           the paths' time grid
-            \pre barrier and bonus level of \p payoff are positive, and the
-                 process's step on \p grid is exact, as CachedStepPathGenerator
-                 requires.
+            \pre barrier and bonus level of \p payoff are positive, as
+                 BonusClassicOption::arguments::validate() ensures; not
+                 checked here.
+            \pre the process's step on \p grid is exact, as
+                 CachedStepPathGenerator requires; QL_REQUIRE checks this.
         */
         CachedStepBonusClassicPathPricer(
             BonusClassicPayoff payoff,

@@ -111,7 +111,9 @@ namespace RKE::QL::Ext {
     //! %Arguments for bonus certificate calculation
     /*! barrier and bonusLevel repeat the payoff's values so that an engine
         can read them without a cast. Both start at Null<Real>(), and
-        validate() rejects them while they still are.
+        validate() rejects them while they still are, as well as a value
+        that is not positive: every engine takes the logarithm of the
+        barrier, so none checks it again.
     */
     class BonusClassicOption::arguments : public OneAssetOption::arguments {
       public:

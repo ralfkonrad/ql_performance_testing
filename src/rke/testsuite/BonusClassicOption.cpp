@@ -21,6 +21,7 @@
 #include <boost/test/unit_test.hpp>
 #include <cmath>
 #include <test-suite/utilities.hpp>
+#include <utility>
 #include <vector>
 
 using namespace RKE::QL::Ext;
@@ -238,6 +239,39 @@ namespace RKE::TestSuite {
         BOOST_CHECK_THROW(static_cast<void>(fdEngine.timeGrid()), Error);
         const BinomialBonusClassicEngine<CoxRossRubinstein> treeEngine(process, treeTimeSteps);
         BOOST_CHECK_THROW(static_cast<void>(treeEngine.timeGrid()), Error);
+    }
+
+    BOOST_AUTO_TEST_CASE(
+        testBonusClassicOptionNonPositiveLevels) { // NOLINT(misc-use-internal-linkage):
+                                                   // the struct is the macro's
+        BOOST_TEST_MESSAGE("BonusClassicOption rejects a barrier or bonus level at or below "
+                           "zero before any engine runs");
+
+        const auto option_data = OptionData();
+        auto market_data = MarketData();
+
+        const auto today = Date(22, Jun, 2025);
+        Settings::instance().evaluationDate() = today;
+
+        const auto exerciseDate = today + option_data.ttm;
+        const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
+
+        // One engine per method; the FD engine in continuous mode is the one whose grid would
+        // otherwise take log(0) and fail deep inside the solver.
+        const std::vector<ext::shared_ptr<PricingEngine>> engines = {
+            ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
+                process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(), true, true, 42),
+            ext::make_shared<FdBlackScholesBonusClassicEngine>(process),
+            ext::make_shared<BinomialBonusClassicEngine<CoxRossRubinstein>>(process, treeTimeSteps),
+        };
+        for (const auto& engine : engines) {
+            for (const auto& [barrier, bonusLevel] :
+                 {std::pair{0.0, option_data.bonusLevel}, std::pair{option_data.barrier, 0.0}}) {
+                BonusClassicOption option(barrier, bonusLevel, exerciseDate);
+                option.setPricingEngine(engine);
+                BOOST_CHECK_THROW(static_cast<void>(option.NPV()), Error);
+            }
+        }
     }
 
     BOOST_AUTO_TEST_CASE(testBonusClassicOptionValuation) { // NOLINT(misc-use-internal-linkage):

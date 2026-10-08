@@ -57,6 +57,10 @@ namespace RKE::QL::Ext {
 
         QL_REQUIRE(barrier != Null<Real>(), "no barrier given");
         QL_REQUIRE(bonusLevel != Null<Real>(), "no bonus level given");
+        // Checked once here for every engine: the log-distances of the Brownian bridge, the
+        // log-spot grid and Boyle-Lau all take log(barrier).
+        QL_REQUIRE(barrier > 0.0, "barrier less/equal zero not allowed");
+        QL_REQUIRE(bonusLevel > 0.0, "bonus level less/equal zero not allowed");
     }
 
     bool BonusClassicOption::engine::triggered(Real underlying) const {

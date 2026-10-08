@@ -146,7 +146,6 @@ namespace RKE::QL::Ext {
     void FdBlackScholesBonusClassicEngine::calculate() const {
         const auto payoff = ext::dynamic_pointer_cast<BonusClassicPayoff>(arguments_.payoff);
         QL_REQUIRE(payoff, "non-bonus-classic payoff given");
-        QL_REQUIRE(payoff->bonusLevel() > 0.0, "bonus level less/equal zero not allowed");
         QL_REQUIRE(arguments_.exercise->type() == Exercise::European,
                    "only european style option are supported");
 
