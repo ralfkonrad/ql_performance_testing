@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "TestSuiteFixture.hpp"
+#include <rke/common/FlatTermStructures.hpp>
 #include <rke/ql/ext/methods/montecarlo/BlackScholesStepCache.hpp>
 #include <rke/ql/ext/methods/montecarlo/CachedStepPathGenerator.hpp>
 #include <rke/ql/ext/methods/montecarlo/LocalVolStepCache.hpp>
@@ -21,7 +22,6 @@
 #include <boost/test/unit_test.hpp>
 #include <algorithm>
 #include <cmath>
-#include <test-suite/utilities.hpp>
 #include <vector>
 
 using namespace RKE::QL::Ext;
@@ -49,11 +49,11 @@ namespace RKE::TestSuite {
         }
 
         Handle<YieldTermStructure> flatCurve(Rate rate) {
-            return Handle<YieldTermStructure>(flatRate(today(), rate, Actual360()));
+            return RKE::Common::flatRate(today(), rate, Actual360());
         }
 
         Handle<BlackVolTermStructure> constantVol() {
-            return Handle<BlackVolTermStructure>(flatVol(today(), 0.20, Actual360()));
+            return RKE::Common::flatVol(today(), 0.20, Actual360());
         }
 
         // Both generators draw the same Sobol sequence through the same bridge, and every

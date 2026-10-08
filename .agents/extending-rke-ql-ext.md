@@ -137,9 +137,9 @@ Add the `.cpp` to `src/rke/testsuite/CMakeLists.txt` and follow
   the case sets.
 - `BOOST_TEST_MESSAGE` as the first line of each case, matching the `-l message`
   the CTest entry passes.
-- `flatRate()` and `flatVol()` come from `<test-suite/utilities.hpp>` — the
-  QuantLib submodule's own test helper, already compiled into the target with
-  `SKIP_LINTING`.
+- `flatRate()` and `flatVol()` come from `<rke/common/FlatTermStructures.hpp>`,
+  never from QuantLib's `<test-suite/utilities.hpp>`, which `AGENTS.md` keeps out
+  of our targets.
 - State the conventions: the existing tests fix `Actual360`, a `NullCalendar`
   flat vol and `Date(22, Jun, 2025)`. A price without its day count and calendar
   is not checkable.
