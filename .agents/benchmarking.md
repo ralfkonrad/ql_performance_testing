@@ -68,7 +68,7 @@ store to `clang-analyzer-deadcode.DeadStores`, and warnings are errors here.
 
 Build the process, the term structures, the instrument and the engine before the
 loop, and set the evaluation date there too. Only the work being measured belongs
-inside. `BM_BonusClassicOption` is the pattern.
+inside. `BM_BonusClassicOptionMC` is the pattern.
 
 When a workload is also profiled, its setup and loop body live in `rke_common`
 (`src/rke/common/`), and the benchmark calls them rather than holding a copy, so
@@ -90,7 +90,7 @@ Useful flags:
 
 ```bash
 # one benchmark: a regex over the ->Name() plus the suffix google-benchmark appends
-$BIN --benchmark_filter='^BonusClassicOption/'   # --benchmark_list_tests=true shows names
+$BIN --benchmark_filter='^BonusClassicOptionMC/' # --benchmark_list_tests=true shows names
 
 # variance across repetitions, with the aggregates only
 $BIN --benchmark_repetitions=10 --benchmark_report_aggregates_only=true
