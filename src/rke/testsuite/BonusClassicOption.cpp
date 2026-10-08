@@ -3,10 +3,12 @@
 
 #include "TestSuiteFixture.hpp"
 #include <rke/ql/ext/instruments/BonusClassicOption.hpp>
+#include <rke/ql/ext/pricingengines/bonusclassic/BinomialBonusClassicEngine.hpp>
 #include <rke/ql/ext/pricingengines/bonusclassic/FdBlackScholesBonusClassicEngine.hpp>
 #include <rke/ql/ext/pricingengines/bonusclassic/MCBonusClassicEngine.hpp>
 #include <ql/instruments/barrieroption.hpp>
 #include <ql/math/matrix.hpp>
+#include <ql/methods/lattices/binomialtree.hpp>
 #include <ql/methods/montecarlo/mctraits.hpp>
 #include <ql/pricingengines/barrier/analyticbarrierengine.hpp>
 #include <ql/processes/blackscholesprocess.hpp>
@@ -30,6 +32,8 @@ namespace RKE::TestSuite {
     // The FD grid QuantLib's own barrier tests price Haug's table on.
     constexpr Size fdTimeGrid = 200;
     constexpr Size fdSpaceGrid = 400;
+    // The step count QuantLib's own barrier tests price Haug's table with.
+    constexpr Size treeTimeSteps = 400;
 
     namespace {
         struct OptionData {
@@ -663,6 +667,36 @@ namespace RKE::TestSuite {
         // knock-out only removes the bonus put, so the continuous price is lower.
         BOOST_TEST_MESSAGE("discrete " << discrete << ", continuous " << continuous);
         BOOST_CHECK_LT(continuous, discrete);
+    }
+
+    BOOST_AUTO_TEST_CASE(
+        testBonusClassicOptionBinomialValuation) { // NOLINT(misc-use-internal-linkage):
+                                                   // the struct is the macro's
+        BOOST_TEST_MESSAGE("BonusClassicOption binomial valuation test");
+
+        const auto option_data = OptionData();
+        auto market_data = MarketData();
+
+        const auto today = Date(22, Jun, 2025);
+        Settings::instance().evaluationDate() = today;
+
+        const auto exerciseDate = today + option_data.ttm;
+
+        const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
+            option_data.barrier, option_data.bonusLevel, exerciseDate);
+
+        const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
+        const auto engine =
+            ext::make_shared<BinomialBonusClassicEngine<CoxRossRubinstein>>(process, treeTimeSteps);
+        bonusClassicOption->setPricingEngine(engine);
+        const auto npv = bonusClassicOption->NPV();
+
+        // Boyle-Lau: the first floor(i^2 sigma^2 T / ln^2(S / H)) above 400, at i = 17.
+        BOOST_CHECK_EQUAL(engine->timeGrid().size() - 1, Size(442));
+
+        // Regression lock: the engine's own output on this lattice, not an externally validated
+        // price. See testBonusClassicOptionBinomialReplication for that.
+        BOOST_CHECK_CLOSE_FRACTION(105.89600347917739, npv, 1e-8);
     }
 
     BOOST_AUTO_TEST_SUITE_END()

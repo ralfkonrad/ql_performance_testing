@@ -18,6 +18,7 @@ set(RKE_QL_EXT_HEADER
         methods/montecarlo/BlackScholesStepCache.hpp
         methods/montecarlo/CachedStepPathGenerator.hpp
         methods/montecarlo/LocalVolStepCache.hpp
+        pricingengines/bonusclassic/BinomialBonusClassicEngine.hpp
         pricingengines/bonusclassic/DiscretizedBonusClassicOption.hpp
         pricingengines/bonusclassic/FdBlackScholesBonusClassicEngine.hpp
         pricingengines/bonusclassic/MCBonusClassicEngine.hpp
