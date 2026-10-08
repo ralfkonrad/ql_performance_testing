@@ -3,6 +3,7 @@
 
 #include "TestSuiteFixture.hpp"
 #include <rke/ql/ext/instruments/BonusClassicOption.hpp>
+#include <rke/ql/ext/pricingengines/bonusclassic/FdBlackScholesBonusClassicEngine.hpp>
 #include <rke/ql/ext/pricingengines/bonusclassic/MCBonusClassicEngine.hpp>
 #include <ql/instruments/barrieroption.hpp>
 #include <ql/math/matrix.hpp>
@@ -26,6 +27,9 @@ using namespace QuantLib;
 namespace RKE::TestSuite {
     // Barrier monitoring dates of the MC engine are its time grid points.
     constexpr Size mcTimeStepsPerYear = 100;
+    // The FD grid QuantLib's own barrier tests price Haug's table on.
+    constexpr Size fdTimeGrid = 200;
+    constexpr Size fdSpaceGrid = 400;
 
     namespace {
         struct OptionData {
@@ -134,6 +138,35 @@ namespace RKE::TestSuite {
                 BOOST_CHECK_CLOSE_FRACTION(cached, plain, tolerance);
             }
         }
+
+        // Broadie, Glasserman and Kou (1997), "A continuity correction for discrete barrier
+        // options", Mathematical Finance 7(4), 325-349: a down barrier monitored every dt prices
+        // like a continuously monitored one at H * exp(-beta * sigma * sqrt(dt)), with
+        // beta = -zeta(1/2) / sqrt(2 * pi).
+        Real bgkShiftedBarrier(Real barrier, Volatility volatility, Time dt) {
+            constexpr Real beta = 0.5826;
+            return barrier * std::exp(-beta * volatility * std::sqrt(dt));
+        }
+
+        // The certificate pays S_T once the barrier has been touched and max(S_T, bonusLevel)
+        // otherwise, i.e. S_T + 1{never touched} * max(bonusLevel - S_T, 0): the asset itself
+        // plus a down-and-out put struck at the bonus level. Receiving the asset at maturity is
+        // worth spot * exp(-q * T); AnalyticBarrierEngine prices the put under continuous
+        // monitoring of the barrier given here.
+        Real replicationPrice(const ext::shared_ptr<GeneralizedBlackScholesProcess>& process,
+                              const OptionData& data,
+                              Date exerciseDate,
+                              Real barrier) {
+            const auto assetLeg = process->x0() * process->dividendYield()->discount(exerciseDate);
+
+            auto downOutPut =
+                BarrierOption(Barrier::DownOut, barrier, 0.0,
+                              ext::make_shared<PlainVanillaPayoff>(Option::Put, data.bonusLevel),
+                              ext::make_shared<EuropeanExercise>(exerciseDate));
+            downOutPut.setPricingEngine(ext::make_shared<AnalyticBarrierEngine>(process));
+
+            return assetLeg + downOutPut.NPV();
+        }
     }
 
     BOOST_FIXTURE_TEST_SUITE(RkeQLExtTestSuite, TestSuiteFixture)
@@ -226,32 +259,14 @@ namespace RKE::TestSuite {
         bonusClassicOption->setPricingEngine(mcEngine);
         const auto npv = bonusClassicOption->NPV();
 
-        // The pricer pays S_T once the barrier has been touched and max(S_T, bonusLevel)
-        // otherwise, i.e. S_T + 1{never touched} * max(bonusLevel - S_T, 0): the asset
-        // itself plus a down-and-out put struck at the bonus level.
-        //
-        // AnalyticBarrierEngine assumes continuous monitoring, while the engine monitors
-        // on its time grid only. Broadie, Glasserman and Kou (1997), "A continuity
-        // correction for discrete barrier options", Mathematical Finance 7(4), 325-349,
-        // give the correction as a shift of a down barrier to H * exp(-beta * sigma *
-        // sqrt(dt)) with beta = -zeta(1/2) / sqrt(2 * pi).
+        // AnalyticBarrierEngine assumes continuous monitoring, while the engine monitors on
+        // its time grid only, so the replication takes the Broadie-Glasserman-Kou barrier.
         // Read from the engine's own grid, so the correction always uses the step the paths
         // were monitored on.
         const auto dt = mcEngine->timeGrid().dt(0);
-        constexpr Real beta = 0.5826;
-        const auto correctedBarrier =
-            option_data.barrier * std::exp(-beta * market_data.volatility * std::sqrt(dt));
-
-        // Receiving the asset at maturity is worth spot * exp(-q * T).
-        const auto assetLeg = process->x0() * process->dividendYield()->discount(exerciseDate);
-
-        auto downOutPut =
-            BarrierOption(Barrier::DownOut, correctedBarrier, 0.0,
-                          ext::make_shared<PlainVanillaPayoff>(Option::Put, option_data.bonusLevel),
-                          ext::make_shared<EuropeanExercise>(exerciseDate));
-        downOutPut.setPricingEngine(ext::make_shared<AnalyticBarrierEngine>(process));
-
-        const auto replication = assetLeg + downOutPut.NPV();
+        const auto replication =
+            replicationPrice(process, option_data, exerciseDate,
+                             bgkShiftedBarrier(option_data.barrier, market_data.volatility, dt));
 
         // Measured residual 3.8e-4 relative; the correction is O(1 / sqrt(steps)) and the
         // grid has 42 steps. Both sides are deterministic, so this is model error, not noise.
@@ -309,19 +324,10 @@ namespace RKE::TestSuite {
         bonusClassicOption->setPricingEngine(mcEngine);
         const auto npv = bonusClassicOption->NPV();
 
-        // The same decomposition as testBonusClassicOptionReplication: the asset plus a
-        // down-and-out put struck at the bonus level. The engine now monitors continuously,
-        // as AnalyticBarrierEngine assumes, so the put takes the barrier itself and no
-        // Broadie-Glasserman-Kou shift applies.
-        const auto assetLeg = process->x0() * process->dividendYield()->discount(exerciseDate);
-
-        auto downOutPut =
-            BarrierOption(Barrier::DownOut, option_data.barrier, 0.0,
-                          ext::make_shared<PlainVanillaPayoff>(Option::Put, option_data.bonusLevel),
-                          ext::make_shared<EuropeanExercise>(exerciseDate));
-        downOutPut.setPricingEngine(ext::make_shared<AnalyticBarrierEngine>(process));
-
-        const auto replication = assetLeg + downOutPut.NPV();
+        // The engine now monitors continuously, as AnalyticBarrierEngine assumes, so the put
+        // takes the barrier itself and no Broadie-Glasserman-Kou shift applies.
+        const auto replication =
+            replicationPrice(process, option_data, exerciseDate, option_data.barrier);
 
         // With flat r, q and sigma the bridge is exact, so the residual is sampling error
         // alone: measured 6.5e-5 relative at 50,000 paths, 1.5e-5 at 200,000 and 2.3e-5 at
@@ -445,6 +451,218 @@ namespace RKE::TestSuite {
             ext::make_shared<MCBonusClassicEngine<LowDiscrepancy, Statistics, SingleVariate>>(
                 process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(), false, true, 42));
         BOOST_CHECK_NO_THROW(bonusClassicOption->NPV());
+    }
+
+    BOOST_AUTO_TEST_CASE(
+        testBonusClassicOptionFdContinuousValuation) { // NOLINT(misc-use-internal-linkage):
+                                                       // the struct is the macro's
+        BOOST_TEST_MESSAGE("BonusClassicOption FD continuous valuation test");
+
+        const auto option_data = OptionData();
+        auto market_data = MarketData();
+
+        const auto today = Date(22, Jun, 2025);
+        Settings::instance().evaluationDate() = today;
+
+        const auto exerciseDate = today + option_data.ttm;
+
+        const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
+            option_data.barrier, option_data.bonusLevel, exerciseDate);
+
+        const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
+        bonusClassicOption->setPricingEngine(ext::make_shared<FdBlackScholesBonusClassicEngine>(
+            process, Null<Size>(), fdTimeGrid, fdSpaceGrid));
+        const auto npv = bonusClassicOption->NPV();
+
+        // Regression lock: the engine's own output on this grid and scheme, not an externally
+        // validated price. See testBonusClassicOptionFdContinuousReplication for that.
+        BOOST_CHECK_CLOSE_FRACTION(105.89059304496158, npv, 1e-8);
+    }
+
+    BOOST_AUTO_TEST_CASE(
+        testBonusClassicOptionFdContinuousReplication) { // NOLINT(misc-use-internal-linkage):
+                                                         // the struct is the macro's
+        BOOST_TEST_MESSAGE("BonusClassicOption FD continuous replication test");
+
+        const auto option_data = OptionData();
+        auto market_data = MarketData();
+
+        const auto today = Date(22, Jun, 2025);
+        Settings::instance().evaluationDate() = today;
+
+        const auto exerciseDate = today + option_data.ttm;
+
+        const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
+
+        // std::exp(std::log(85.0)) lies above 85, so a grid starting at std::log(85.0) would pay
+        // the bonus on its first node at maturity; 90 maps back to itself.
+        for (const Real barrier : {option_data.barrier, 85.0}) {
+            const auto bonusClassicOption =
+                ext::make_shared<BonusClassicOption>(barrier, option_data.bonusLevel, exerciseDate);
+            bonusClassicOption->setPricingEngine(ext::make_shared<FdBlackScholesBonusClassicEngine>(
+                process, Null<Size>(), fdTimeGrid, fdSpaceGrid));
+            const auto npv = bonusClassicOption->NPV();
+
+            // Both sides monitor continuously, so the put takes the barrier itself.
+            const auto replication = replicationPrice(process, option_data, exerciseDate, barrier);
+
+            // Measured residuals 4.3e-6 relative at barrier 90 and 3.2e-6 at 85. They fall
+            // linearly in the time steps, to 1.1e-6 and 4.5e-7 at 800 steps: QuantLib imposes
+            // the Dirichlet value on the barrier node after each implicit solve, so the next
+            // node is coupled to the unconstrained one. A first node above 85 was 2.1e-4 off.
+            // The bound leaves three times the larger residual.
+            BOOST_TEST_MESSAGE("barrier " << barrier << ": " << npv << ", relative residual "
+                                          << std::fabs(npv - replication) / replication);
+            BOOST_CHECK_CLOSE_FRACTION(replication, npv, 1.5e-5);
+        }
+    }
+
+    BOOST_AUTO_TEST_CASE(testBonusClassicOptionFdValuation) { // NOLINT(misc-use-internal-linkage):
+                                                              // the struct is the macro's
+        BOOST_TEST_MESSAGE("BonusClassicOption FD valuation test");
+
+        const auto option_data = OptionData();
+        auto market_data = MarketData();
+
+        const auto today = Date(22, Jun, 2025);
+        Settings::instance().evaluationDate() = today;
+
+        const auto exerciseDate = today + option_data.ttm;
+
+        const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
+            option_data.barrier, option_data.bonusLevel, exerciseDate);
+
+        const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
+        bonusClassicOption->setPricingEngine(ext::make_shared<FdBlackScholesBonusClassicEngine>(
+            process, mcTimeStepsPerYear, fdTimeGrid, fdSpaceGrid, 0, FdmSchemeDesc::TrBDF2()));
+        const auto npv = bonusClassicOption->NPV();
+
+        // Regression lock: the engine's own output on this grid and scheme, not an externally
+        // validated price. See testBonusClassicOptionFdReplication and
+        // testBonusClassicOptionFdVersusMc for that.
+        BOOST_CHECK_CLOSE_FRACTION(106.95082725557951, npv, 1e-8);
+    }
+
+    BOOST_AUTO_TEST_CASE(
+        testBonusClassicOptionFdReplication) { // NOLINT(misc-use-internal-linkage):
+                                               // the struct is the macro's
+        BOOST_TEST_MESSAGE("BonusClassicOption FD replication test");
+
+        const auto option_data = OptionData();
+        auto market_data = MarketData();
+
+        const auto today = Date(22, Jun, 2025);
+        Settings::instance().evaluationDate() = today;
+
+        const auto exerciseDate = today + option_data.ttm;
+
+        const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
+
+        const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
+            option_data.barrier, option_data.bonusLevel, exerciseDate);
+        const auto fdEngine = ext::make_shared<FdBlackScholesBonusClassicEngine>(
+            process, mcTimeStepsPerYear, fdTimeGrid, fdSpaceGrid, 0, FdmSchemeDesc::TrBDF2());
+        bonusClassicOption->setPricingEngine(fdEngine);
+        const auto npv = bonusClassicOption->NPV();
+
+        // The engine monitors on its time grid, so the replication takes the
+        // Broadie-Glasserman-Kou barrier for the grid's step.
+        const auto dt = fdEngine->timeGrid().dt(0);
+        const auto replication =
+            replicationPrice(process, option_data, exerciseDate,
+                             bgkShiftedBarrier(option_data.barrier, market_data.volatility, dt));
+
+        // Measured residual 4.7e-4 relative. The engine at 6,400 nodes and 3,200 steps, 2.5e-7
+        // from its value at half that grid, is 4.5e-4 below the replication, so nearly all of it
+        // is the correction's own error on 42 steps; the Monte Carlo engine's is 3.8e-4.
+        BOOST_TEST_MESSAGE("FD " << npv << ", relative residual "
+                                 << std::fabs(npv - replication) / replication);
+        BOOST_CHECK_CLOSE_FRACTION(replication, npv, 1e-3);
+    }
+
+    BOOST_AUTO_TEST_CASE(testBonusClassicOptionFdVersusMc) { // NOLINT(misc-use-internal-linkage):
+                                                             // the struct is the macro's
+        BOOST_TEST_MESSAGE("BonusClassicOption FD versus MC test");
+
+        const auto option_data = OptionData();
+        auto market_data = MarketData();
+
+        const auto today = Date(22, Jun, 2025);
+        Settings::instance().evaluationDate() = today;
+
+        const auto exerciseDate = today + option_data.ttm;
+
+        const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
+
+        const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
+            option_data.barrier, option_data.bonusLevel, exerciseDate);
+
+        const auto fdEngine = ext::make_shared<FdBlackScholesBonusClassicEngine>(
+            process, mcTimeStepsPerYear, fdTimeGrid, fdSpaceGrid, 0, FdmSchemeDesc::TrBDF2());
+        bonusClassicOption->setPricingEngine(fdEngine);
+        const auto fd = bonusClassicOption->NPV();
+
+        // The configuration of testBonusClassicOptionValuation's lock.
+        const auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
+            process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), true, true, 42);
+        bonusClassicOption->setPricingEngine(mcEngine);
+        const auto mc = bonusClassicOption->NPV();
+
+        // Both engines monitor the same product: the same 42 points after t = 0.
+        const auto fdGrid = fdEngine->timeGrid();
+        const auto mcGrid = mcEngine->timeGrid();
+        BOOST_CHECK_EQUAL(fdGrid.size() - 1, Size(42));
+        BOOST_REQUIRE_EQUAL(fdGrid.size(), mcGrid.size());
+        for (Size i = 0; i < fdGrid.size(); ++i) {
+            BOOST_CHECK_EQUAL(fdGrid[i], mcGrid[i]);
+        }
+
+        // Measured residual 9.0e-5 relative, the sum of two deterministic errors: the engine at
+        // 6,400 nodes and 3,200 steps is 2.8e-5 above this grid's value and 6.2e-5 below the
+        // Monte Carlo lock, which is that lock's own distance from the discrete price at 50,000
+        // low-discrepancy paths. The bound leaves three times the residual.
+        BOOST_TEST_MESSAGE("FD " << fd << ", MC " << mc << ", relative difference "
+                                 << std::fabs(fd - mc) / mc);
+        BOOST_CHECK_CLOSE_FRACTION(mc, fd, 3e-4);
+    }
+
+    BOOST_AUTO_TEST_CASE(
+        testBonusClassicOptionFdMonitoringOrder) { // NOLINT(misc-use-internal-linkage):
+                                                   // the struct is the macro's
+        BOOST_TEST_MESSAGE("BonusClassicOption FD monitoring order test");
+
+        const auto option_data = OptionData();
+        auto market_data = MarketData();
+
+        const auto today = Date(22, Jun, 2025);
+        Settings::instance().evaluationDate() = today;
+
+        const auto exerciseDate = today + option_data.ttm;
+
+        const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
+
+        const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
+            option_data.barrier, option_data.bonusLevel, exerciseDate);
+
+        const auto discreteEngine = ext::make_shared<FdBlackScholesBonusClassicEngine>(
+            process, mcTimeStepsPerYear, fdTimeGrid, fdSpaceGrid, 0, FdmSchemeDesc::TrBDF2());
+        bonusClassicOption->setPricingEngine(discreteEngine);
+        const auto discrete = bonusClassicOption->NPV();
+
+        const auto continuousEngine = ext::make_shared<FdBlackScholesBonusClassicEngine>(
+            process, Null<Size>(), fdTimeGrid, fdSpaceGrid, 0, FdmSchemeDesc::TrBDF2());
+        bonusClassicOption->setPricingEngine(continuousEngine);
+        const auto continuous = bonusClassicOption->NPV();
+
+        BOOST_CHECK(!discreteEngine->monitorsContinuously());
+        BOOST_CHECK(continuousEngine->monitorsContinuously());
+        // A continuously monitored barrier has no grid to report, and no fallback either.
+        BOOST_CHECK_THROW(static_cast<void>(continuousEngine->timeGrid()), Error);
+
+        // Continuous monitoring knocks out every path the grid knocks out and more, and a
+        // knock-out only removes the bonus put, so the continuous price is lower.
+        BOOST_TEST_MESSAGE("discrete " << discrete << ", continuous " << continuous);
+        BOOST_CHECK_LT(continuous, discrete);
     }
 
     BOOST_AUTO_TEST_SUITE_END()

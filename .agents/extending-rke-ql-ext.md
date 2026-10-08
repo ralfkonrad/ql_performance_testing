@@ -74,6 +74,28 @@ doubles. Then:
 A template engine is header-only, and still has to be listed — in
 `RKE_QL_EXT_HEADER`.
 
+A finite-difference engine derives from the instrument's `engine` alone and, in
+`calculate()`, assembles mesher, boundary set, step conditions and inner-value
+calculator into an `FdmSolverDesc` for `FdmBlackScholesSolver`, as
+`FdBlackScholesBonusClassicEngine` does after QuantLib's
+`FdBlackScholesBarrierEngine`. It registers with its process like any engine, and:
+
+- Reads `valueAt()` before `thetaAt()`. The other accessors run the rollback;
+  `thetaAt()` does not, and dereferences a null solver if called first.
+- Gates a step condition on its own times, compared exactly. The model calls
+  `applyTo()` after every time step, and at a stopping time passes the stored
+  double.
+- Puts a node on every jump of the payoff or the knock-out, and gives that node
+  its cell's average: a node taking one side's value moves the barrier by half a
+  cell, a first-order error. `FdmLogInnerValue` averages at maturity.
+- Checks that a node meant to sit on a level maps back to the right side of it:
+  `std::exp(std::log(H))` exceeds `H` for about a third of all levels.
+- Expects a knock-out on monitoring dates to make Crank-Nicolson, the default
+  `Douglas` scheme, converge erratically in time; `FdmSchemeDesc::TrBDF2()`
+  converges at second order there.
+- Exposes monitoring times as `timeGrid()`, as the Monte Carlo engine does: they
+  define the product.
+
 ## 4. Registering the Files
 
 `src/rke/ql/ext/CMakeLists.txt` keeps two lists, `RKE_QL_EXT_SOURCES` and

@@ -67,13 +67,16 @@ namespace RKE::QL::Ext {
         maturity. The barrier is monitored over the whole life of the option,
         and how often is up to the pricing engine.
 
-        \warning no default engine is set; see MCBonusClassicEngine.
+        \warning no default engine is set; see MCBonusClassicEngine and
+                 FdBlackScholesBonusClassicEngine.
 
         \ingroup instruments
 
         \test the Monte Carlo value is checked against the replication above,
               priced with QuantLib::AnalyticBarrierEngine and the
               Broadie-Glasserman-Kou correction for discrete monitoring.
+        \test the finite-difference value is checked against the same
+              replication.
     */
     class BonusClassicOption : public QuantLib::OneAssetOption {
       public:
