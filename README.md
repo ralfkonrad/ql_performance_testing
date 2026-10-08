@@ -6,8 +6,9 @@ SPDX-License-Identifier: MIT
 # ql_performance_testing
 
 A QuantLib playground: `src/rke/ql/ext` is a small extension library — currently a
-`BonusClassicOption` with a Monte Carlo engine — with its own Boost.Test suite,
-and `src/rke/benchmark/` measures it and QuantLib itself with google-benchmark;
+`BonusClassicOption` with Monte Carlo, finite-difference and binomial-tree engines —
+with its own Boost.Test suite, and `src/rke/benchmark/` measures it and QuantLib
+itself with google-benchmark;
 `src/rke/profile/` runs the same workloads for perf and valgrind. QuantLib
 (the `ralfkonrad` fork), google-benchmark and CLI11 are git submodules under
 `external/`.

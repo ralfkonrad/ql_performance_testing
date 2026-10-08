@@ -7,8 +7,8 @@ SPDX-License-Identifier: MIT
 
 How to price `BonusClassicOption` with a finite-difference engine and with a binomial
 tree next to `MCBonusClassicEngine`, which QuantLib classes each one is built from, and
-which tests make the numbers checkable. The finite-difference engine of section 3 is
-implemented; the tree engine of section 4 is not.
+which tests make the numbers checkable. Both are implemented: the finite-difference
+engine of section 3 and the tree engine of section 4.
 
 ## 1. The Product and the One Fact Every Engine Needs
 
@@ -35,8 +35,7 @@ The test market is the one in `src/rke/testsuite/BonusClassicOption.cpp`: evalua
 date 22 Jun 2025, maturity 22 Nov 2025 (`T = 153/360` under `Actual360`), spot 100,
 `H = 90`, `B = 120`, risk-free rate 1%, dividend yield 3%, volatility 20%, flat curves,
 `NullCalendar` volatility, `BlackScholesMertonProcess`; the MC grid has 42 steps from
-`mcTimeStepsPerYear = 100`. Nothing under `src/rke` or `.agents` uses finite differences
-or lattices yet.
+`mcTimeStepsPerYear = 100`.
 
 ## 2. Routes Considered
 
@@ -302,6 +301,7 @@ class BinomialBonusClassicEngine : public BonusClassicOption::engine {
         QuantLib::Size timeSteps,
         QuantLib::Size maxTimeSteps = 0); // 0: max(1000, 5 * timeSteps), as QuantLib
     void calculate() const override;
+    [[nodiscard]] QuantLib::TimeGrid timeGrid() const; // the lattice grid, after Boyle-Lau and odd rounding
 };
 ```
 
