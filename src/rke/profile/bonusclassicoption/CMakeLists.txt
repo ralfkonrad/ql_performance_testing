@@ -11,9 +11,9 @@ target_link_libraries(rke_profile_bonusclassicoption PRIVATE
         rke::warnings
 )
 
-# Smoke tests, not measurements: one pricing per monitoring mode and path generation, and one
-# per smile market at 256 paths instead of 2^16, so CI catches a profile executable that throws
-# before anyone profiles it.
+# Smoke tests, not measurements: one pricing per monitoring mode and path generation, one per
+# smile market at 256 paths instead of 2^16, and one per mode of the finite-difference and the
+# binomial engine, so CI catches a profile executable that throws before anyone profiles it.
 add_test(
         NAME rke_profile_bonusclassicoption_discrete
         COMMAND rke_profile_bonusclassicoption discrete 1
@@ -42,4 +42,19 @@ add_test(
 add_test(
         NAME rke_profile_bonusclassicoption_smile_bicubic
         COMMAND rke_profile_bonusclassicoption discrete 1 --market smile-bicubic --samples=256
+)
+
+add_test(
+        NAME rke_profile_bonusclassicoption_fd_discrete
+        COMMAND rke_profile_bonusclassicoption discrete 1 --engine fd
+)
+
+add_test(
+        NAME rke_profile_bonusclassicoption_fd_continuous
+        COMMAND rke_profile_bonusclassicoption continuous 1 --engine fd
+)
+
+add_test(
+        NAME rke_profile_bonusclassicoption_binomial
+        COMMAND rke_profile_bonusclassicoption discrete 1 --engine binomial
 )
