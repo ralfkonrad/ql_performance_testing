@@ -1,16 +1,18 @@
 # SPDX-FileCopyrightText: 2026 Ralf Konrad Eckel
 # SPDX-License-Identifier: MIT
 
-# Workloads shared by the benchmarks and the profile executables, so both measure the same
-# instrument, market and engine.
+# The flat market helpers and the workloads shared by the tests, the benchmarks and the
+# profile executables, so all three price the same instrument, market and engine.
 set(RKE_COMMON_SOURCES
         BonusClassicOptionSetup.cpp
+        FlatTermStructures.cpp
 )
 
 # Headers are listed by hand, and an unlisted one still compiles, so an omission
 # is silent.
 set(RKE_COMMON_HEADER
         BonusClassicOptionSetup.hpp
+        FlatTermStructures.hpp
 )
 
 add_library(rke_common STATIC

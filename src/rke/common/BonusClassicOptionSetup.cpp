@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "BonusClassicOptionSetup.hpp"
+#include "FlatTermStructures.hpp"
 #include <rke/ql/ext/pricingengines/bonusclassic/MCBonusClassicEngine.hpp>
 #include <ql/math/interpolations/bicubicsplineinterpolation.hpp>
 #include <ql/math/interpolations/bilinearinterpolation.hpp>
@@ -13,9 +14,7 @@
 #include <ql/processes/eulerdiscretization.hpp>
 #include <ql/quotes/simplequote.hpp>
 #include <ql/settings.hpp>
-#include <ql/termstructures/volatility/equityfx/blackconstantvol.hpp>
 #include <ql/termstructures/volatility/equityfx/blackvariancesurface.hpp>
-#include <ql/termstructures/yield/flatforward.hpp>
 #include <ql/termstructures/yield/zerocurve.hpp>
 #include <ql/time/calendars/nullcalendar.hpp>
 #include <ql/time/daycounters/actual360.hpp>
@@ -30,18 +29,9 @@ namespace RKE::Common {
     MarketData::makeGeneralizedBlackScholesProcess(Date today, bool forceDiscretization) const {
         const auto dc = Actual360();
         const auto spotQuote = ext::make_shared<SimpleQuote>(spot);
-
-        const auto qH_SME = ext::make_shared<SimpleQuote>(dividendYield);
-        const auto qTS = Handle<YieldTermStructure>(
-            ext::make_shared<FlatForward>(today, Handle<Quote>(qH_SME), dc));
-
-        const auto rH_SME = ext::make_shared<SimpleQuote>(riskfreeRate);
-        const auto rTS = Handle<YieldTermStructure>(
-            ext::make_shared<FlatForward>(today, Handle<Quote>(rH_SME), dc));
-
-        const auto volaQuote = ext::make_shared<SimpleQuote>(volatility);
-        const auto volTS = Handle<BlackVolTermStructure>(ext::make_shared<BlackConstantVol>(
-            today, NullCalendar(), Handle<Quote>(volaQuote), dc));
+        const auto qTS = flatRate(today, dividendYield, dc);
+        const auto rTS = flatRate(today, riskfreeRate, dc);
+        const auto volTS = flatVol(today, volatility, dc);
 
         return ext::make_shared<BlackScholesMertonProcess>(
             Handle<Quote>(spotQuote), qTS, rTS, volTS, ext::make_shared<EulerDiscretization>(),
