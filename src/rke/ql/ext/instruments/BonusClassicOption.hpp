@@ -47,7 +47,7 @@ namespace RKE::QL::Ext {
         //@{
         [[nodiscard]] std::string name() const override { return "BonusClassic"; }
         QuantLib::Real operator()(QuantLib::Real price) const override;
-        void accept(QuantLib::AcyclicVisitor& /*unused*/) override;
+        void accept(QuantLib::AcyclicVisitor& acyclic_visitor) override;
         //@}
 
 
@@ -94,7 +94,7 @@ namespace RKE::QL::Ext {
         BonusClassicOption(QuantLib::ext::shared_ptr<BonusClassicPayoff> payoff,
                            QuantLib::ext::shared_ptr<QuantLib::EuropeanExercise> exercise);
 
-        void setupArguments(QuantLib::PricingEngine::arguments* /*unused*/) const override;
+        void setupArguments(QuantLib::PricingEngine::arguments* arguments) const override;
 
         //! \name Inspectors
         //@{
