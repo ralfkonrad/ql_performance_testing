@@ -6,6 +6,7 @@
 set(RKE_COMMON_SOURCES
         BonusClassicOptionSetup.cpp
         FlatTermStructures.cpp
+        StepCacheMarkets.cpp
 )
 
 # Headers are listed by hand, and an unlisted one still compiles, so an omission
@@ -13,6 +14,7 @@ set(RKE_COMMON_SOURCES
 set(RKE_COMMON_HEADER
         BonusClassicOptionSetup.hpp
         FlatTermStructures.hpp
+        StepCacheMarkets.hpp
 )
 
 add_library(rke_common STATIC

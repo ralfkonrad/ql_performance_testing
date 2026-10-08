@@ -3,22 +3,14 @@
 
 #include "TestSuiteFixture.hpp"
 #include <rke/common/BonusClassicOptionSetup.hpp>
-#include <rke/common/FlatTermStructures.hpp>
+#include <rke/common/StepCacheMarkets.hpp>
 #include <rke/ql/ext/methods/montecarlo/BlackScholesStepCache.hpp>
 #include <rke/ql/ext/methods/montecarlo/CachedStepPathGenerator.hpp>
 #include <rke/ql/ext/methods/montecarlo/LocalVolStepCache.hpp>
 #include <ql/errors.hpp>
-#include <ql/math/matrix.hpp>
 #include <ql/math/randomnumbers/rngtraits.hpp>
 #include <ql/methods/montecarlo/pathgenerator.hpp>
 #include <ql/processes/blackscholesprocess.hpp>
-#include <ql/quotes/simplequote.hpp>
-#include <ql/termstructures/volatility/equityfx/blackvariancecurve.hpp>
-#include <ql/termstructures/volatility/equityfx/blackvariancesurface.hpp>
-#include <ql/termstructures/volatility/equityfx/localconstantvol.hpp>
-#include <ql/termstructures/yield/zerocurve.hpp>
-#include <ql/time/calendars/nullcalendar.hpp>
-#include <ql/time/daycounters/actual360.hpp>
 #include <boost/test/unit_test.hpp>
 #include <algorithm>
 #include <cmath>
@@ -32,7 +24,6 @@ namespace RKE::TestSuite {
         // Conventions of every case: Actual360 throughout, NullCalendar, evaluation date
         // 22 Jun 2025, spot 100, rate and dividend yield continuously compounded.
         using RKE::Common::evaluationDate;
-        constexpr Real spot = 100.0;
         constexpr Time maturity = 1.0;
         constexpr Size timeSteps = 50;
         constexpr Size paths = 64;
@@ -41,18 +32,6 @@ namespace RKE::TestSuite {
         constexpr Real pathTolerance = 1.0e-12;
 
         using rsg_type = LowDiscrepancy::rsg_type;
-
-        Handle<Quote> spotQuote() {
-            return Handle<Quote>(ext::make_shared<SimpleQuote>(spot));
-        }
-
-        Handle<YieldTermStructure> flatCurve(Rate rate) {
-            return RKE::Common::flatRate(evaluationDate(), rate, Actual360());
-        }
-
-        Handle<BlackVolTermStructure> constantVol() {
-            return RKE::Common::flatVol(evaluationDate(), 0.20, Actual360());
-        }
 
         // Both generators draw the same Sobol sequence through the same bridge, and every
         // point of every path, plain and antithetic, has to be the same double, or within the
@@ -133,81 +112,15 @@ namespace RKE::TestSuite {
                 Error);
         }
 
-        // Zero rates linear between the nodes, continuously compounded.
-        Handle<YieldTermStructure> zeroCurve(const std::vector<Rate>& rates) {
-            const std::vector<Date> curveDates = {
-                evaluationDate(),
-                evaluationDate() + Period(3, Months),
-                evaluationDate() + Period(1, Years),
-                evaluationDate() + Period(2, Years),
-            };
-            return Handle<YieldTermStructure>(
-                ext::make_shared<ZeroCurve>(curveDates, rates, Actual360(), NullCalendar()));
-        }
-
-        Handle<YieldTermStructure> zeroRiskFree() {
-            return zeroCurve({0.010, 0.012, 0.018, 0.022});
-        }
-
-        Handle<YieldTermStructure> zeroDividend() {
-            return zeroCurve({0.030, 0.028, 0.025, 0.024});
-        }
-
         // The flat reference market under EulerDiscretization, as the benchmarks price it.
         ext::shared_ptr<GeneralizedBlackScholesProcess> constantVolProcess() {
             return RKE::Common::MarketData().makeGeneralizedBlackScholesProcess(evaluationDate());
-        }
-
-        ext::shared_ptr<GeneralizedBlackScholesProcess> varianceCurveProcess() {
-            const std::vector<Date> volDates = {
-                evaluationDate() + Period(3, Months),
-                evaluationDate() + Period(1, Years),
-                evaluationDate() + Period(2, Years),
-            };
-            const auto vol = Handle<BlackVolTermStructure>(ext::make_shared<BlackVarianceCurve>(
-                evaluationDate(), volDates, std::vector<Volatility>{0.25, 0.21, 0.19},
-                Actual360()));
-            return ext::make_shared<BlackScholesMertonProcess>(spotQuote(), zeroDividend(),
-                                                               zeroRiskFree(), vol);
-        }
-
-        // A mild skew, flat in time, bilinear in time and strike, on zero curves.
-        ext::shared_ptr<GeneralizedBlackScholesProcess> smileProcess() {
-            const std::vector<Date> dates = {
-                evaluationDate() + Period(6, Months),
-                evaluationDate() + Period(1, Years),
-                evaluationDate() + Period(2, Years),
-            };
-            const std::vector<Real> strikes = {60.0, 80.0, 100.0, 120.0, 140.0};
-            // Rows are strikes, columns dates.
-            Matrix vols(strikes.size(), dates.size());
-            const std::vector<Volatility> skew = {0.28, 0.24, 0.20, 0.19, 0.19};
-            for (Size i = 0; i < strikes.size(); ++i) {
-                for (Size j = 0; j < dates.size(); ++j) {
-                    vols(i, j) = skew[i];
-                }
-            }
-            const auto surface =
-                Handle<BlackVolTermStructure>(ext::make_shared<BlackVarianceSurface>(
-                    evaluationDate(), NullCalendar(), dates, strikes, vols, Actual360(),
-                    BlackVarianceSurface::ConstantExtrapolation,
-                    BlackVarianceSurface::ConstantExtrapolation));
-            return ext::make_shared<BlackScholesMertonProcess>(spotQuote(), zeroDividend(),
-                                                               zeroRiskFree(), surface);
         }
 
         // The type check alone would take the exact step here.
         ext::shared_ptr<GeneralizedBlackScholesProcess> forcedDiscretizationProcess() {
             return RKE::Common::MarketData().makeGeneralizedBlackScholesProcess(evaluationDate(),
                                                                                 true);
-        }
-
-        // Euler steps over a BlackConstantVol, which the type check alone would miss.
-        ext::shared_ptr<GeneralizedBlackScholesProcess> externalLocalVolProcess() {
-            const auto localVol = Handle<LocalVolTermStructure>(
-                ext::make_shared<LocalConstantVol>(evaluationDate(), 0.20, Actual360()));
-            return ext::make_shared<GeneralizedBlackScholesProcess>(
-                spotQuote(), flatCurve(0.03), flatCurve(0.01), constantVol(), localVol);
         }
     }
 
@@ -227,7 +140,9 @@ namespace RKE::TestSuite {
         const BlackScholesStepCache cache(process, grid);
         BOOST_REQUIRE(cache.reproducesEvolve());
         for (Size i = 0; i < timeSteps; ++i) {
-            BOOST_CHECK_EQUAL(cache.variance(i), process->variance(grid[i], spot, grid.dt(i)));
+            BOOST_CHECK_EQUAL(
+                cache.variance(i),
+                process->variance(grid[i], RKE::Common::MarketData().spot, grid.dt(i)));
         }
     }
 
@@ -236,7 +151,7 @@ namespace RKE::TestSuite {
         BOOST_TEST_MESSAGE("CachedStepPathGenerator with a variance curve and zero curves");
         Settings::instance().evaluationDate() = evaluationDate();
 
-        checkSamePaths(varianceCurveProcess());
+        checkSamePaths(RKE::Common::varianceCurveProcess(evaluationDate()));
     }
 
     BOOST_AUTO_TEST_CASE(testVolatilitySurface) { // NOLINT(misc-use-internal-linkage): the
@@ -244,7 +159,7 @@ namespace RKE::TestSuite {
         BOOST_TEST_MESSAGE("CachedStepPathGenerator refuses a smile");
         Settings::instance().evaluationDate() = evaluationDate();
 
-        checkRefused(smileProcess());
+        checkRefused(RKE::Common::smileProcess(evaluationDate()));
     }
 
     BOOST_AUTO_TEST_CASE(testForcedDiscretization) { // NOLINT(misc-use-internal-linkage): the
@@ -261,7 +176,7 @@ namespace RKE::TestSuite {
         BOOST_TEST_MESSAGE("CachedStepPathGenerator refuses an external local vol");
         Settings::instance().evaluationDate() = evaluationDate();
 
-        checkRefused(externalLocalVolProcess());
+        checkRefused(RKE::Common::externalLocalVolProcess(evaluationDate()));
     }
 
     BOOST_AUTO_TEST_CASE(testSharedCache) { // NOLINT(misc-use-internal-linkage): the struct is
@@ -323,7 +238,7 @@ namespace RKE::TestSuite {
         BOOST_TEST_MESSAGE("LocalVolStepCache with a smile and zero curves");
         Settings::instance().evaluationDate() = evaluationDate();
 
-        checkSameSteps(smileProcess());
+        checkSameSteps(RKE::Common::smileProcess(evaluationDate()));
     }
 
     BOOST_AUTO_TEST_CASE(testForcedDiscretization) { // NOLINT(misc-use-internal-linkage): the
@@ -341,7 +256,8 @@ namespace RKE::TestSuite {
                            "local vol");
         Settings::instance().evaluationDate() = evaluationDate();
 
-        checkSamePaths<LocalVolStepCache>(externalLocalVolProcess(), pathTolerance);
+        checkSamePaths<LocalVolStepCache>(RKE::Common::externalLocalVolProcess(evaluationDate()),
+                                          pathTolerance);
     }
 
     BOOST_AUTO_TEST_CASE(testExactStep) { // NOLINT(misc-use-internal-linkage): the struct is
@@ -350,7 +266,7 @@ namespace RKE::TestSuite {
                            "step on a variance curve");
         Settings::instance().evaluationDate() = evaluationDate();
 
-        checkRefused<LocalVolStepCache>(varianceCurveProcess());
+        checkRefused<LocalVolStepCache>(RKE::Common::varianceCurveProcess(evaluationDate()));
     }
 
     BOOST_AUTO_TEST_CASE(testCoincidingExactStep) { // NOLINT(misc-use-internal-linkage): the
