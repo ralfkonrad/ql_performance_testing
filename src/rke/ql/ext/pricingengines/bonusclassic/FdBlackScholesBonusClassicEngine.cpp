@@ -151,6 +151,8 @@ namespace RKE::QL::Ext {
 
         const auto spot = process_->x0();
         QL_REQUIRE(spot > 0.0, "negative or null underlying given");
+        // In discrete mode t = 0 is no monitoring time, so this is a restriction rather than a
+        // knock-out; see the class warning.
         QL_REQUIRE(!triggered(spot), "barrier touched");
 
         const auto maturity = process_->time(arguments_.exercise->lastDate());

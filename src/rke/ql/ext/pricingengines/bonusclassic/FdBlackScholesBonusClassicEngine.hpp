@@ -64,6 +64,12 @@ namespace RKE::QL::Ext {
                  prices then converge erratically in time. The default here
                  is therefore QuantLib::FdmSchemeDesc::TrBDF2(), which is
                  L-stable and converges at second order there.
+        \warning calculate() requires the spot above the barrier in either
+                 mode and throws otherwise. With discrete monitoring that is
+                 a restriction, not a knock-out: \f$ t = 0 \f$ is no
+                 monitoring time, so a certificate alive today with its spot
+                 at or below the barrier has a price, which this engine does
+                 not compute.
         \warning with discrete monitoring the barrier has to lie inside
                  QuantLib::FdmBlackScholesMesher's range; calculate() fails
                  otherwise.
