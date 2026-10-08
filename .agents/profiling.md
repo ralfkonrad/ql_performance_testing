@@ -30,9 +30,9 @@ OUT=build/profile/prof/$(basename "$PROG") && mkdir -p "$OUT"
 ```
 
 `rke_profile_bonusclassicoption` takes `[discrete|continuous] [iterations]
-[--path-generation cached|uncached] [--market flat|smile-bilinear|smile-bicubic]
-[--samples=<paths per pricing>]`, defaulting to `discrete`, `10`, `cached`, `flat` and
-2^16 paths.
+[--engine mc|fd|binomial] [--path-generation cached|uncached]
+[--market flat|smile-bilinear|smile-bicubic] [--samples=<paths per pricing>]`, defaulting
+to `discrete`, `10`, `mc`, `cached`, `flat` and 2^16 paths.
 `cached` is the step cache of the market's branch, `CachedStepSingleVariate` on `flat`
 and `LocalVolStepSingleVariate` on the smiles; `uncached` is `QuantLib::SingleVariate`,
 which asks the process for every step, the baseline the step cache is measured against. It
@@ -47,6 +47,15 @@ The smile markets take the Euler branch through `LocalVolSurface`. An uncached
 `smile-bicubic` repricing runs about a minute natively, far too long for callgrind at
 2^16 paths. Ir per step does not depend on the path count, so count a smile run with
 fewer paths, `--samples=256` as the smoke tests do, and quote it per step.
+
+`fd` is `FdBlackScholesBonusClassicEngine` on `rke_common`'s `fdTimeGrid` by
+`fdSpaceGrid`, monitored on the Monte-Carlo grid under `discrete` and continuously
+otherwise; `binomial` is `BinomialBonusClassicEngine<CoxRossRubinstein>` at
+`treeTimeSteps` with Boyle-Lau on, which monitors on every step, so it refuses
+`continuous`. Both price `flat` only and ignore `--path-generation` and `--samples`;
+the result line prints the grid they priced on in place of the path count, the
+lattice after Boyle-Lau in particular. One pricing takes milliseconds, so nothing
+needs shrinking for callgrind.
 
 Every recipe ends in a text file, so an agent reads the result rather than a
 picture.

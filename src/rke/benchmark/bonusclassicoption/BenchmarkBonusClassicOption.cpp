@@ -29,9 +29,10 @@ namespace RKE::Benchmark {
         void benchmarkBonusClassicOption(benchmark::State& state,
                                          bool isBiased,
                                          PathGeneration pathGeneration,
-                                         Market market = Market::Flat) {
+                                         Market market = Market::Flat,
+                                         Engine engine = Engine::MonteCarlo) {
             const auto setup =
-                makeBonusClassicOptionSetup(isBiased, pathGeneration, market, samples);
+                makeBonusClassicOptionSetup(isBiased, pathGeneration, market, samples, engine);
 
             for (const auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
                 auto npv = reprice(*setup.option);
@@ -39,12 +40,12 @@ namespace RKE::Benchmark {
             }
         }
 
-        void BM_BonusClassicOption(benchmark::State& state) {
+        void BM_BonusClassicOptionMC(benchmark::State& state) {
             benchmarkBonusClassicOption(state, true, PathGeneration::CachedStep);
         }
 
-        BENCHMARK(BM_BonusClassicOption)
-            ->Name("BonusClassicOption")
+        BENCHMARK(BM_BonusClassicOptionMC)
+            ->Name("BonusClassicOptionMC")
             ->Unit(benchmark::kMillisecond)
             // Pins the count instead of letting google-benchmark scale to statistical stability,
             // trading the variance estimate for a predictable wall time; measure variance with
@@ -53,121 +54,161 @@ namespace RKE::Benchmark {
 
         // The same pricing with the barrier monitored continuously, which adds a variance()
         // call, a logarithm and an exponential per step of every surviving path.
-        void BM_BonusClassicOptionContinuous(benchmark::State& state) {
+        void BM_BonusClassicOptionMCContinuous(benchmark::State& state) {
             benchmarkBonusClassicOption(state, false, PathGeneration::CachedStep);
         }
 
-        BENCHMARK(BM_BonusClassicOptionContinuous)
-            ->Name("BonusClassicOptionContinuous")
+        BENCHMARK(BM_BonusClassicOptionMCContinuous)
+            ->Name("BonusClassicOptionMCContinuous")
             ->Unit(benchmark::kMillisecond)
-            // Pinned like BonusClassicOption, so the two times compare directly.
+            // Pinned like BonusClassicOptionMC, so the two times compare directly.
             ->Iterations(10);
 
         // The two pricings above with QuantLib::SingleVariate, whose PathGenerator asks the
         // process for drift and diffusion at every step, as the baseline the step cache is
         // measured against. Same paths, same NPVs.
-        void BM_BonusClassicOptionUncached(benchmark::State& state) {
+        void BM_BonusClassicOptionMCUncached(benchmark::State& state) {
             benchmarkBonusClassicOption(state, true, PathGeneration::Uncached);
         }
 
-        BENCHMARK(BM_BonusClassicOptionUncached)
-            ->Name("BonusClassicOptionUncached")
+        BENCHMARK(BM_BonusClassicOptionMCUncached)
+            ->Name("BonusClassicOptionMCUncached")
             ->Unit(benchmark::kMillisecond)
             ->Iterations(10);
 
-        void BM_BonusClassicOptionContinuousUncached(benchmark::State& state) {
+        void BM_BonusClassicOptionMCContinuousUncached(benchmark::State& state) {
             benchmarkBonusClassicOption(state, false, PathGeneration::Uncached);
         }
 
-        BENCHMARK(BM_BonusClassicOptionContinuousUncached)
-            ->Name("BonusClassicOptionContinuousUncached")
+        BENCHMARK(BM_BonusClassicOptionMCContinuousUncached)
+            ->Name("BonusClassicOptionMCContinuousUncached")
             ->Unit(benchmark::kMillisecond)
             ->Iterations(10);
 
         // The four pricings above on the bilinear smile market, whose step is the Euler step
         // through LocalVolSurface, cached by LocalVolStepCache. Every step asks the surface for
         // a local volatility, so fewer iterations are pinned.
-        void BM_BonusClassicOptionSmileBilinear(benchmark::State& state) {
+        void BM_BonusClassicOptionMCSmileBilinear(benchmark::State& state) {
             benchmarkBonusClassicOption(state, true, PathGeneration::CachedStep,
                                         Market::SmileBilinear);
         }
 
-        BENCHMARK(BM_BonusClassicOptionSmileBilinear)
-            ->Name("BonusClassicOptionSmileBilinear")
+        BENCHMARK(BM_BonusClassicOptionMCSmileBilinear)
+            ->Name("BonusClassicOptionMCSmileBilinear")
             ->Unit(benchmark::kMillisecond)
             ->Iterations(3);
 
-        void BM_BonusClassicOptionSmileBilinearContinuous(benchmark::State& state) {
+        void BM_BonusClassicOptionMCSmileBilinearContinuous(benchmark::State& state) {
             benchmarkBonusClassicOption(state, false, PathGeneration::CachedStep,
                                         Market::SmileBilinear);
         }
 
-        BENCHMARK(BM_BonusClassicOptionSmileBilinearContinuous)
-            ->Name("BonusClassicOptionSmileBilinearContinuous")
+        BENCHMARK(BM_BonusClassicOptionMCSmileBilinearContinuous)
+            ->Name("BonusClassicOptionMCSmileBilinearContinuous")
             ->Unit(benchmark::kMillisecond)
             ->Iterations(3);
 
-        void BM_BonusClassicOptionSmileBilinearUncached(benchmark::State& state) {
+        void BM_BonusClassicOptionMCSmileBilinearUncached(benchmark::State& state) {
             benchmarkBonusClassicOption(state, true, PathGeneration::Uncached,
                                         Market::SmileBilinear);
         }
 
-        BENCHMARK(BM_BonusClassicOptionSmileBilinearUncached)
-            ->Name("BonusClassicOptionSmileBilinearUncached")
+        BENCHMARK(BM_BonusClassicOptionMCSmileBilinearUncached)
+            ->Name("BonusClassicOptionMCSmileBilinearUncached")
             ->Unit(benchmark::kMillisecond)
             ->Iterations(3);
 
-        void BM_BonusClassicOptionSmileBilinearContinuousUncached(benchmark::State& state) {
+        void BM_BonusClassicOptionMCSmileBilinearContinuousUncached(benchmark::State& state) {
             benchmarkBonusClassicOption(state, false, PathGeneration::Uncached,
                                         Market::SmileBilinear);
         }
 
-        BENCHMARK(BM_BonusClassicOptionSmileBilinearContinuousUncached)
-            ->Name("BonusClassicOptionSmileBilinearContinuousUncached")
+        BENCHMARK(BM_BonusClassicOptionMCSmileBilinearContinuousUncached)
+            ->Name("BonusClassicOptionMCSmileBilinearContinuousUncached")
             ->Unit(benchmark::kMillisecond)
             ->Iterations(3);
 
         // The same four on the bicubic surface, which builds a strike spline on every lookup. A
         // repricing runs up to a minute, so a single iteration.
-        void BM_BonusClassicOptionSmileBicubic(benchmark::State& state) {
+        void BM_BonusClassicOptionMCSmileBicubic(benchmark::State& state) {
             benchmarkBonusClassicOption(state, true, PathGeneration::CachedStep,
                                         Market::SmileBicubic);
         }
 
-        BENCHMARK(BM_BonusClassicOptionSmileBicubic)
-            ->Name("BonusClassicOptionSmileBicubic")
+        BENCHMARK(BM_BonusClassicOptionMCSmileBicubic)
+            ->Name("BonusClassicOptionMCSmileBicubic")
             ->Unit(benchmark::kMillisecond)
             ->Iterations(1);
 
-        void BM_BonusClassicOptionSmileBicubicContinuous(benchmark::State& state) {
+        void BM_BonusClassicOptionMCSmileBicubicContinuous(benchmark::State& state) {
             benchmarkBonusClassicOption(state, false, PathGeneration::CachedStep,
                                         Market::SmileBicubic);
         }
 
-        BENCHMARK(BM_BonusClassicOptionSmileBicubicContinuous)
-            ->Name("BonusClassicOptionSmileBicubicContinuous")
+        BENCHMARK(BM_BonusClassicOptionMCSmileBicubicContinuous)
+            ->Name("BonusClassicOptionMCSmileBicubicContinuous")
             ->Unit(benchmark::kMillisecond)
             ->Iterations(1);
 
-        void BM_BonusClassicOptionSmileBicubicUncached(benchmark::State& state) {
+        void BM_BonusClassicOptionMCSmileBicubicUncached(benchmark::State& state) {
             benchmarkBonusClassicOption(state, true, PathGeneration::Uncached,
                                         Market::SmileBicubic);
         }
 
-        BENCHMARK(BM_BonusClassicOptionSmileBicubicUncached)
-            ->Name("BonusClassicOptionSmileBicubicUncached")
+        BENCHMARK(BM_BonusClassicOptionMCSmileBicubicUncached)
+            ->Name("BonusClassicOptionMCSmileBicubicUncached")
             ->Unit(benchmark::kMillisecond)
             ->Iterations(1);
 
-        void BM_BonusClassicOptionSmileBicubicContinuousUncached(benchmark::State& state) {
+        void BM_BonusClassicOptionMCSmileBicubicContinuousUncached(benchmark::State& state) {
             benchmarkBonusClassicOption(state, false, PathGeneration::Uncached,
                                         Market::SmileBicubic);
         }
 
-        BENCHMARK(BM_BonusClassicOptionSmileBicubicContinuousUncached)
-            ->Name("BonusClassicOptionSmileBicubicContinuousUncached")
+        BENCHMARK(BM_BonusClassicOptionMCSmileBicubicContinuousUncached)
+            ->Name("BonusClassicOptionMCSmileBicubicContinuousUncached")
             ->Unit(benchmark::kMillisecond)
             ->Iterations(1);
+
+        // The finite-difference engine on the same certificate and flat market, discretely
+        // monitored on the Monte-Carlo grid and rolled back on fdTimeGrid x fdSpaceGrid, so
+        // its time compares with BonusClassicOptionMC directly. --samples does not apply.
+        void BM_BonusClassicOptionFd(benchmark::State& state) {
+            benchmarkBonusClassicOption(state, true, PathGeneration::CachedStep, Market::Flat,
+                                        Engine::FiniteDifference);
+        }
+
+        BENCHMARK(BM_BonusClassicOptionFd)
+            ->Name("BonusClassicOptionFd")
+            ->Unit(benchmark::kMillisecond)
+            // A pricing takes milliseconds, so the pin is higher than the Monte-Carlo ones for
+            // a comparable wall time.
+            ->Iterations(100);
+
+        // Continuous monitoring: the knock-out becomes a Dirichlet boundary at the barrier and
+        // the step conditions on the monitoring dates go away.
+        void BM_BonusClassicOptionFdContinuous(benchmark::State& state) {
+            benchmarkBonusClassicOption(state, false, PathGeneration::CachedStep, Market::Flat,
+                                        Engine::FiniteDifference);
+        }
+
+        BENCHMARK(BM_BonusClassicOptionFdContinuous)
+            ->Name("BonusClassicOptionFdContinuous")
+            ->Unit(benchmark::kMillisecond)
+            ->Iterations(100);
+
+        // The binomial engine, treeTimeSteps Cox-Ross-Rubinstein steps raised by Boyle-Lau,
+        // which monitors on every step, so there is no continuous variant; the cheapest of the
+        // three.
+        void BM_BonusClassicOptionBinomial(benchmark::State& state) {
+            benchmarkBonusClassicOption(state, true, PathGeneration::CachedStep, Market::Flat,
+                                        Engine::Binomial);
+        }
+
+        BENCHMARK(BM_BonusClassicOptionBinomial)
+            ->Name("BonusClassicOptionBinomial")
+            ->Unit(benchmark::kMillisecond)
+            ->Iterations(1000);
     }
 }
 

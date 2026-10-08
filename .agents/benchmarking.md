@@ -68,7 +68,7 @@ store to `clang-analyzer-deadcode.DeadStores`, and warnings are errors here.
 
 Build the process, the term structures, the instrument and the engine before the
 loop, and set the evaluation date there too. Only the work being measured belongs
-inside. `BM_BonusClassicOption` is the pattern.
+inside. `BM_BonusClassicOptionMC` is the pattern.
 
 When a workload is also profiled, its setup and loop body live in `rke_common`
 (`src/rke/common/`), and the benchmark calls them rather than holding a copy, so
@@ -90,7 +90,7 @@ Useful flags:
 
 ```bash
 # one benchmark: a regex over the ->Name() plus the suffix google-benchmark appends
-$BIN --benchmark_filter='^BonusClassicOption/'   # --benchmark_list_tests=true shows names
+$BIN --benchmark_filter='^BonusClassicOptionMC/' # --benchmark_list_tests=true shows names
 
 # variance across repetitions, with the aggregates only
 $BIN --benchmark_repetitions=10 --benchmark_report_aggregates_only=true
@@ -126,9 +126,11 @@ without being asked.
 Keep that dry run to seconds: it runs in every CI job, and one iteration of a
 production-sized workload can take a minute. Shrink a size the code path does not
 depend on and keep the rest: `rke_benchmark_bonusclassicoption` takes `--samples`,
-and its `add_test` passes 256 paths instead of 2^16 on the same time grid. A binary
-with such a flag needs its own `main`: `benchmark::Initialize` consumes the
-`--benchmark_*` flags, and CLI11 parses what is left.
+and its `add_test` passes 256 paths instead of 2^16 on the same time grid. Only the
+Monte-Carlo registrations read it: the `Fd*` and `Binomial` ones price in
+milliseconds at production size. A binary with such a flag needs its own `main`:
+`benchmark::Initialize` consumes the `--benchmark_*` flags, and CLI11 parses what
+is left.
 
 Consequence: every benchmark number is a local measurement. When you quote one,
 name the machine, the compiler and the C++ standard it came from, and measure

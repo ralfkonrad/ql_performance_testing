@@ -3,6 +3,8 @@
 
 #include "BonusClassicOptionSetup.hpp"
 #include "FlatTermStructures.hpp"
+#include <rke/ql/ext/pricingengines/bonusclassic/BinomialBonusClassicEngine.hpp>
+#include <rke/ql/ext/pricingengines/bonusclassic/FdBlackScholesBonusClassicEngine.hpp>
 #include <rke/ql/ext/pricingengines/bonusclassic/MCBonusClassicEngine.hpp>
 #include <ql/math/interpolations/bicubicsplineinterpolation.hpp>
 #include <ql/math/interpolations/bilinearinterpolation.hpp>
@@ -10,6 +12,7 @@
 #include <ql/math/randomnumbers/rngtraits.hpp>
 #include <ql/math/randomnumbers/sobolrsg.hpp>
 #include <ql/math/statistics/statistics.hpp>
+#include <ql/methods/lattices/binomialtree.hpp>
 #include <ql/methods/montecarlo/mctraits.hpp>
 #include <ql/processes/eulerdiscretization.hpp>
 #include <ql/quotes/simplequote.hpp>
@@ -108,10 +111,13 @@ namespace RKE::Common {
         }
     }
 
-    BonusClassicOptionSetup makeBonusClassicOptionSetup(bool isBiased,
-                                                        PathGeneration pathGeneration,
-                                                        Market market,
-                                                        Size samples) {
+    BonusClassicOptionSetup makeBonusClassicOptionSetup(
+        bool isBiased, PathGeneration pathGeneration, Market market, Size samples, Engine engine) {
+        QL_REQUIRE(engine == Engine::MonteCarlo || market == Market::Flat,
+                   "only the Monte-Carlo engine prices a smile market");
+        QL_REQUIRE(engine != Engine::Binomial || isBiased,
+                   "the binomial engine monitors on every step, never continuously");
+
         const auto option_data = OptionData();
         const auto market_data = MarketData();
 
@@ -122,26 +128,52 @@ namespace RKE::Common {
                                  market_data.makeGeneralizedBlackScholesProcess(today) :
                                  SmileMarketData().makeGeneralizedBlackScholesProcess(
                                      today, market == Market::SmileBicubic);
-        // The Null<Real>() tolerance is mandatory, not a default: with no error estimate under
-        // LowDiscrepancy, McSimulation::calculate takes the fixed-sample branch and maxSamples
-        // never applies. The grid is a production run's whatever the path count: about one step
-        // per business day, 255 over the Actual360 year fraction 365/360, though not on the
-        // business days themselves.
-        constexpr Size timeStepsPerYear = 252;
-        const auto mcEngine = [&] {
+        const auto pricingEngine = [&]() -> ext::shared_ptr<PricingEngine> {
+            if (engine == Engine::FiniteDifference) {
+                // Discrete monitoring on the Monte-Carlo grid, so the two prices compare; the
+                // rollback merges those dates into its own tGrid steps.
+                return ext::make_shared<FdBlackScholesBonusClassicEngine>(
+                    process, isBiased ? monitoringStepsPerYear : Null<Size>(), fdTimeGrid,
+                    fdSpaceGrid);
+            }
+            if (engine == Engine::Binomial) {
+                // Boyle-Lau on, maxTimeSteps at its default: without it the first knocked-out
+                // layer at 400 steps sits 0.55% below the barrier and the price 0.5% off the
+                // replication, see testBonusClassicOptionBinomialBoyleLau. The lattice is
+                // therefore larger than treeTimeSteps; monitoringSteps() reports it.
+                return ext::make_shared<BinomialBonusClassicEngine<CoxRossRubinstein>>(
+                    process, treeTimeSteps);
+            }
+            // The Null<Real>() tolerance is mandatory, not a default: with no error estimate
+            // under LowDiscrepancy, McSimulation::calculate takes the fixed-sample branch and
+            // maxSamples never applies. The grid is a production run's whatever the path count.
             if (pathGeneration == PathGeneration::Uncached) {
-                return makeEngine<SingleVariate>(process, timeStepsPerYear, samples, isBiased);
+                return makeEngine<SingleVariate>(process, monitoringStepsPerYear, samples,
+                                                 isBiased);
             }
             return market == Market::Flat ?
-                       makeEngine<CachedStepSingleVariate>(process, timeStepsPerYear, samples,
+                       makeEngine<CachedStepSingleVariate>(process, monitoringStepsPerYear, samples,
                                                            isBiased) :
-                       makeEngine<LocalVolStepSingleVariate>(process, timeStepsPerYear, samples,
-                                                             isBiased);
+                       makeEngine<LocalVolStepSingleVariate>(process, monitoringStepsPerYear,
+                                                             samples, isBiased);
         }();
 
         const auto bonusClassicOption = makeBonusClassicOption(option_data, today);
-        bonusClassicOption->setPricingEngine(mcEngine);
+        bonusClassicOption->setPricingEngine(pricingEngine);
 
-        return {process, mcEngine, bonusClassicOption};
+        return {process, pricingEngine, bonusClassicOption};
+    }
+
+    Size monitoringSteps(const BonusClassicOptionSetup& setup) {
+        if (const auto fd =
+                ext::dynamic_pointer_cast<FdBlackScholesBonusClassicEngine>(setup.engine)) {
+            return fd->monitorsContinuously() ? Null<Size>() : fd->timeGrid().size() - 1;
+        }
+        if (const auto tree =
+                ext::dynamic_pointer_cast<BinomialBonusClassicEngine<CoxRossRubinstein>>(
+                    setup.engine)) {
+            return tree->timeGrid().size() - 1;
+        }
+        return Null<Size>();
     }
 }
