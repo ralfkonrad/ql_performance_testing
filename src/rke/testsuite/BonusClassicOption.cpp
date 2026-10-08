@@ -603,7 +603,7 @@ namespace RKE::TestSuite {
 
         const auto process = market_data.makeGeneralizedBlackScholesProcess(today);
         bonusClassicOption->setPricingEngine(ext::make_shared<FdBlackScholesBonusClassicEngine>(
-            process, mcTimeStepsPerYear, fdTimeGrid, fdSpaceGrid, 0, FdmSchemeDesc::TrBDF2()));
+            process, mcTimeStepsPerYear, fdTimeGrid, fdSpaceGrid));
         const auto npv = bonusClassicOption->NPV();
 
         // Regression lock: the engine's own output on this grid and scheme, not an externally
@@ -630,7 +630,7 @@ namespace RKE::TestSuite {
         const auto bonusClassicOption = ext::make_shared<BonusClassicOption>(
             option_data.barrier, option_data.bonusLevel, exerciseDate);
         const auto fdEngine = ext::make_shared<FdBlackScholesBonusClassicEngine>(
-            process, mcTimeStepsPerYear, fdTimeGrid, fdSpaceGrid, 0, FdmSchemeDesc::TrBDF2());
+            process, mcTimeStepsPerYear, fdTimeGrid, fdSpaceGrid);
         bonusClassicOption->setPricingEngine(fdEngine);
         const auto npv = bonusClassicOption->NPV();
 
@@ -667,7 +667,7 @@ namespace RKE::TestSuite {
             option_data.barrier, option_data.bonusLevel, exerciseDate);
 
         const auto fdEngine = ext::make_shared<FdBlackScholesBonusClassicEngine>(
-            process, mcTimeStepsPerYear, fdTimeGrid, fdSpaceGrid, 0, FdmSchemeDesc::TrBDF2());
+            process, mcTimeStepsPerYear, fdTimeGrid, fdSpaceGrid);
         bonusClassicOption->setPricingEngine(fdEngine);
         const auto fd = bonusClassicOption->NPV();
 
@@ -714,12 +714,12 @@ namespace RKE::TestSuite {
             option_data.barrier, option_data.bonusLevel, exerciseDate);
 
         const auto discreteEngine = ext::make_shared<FdBlackScholesBonusClassicEngine>(
-            process, mcTimeStepsPerYear, fdTimeGrid, fdSpaceGrid, 0, FdmSchemeDesc::TrBDF2());
+            process, mcTimeStepsPerYear, fdTimeGrid, fdSpaceGrid);
         bonusClassicOption->setPricingEngine(discreteEngine);
         const auto discrete = bonusClassicOption->NPV();
 
         const auto continuousEngine = ext::make_shared<FdBlackScholesBonusClassicEngine>(
-            process, Null<Size>(), fdTimeGrid, fdSpaceGrid, 0, FdmSchemeDesc::TrBDF2());
+            process, Null<Size>(), fdTimeGrid, fdSpaceGrid);
         bonusClassicOption->setPricingEngine(continuousEngine);
         const auto continuous = bonusClassicOption->NPV();
 
