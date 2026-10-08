@@ -41,10 +41,12 @@ namespace RKE::Common {
 
         // LowDiscrepancy with Joe-Kuo D7 direction integers, tabulated up to dimension 1898,
         // instead of SobolRsg's default Jaeckel ones, tabulated up to 32 and drawn from the seed
-        // beyond. One dimension per time step, so a daily grid needs the former.
+        // beyond. One dimension per time step, so a daily grid needs the former. Otherwise the
+        // factory is GenericLowDiscrepancy's, icInstance included.
         struct LowDiscrepancyJoeKuoD7 : LowDiscrepancy {
             static rsg_type make_sequence_generator(Size dimension, BigNatural seed) {
-                return rsg_type(SobolRsg(dimension, seed, SobolRsg::JoeKuoD7));
+                const auto g = SobolRsg(dimension, seed, SobolRsg::JoeKuoD7);
+                return icInstance ? rsg_type(g, *icInstance) : rsg_type(g);
             }
         };
 
