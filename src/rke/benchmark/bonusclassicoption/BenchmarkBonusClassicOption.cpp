@@ -197,6 +197,52 @@ namespace RKE::Benchmark {
             ->Unit(benchmark::kMillisecond)
             ->Iterations(100);
 
+        // The two pricings above on the bilinear smile under the local volatility: every time
+        // step asks LocalVolSurface for a volatility at every node, five surface lookups each,
+        // so a pricing costs tens of milliseconds instead of a few. The price carries the kink
+        // defect the engine's header warns about; the cost does not depend on it.
+        void BM_BonusClassicOptionFdSmileBilinear(benchmark::State& state) {
+            benchmarkBonusClassicOption(state, true, PathGeneration::CachedStep,
+                                        Market::SmileBilinear, Engine::FiniteDifference);
+        }
+
+        BENCHMARK(BM_BonusClassicOptionFdSmileBilinear)
+            ->Name("BonusClassicOptionFdSmileBilinear")
+            ->Unit(benchmark::kMillisecond)
+            ->Iterations(10);
+
+        void BM_BonusClassicOptionFdSmileBilinearContinuous(benchmark::State& state) {
+            benchmarkBonusClassicOption(state, false, PathGeneration::CachedStep,
+                                        Market::SmileBilinear, Engine::FiniteDifference);
+        }
+
+        BENCHMARK(BM_BonusClassicOptionFdSmileBilinearContinuous)
+            ->Name("BonusClassicOptionFdSmileBilinearContinuous")
+            ->Unit(benchmark::kMillisecond)
+            ->Iterations(10);
+
+        // The same two on the bicubic surface, which builds a strike spline on every lookup: a
+        // pricing takes a few hundred milliseconds.
+        void BM_BonusClassicOptionFdSmileBicubic(benchmark::State& state) {
+            benchmarkBonusClassicOption(state, true, PathGeneration::CachedStep,
+                                        Market::SmileBicubic, Engine::FiniteDifference);
+        }
+
+        BENCHMARK(BM_BonusClassicOptionFdSmileBicubic)
+            ->Name("BonusClassicOptionFdSmileBicubic")
+            ->Unit(benchmark::kMillisecond)
+            ->Iterations(3);
+
+        void BM_BonusClassicOptionFdSmileBicubicContinuous(benchmark::State& state) {
+            benchmarkBonusClassicOption(state, false, PathGeneration::CachedStep,
+                                        Market::SmileBicubic, Engine::FiniteDifference);
+        }
+
+        BENCHMARK(BM_BonusClassicOptionFdSmileBicubicContinuous)
+            ->Name("BonusClassicOptionFdSmileBicubicContinuous")
+            ->Unit(benchmark::kMillisecond)
+            ->Iterations(3);
+
         // The binomial engine, treeTimeSteps Cox-Ross-Rubinstein steps raised by Boyle-Lau,
         // which monitors on every step, so there is no continuous variant; the cheapest of the
         // three.
