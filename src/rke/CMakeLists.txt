@@ -12,3 +12,5 @@ add_subdirectory(testsuite)
 add_subdirectory(benchmark)
 
 add_subdirectory(profile)
+
+add_subdirectory(example)

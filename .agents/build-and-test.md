@@ -104,6 +104,7 @@ source tree.
 | `rke_testsuite`            | Boost.Test executable | `src/rke/testsuite/rke_testsuite`                       |
 | `rke_benchmark_<workload>` | google-benchmark exe  | `src/rke/benchmark/<workload>/rke_benchmark_<workload>` |
 | `rke_profile_<workload>`   | profile executable    | `src/rke/profile/<workload>/rke_profile_<workload>`     |
+| `rke_example_<workload>`   | example executable    | `src/rke/example/<workload>/rke_example_<workload>`     |
 
 `cmake --build --preset release` also builds QuantLib and QuantLib's own test
 suite. To skip that, build one target: `--target rke_testsuite`.
@@ -115,7 +116,8 @@ CTest knows `quantlib_test_suite`, `rke_testsuite`, one
 per profile executable, one single-iteration smoke run per mode, path generation and
 engine, such as `rke_profile_bonusclassicoption_discrete`,
 `rke_profile_bonusclassicoption_discrete_uncached` and
-`rke_profile_bonusclassicoption_fd_continuous`.
+`rke_profile_bonusclassicoption_fd_continuous`, and one smoke run per example
+executable, `rke_example_bonusclassicoption`.
 The first is QuantLib's full suite and dominates the runtime, so the hidden
 `default` test preset carries `filter.include.name` `^rke_` and both visible
 presets inherit it:

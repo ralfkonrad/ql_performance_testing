@@ -102,14 +102,15 @@ Source of truth: `.clang-format`.
   library in `RKE::QL::Ext`, the setup the tests, benchmarks and profiles share
   in `RKE::Common`, the CLI11 options the benchmarks and profiles share in
   `RKE::Cli`, benchmarks in `RKE::Benchmark`, the test suite in `RKE::TestSuite`,
-  profile executables in `RKE::Profile`. Every name a file
+  profile executables in `RKE::Profile`, examples in `RKE::Example`. Every name a file
   declares goes there, test cases and `BENCHMARK(...)` registrations included;
   only `main` stays global, which keeps `BENCHMARK_MAIN()` and `testsuite.cpp`
   outside. Nothing outside `src/rke/ql/ext` goes into `RKE::QL::Ext`.
 - CMake targets follow the same directories: `rke_ql_ext`, `rke_common`,
   `rke_cli`, `rke_testsuite`, and one executable per workload directory:
   `rke_benchmark_<workload>` from `src/rke/benchmark/<workload>/`,
-  `rke_profile_<workload>` from `src/rke/profile/<workload>/`. A CTest name starts
+  `rke_profile_<workload>` from `src/rke/profile/<workload>/`,
+  `rke_example_<workload>` from `src/rke/example/<workload>/`. A CTest name starts
   with its target's name; the `rke_` prefix is what the test presets filter on.
 - Headers qualify `QuantLib::` in full. Implementation files put
   `using namespace QuantLib;` after the includes — which is why
