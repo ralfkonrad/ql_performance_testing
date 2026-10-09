@@ -48,7 +48,7 @@ namespace RKE::Common {
     }
 
     struct OptionData {
-        QuantLib::Real barrier = 90.0;
+        QuantLib::Real barrier = 70.0;
         QuantLib::Real bonusLevel = 120.00;
         // The low end of a bonus certificate's usual one to two years; the tests price 5M.
         QuantLib::Period ttm = QuantLib::Period(1, QuantLib::Years);

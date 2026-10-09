@@ -183,7 +183,7 @@ are in
 ### 5.1 The Valuation Test Is a Regression Lock, Not a Reference Price
 
 `testBonusClassicOptionValuation` pins `MCBonusClassicEngine` to
-`106.96041418042263` at `1e-8`. The low-discrepancy sequence is deterministic for
+`119.59926159811715` at `1e-8`. The low-discrepancy sequence is deterministic for
 a fixed seed, sample count and time grid, so that number is the engine's own
 output and nothing more. Any change to the engine, the grid or the sample count
 moves it: re-derive it and say in the commit why it moved. Never widen the

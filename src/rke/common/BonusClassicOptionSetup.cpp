@@ -138,7 +138,7 @@ namespace RKE::Common {
             }
             if (engine == Engine::Binomial) {
                 // Boyle-Lau on, maxTimeSteps at its default: without it the first knocked-out
-                // layer at 400 steps sits 0.55% below the barrier and the price 0.5% off the
+                // layer at 400 steps sits 0.19% below the barrier and the price 1.7e-4 off the
                 // replication, see testBonusClassicOptionBinomialBoyleLau. The lattice is
                 // therefore larger than treeTimeSteps; monitoringSteps() reports it.
                 return ext::make_shared<BinomialBonusClassicEngine<CoxRossRubinstein>>(
