@@ -239,9 +239,11 @@ namespace RKE::TestSuite {
 
         // Measured residual 1.3e-5 relative; the correction is O(1 / sqrt(steps)) and the
         // grid has 42 steps. Both sides are deterministic, so this is model error, not noise.
+        // The bound leaves seven times the residual: the 6.3e-5 sampling error the continuous
+        // replication measures on the same paths is in it too.
         BOOST_TEST_MESSAGE("MC " << npv << ", relative residual "
                                  << std::fabs(npv - replication) / replication);
-        BOOST_CHECK_CLOSE_FRACTION(replication, npv, 1e-3);
+        BOOST_CHECK_CLOSE_FRACTION(replication, npv, 1e-4);
     }
 
     BOOST_AUTO_TEST_CASE(
@@ -464,10 +466,11 @@ namespace RKE::TestSuite {
 
         // Measured residual 8.3e-5 relative. The engine at 6,400 nodes and 3,200 steps, 5.2e-8
         // from its value at half that grid, is 7.7e-5 below the replication, so nearly all of it
-        // is the correction's own error on 42 steps; the Monte Carlo engine's is 1.3e-5.
+        // is the correction's own error on 42 steps; the Monte Carlo engine's is 1.3e-5. The
+        // bound leaves three times the residual.
         BOOST_TEST_MESSAGE("FD " << npv << ", relative residual "
                                  << std::fabs(npv - replication) / replication);
-        BOOST_CHECK_CLOSE_FRACTION(replication, npv, 1e-3);
+        BOOST_CHECK_CLOSE_FRACTION(replication, npv, 2.5e-4);
     }
 
     BOOST_AUTO_TEST_CASE(testBonusClassicOptionFdVersusMc) { // NOLINT(misc-use-internal-linkage):
@@ -574,11 +577,11 @@ namespace RKE::TestSuite {
         // Measured residual 3.7e-5 relative at 404 steps. It is discretisation error, not
         // noise, and it does not fall steadily with the steps: 8.5e-5 at 104 steps after
         // Boyle-Lau, 1.2e-4 at 224, 2.2e-5 at 813 and 6.5e-6 at 1,616, as the layer the floor
-        // leaves below the barrier moves between 1e-6 and 5e-4 of it. The bound leaves 5.4
+        // leaves below the barrier moves between 1e-6 and 5e-4 of it. The bound leaves 2.7
         // times the 404-step residual.
         BOOST_TEST_MESSAGE("binomial " << npv << ", relative residual "
                                        << std::fabs(npv - replication) / replication);
-        BOOST_CHECK_CLOSE_FRACTION(replication, npv, 2e-4);
+        BOOST_CHECK_CLOSE_FRACTION(replication, npv, 1e-4);
     }
 
     BOOST_AUTO_TEST_CASE(
