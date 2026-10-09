@@ -13,8 +13,9 @@
 // Defaults are discrete, 10, mc, cached, flat and 2^16 paths, about 20,000 samples under perf
 // -F 999; one iteration is enough under callgrind, which counts instructions exactly, and
 // fewer paths keep a smile market countable there, since Ir per step does not depend on them.
-// fd and binomial price the flat market only, on rke_common's grids; --path-generation and
-// --samples do not apply to them, and binomial monitors discretely only.
+// fd prices every market on rke_common's grids, the smiles under the local volatility;
+// binomial prices the flat market only and monitors discretely only. --path-generation and
+// --samples do not apply to either.
 
 #include <rke/cli/SamplesOption.hpp>
 #include <rke/common/BonusClassicOptionSetup.hpp>
@@ -78,9 +79,9 @@ namespace RKE::Profile {
                 ->check(CLI::Range(Size{1}, std::numeric_limits<Size>::max()))
                 ->capture_default_str();
             app.add_option("--engine", arguments.engine,
-                           "Monte Carlo, finite differences or the binomial tree; the last two on "
-                           "the flat market only, without --path-generation and --samples, and "
-                           "the tree under discrete monitoring only")
+                           "Monte Carlo, finite differences or the binomial tree; the last two "
+                           "without --path-generation and --samples, and the tree on the flat "
+                           "market under discrete monitoring only")
                 ->check(CLI::IsMember(&tables().engines))
                 ->capture_default_str();
             app.add_option("--path-generation", arguments.pathGeneration,
