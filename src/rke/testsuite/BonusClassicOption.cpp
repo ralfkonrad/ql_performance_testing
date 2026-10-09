@@ -3,6 +3,8 @@
 
 #include "TestSuiteFixture.hpp"
 #include <rke/common/BonusClassicOptionSetup.hpp>
+#include <rke/common/FlatTermStructures.hpp>
+#include <rke/common/StepCacheMarkets.hpp>
 #include <rke/ql/ext/instruments/BonusClassicOption.hpp>
 #include <rke/ql/ext/pricingengines/bonusclassic/BinomialBonusClassicEngine.hpp>
 #include <rke/ql/ext/pricingengines/bonusclassic/FdBlackScholesBonusClassicEngine.hpp>
@@ -15,8 +17,12 @@
 #include <ql/pricingengines/barrier/analyticbarrierengine.hpp>
 #include <ql/pricingengines/barrier/analyticbinarybarrierengine.hpp>
 #include <ql/processes/blackscholesprocess.hpp>
+#include <ql/termstructures/volatility/equityfx/localvolsurface.hpp>
+#include <ql/time/daycounters/actual360.hpp>
 #include <boost/test/unit_test.hpp>
 #include <cmath>
+#include <iomanip>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -190,6 +196,110 @@ namespace RKE::TestSuite {
             flat.option = RKE::Common::makeBonusClassicOption(flat.optionData, flat.today);
             flat.exerciseDate = flat.option->exercise()->lastDate();
             return flat;
+        }
+
+        // The smile markets the FD engine prices under local volatility: the same option and
+        // date, the process RKE::Common::SmileMarketData builds on its bilinear or bicubic
+        // surface, zero curves and a Black variance surface on Actual360 and NullCalendar.
+        struct SmileCase {
+            RKE::Common::OptionData optionData;
+            Date today;
+            Date exerciseDate;
+            ext::shared_ptr<GeneralizedBlackScholesProcess> process;
+            ext::shared_ptr<BonusClassicOption> option;
+        };
+
+        SmileCase makeSmileCase(bool isBicubic) {
+            auto smile = SmileCase();
+            smile.today = RKE::Common::evaluationDate();
+            Settings::instance().evaluationDate() = smile.today;
+            smile.optionData.ttm = Period(5, Months);
+            smile.process = RKE::Common::SmileMarketData().makeGeneralizedBlackScholesProcess(
+                smile.today, isBicubic);
+            smile.option = RKE::Common::makeBonusClassicOption(smile.optionData, smile.today);
+            smile.exerciseDate = smile.option->exercise()->lastDate();
+            return smile;
+        }
+
+        std::string_view surfaceName(bool isBicubic) {
+            return isBicubic ? "bicubic" : "bilinear";
+        }
+
+        // The FD engine on the test grid, monitored on the Monte-Carlo grid or continuously,
+        // with the probabilities on and the local volatility as asked; the damping steps and
+        // the scheme are the defaults, spelled out to reach the flags behind them.
+        ext::shared_ptr<FdBlackScholesBonusClassicEngine>
+        makeFdEngine(const ext::shared_ptr<GeneralizedBlackScholesProcess>& process,
+                     bool isBiased,
+                     bool localVol,
+                     Size tGrid = fdTimeGrid,
+                     Size xGrid = fdSpaceGrid) {
+            return ext::make_shared<FdBlackScholesBonusClassicEngine>(
+                process, isBiased ? mcTimeStepsPerYear : Null<Size>(), tGrid, xGrid, 0,
+                FdmSchemeDesc::TrBDF2(), true, localVol);
+        }
+
+        // The Monte-Carlo engine under the Euler step through the local volatility, the
+        // reference the FD engine's smile prices are checked against.
+        ext::shared_ptr<MCBonusClassicEngine<LowDiscrepancy, Statistics, LocalVolStepSingleVariate>>
+        makeLocalVolMcEngine(const ext::shared_ptr<GeneralizedBlackScholesProcess>& process,
+                             bool isBiased,
+                             Size samples) {
+            return ext::make_shared<
+                MCBonusClassicEngine<LowDiscrepancy, Statistics, LocalVolStepSingleVariate>>(
+                process, mcTimeStepsPerYear, samples, samples + 1, Null<Real>(), isBiased, true,
+                42);
+        }
+
+        // The bounds of one FD-versus-MC comparison: relative on the price, absolute on the
+        // probabilities.
+        struct FdVersusMcBounds {
+            Real price;
+            Real hit;
+            Real bonus;
+        };
+
+        // Prices the smile under the FD engine and under the Euler Monte-Carlo engine at 50,000
+        // paths, in one monitoring mode, requires the price and both probabilities within the
+        // bounds, and returns the FD price.
+        Real checkFdSmileVersusMc(const SmileCase& smile, bool isBiased, FdVersusMcBounds bounds) {
+            const auto fdEngine = makeFdEngine(smile.process, isBiased, true);
+            smile.option->setPricingEngine(fdEngine);
+            const auto fd = smile.option->NPV();
+            const auto fdProbabilities = engineProbabilities(*smile.option);
+
+            // The Euler step through the same LocalVolSurface; about ten seconds for both
+            // modes, the surface rebuilding a spline on every lookup.
+            const auto mcEngine = makeLocalVolMcEngine(smile.process, isBiased, 50'000);
+            smile.option->setPricingEngine(mcEngine);
+            const auto mc = smile.option->NPV();
+            const auto mcProbabilities = engineProbabilities(*smile.option);
+
+            if (isBiased) {
+                // Both engines monitor the same product: the same 42 points after t = 0.
+                const auto fdGrid = fdEngine->timeGrid();
+                const auto mcGrid = mcEngine->timeGrid();
+                BOOST_CHECK_EQUAL(fdGrid.size() - 1, Size(42));
+                BOOST_REQUIRE_EQUAL(fdGrid.size(), mcGrid.size());
+                for (Size i = 0; i < fdGrid.size(); ++i) {
+                    BOOST_CHECK_EQUAL(fdGrid[i], mcGrid[i]);
+                }
+            }
+
+            BOOST_TEST_MESSAGE((isBiased ? "discrete" : "continuous")
+                               << ": FD " << fd << ", MC " << mc << ", relative difference "
+                               << std::fabs(fd - mc) / mc);
+            BOOST_TEST_MESSAGE("  hit FD " << fdProbabilities.hit << ", MC " << mcProbabilities.hit
+                                           << ", absolute difference "
+                                           << std::fabs(fdProbabilities.hit - mcProbabilities.hit));
+            BOOST_TEST_MESSAGE("  bonus FD "
+                               << fdProbabilities.bonus << ", MC " << mcProbabilities.bonus
+                               << ", absolute difference "
+                               << std::fabs(fdProbabilities.bonus - mcProbabilities.bonus));
+            BOOST_CHECK_CLOSE_FRACTION(mc, fd, bounds.price);
+            BOOST_CHECK_SMALL(fdProbabilities.hit - mcProbabilities.hit, bounds.hit);
+            BOOST_CHECK_SMALL(fdProbabilities.bonus - mcProbabilities.bonus, bounds.bonus);
+            return fd;
         }
     }
 
@@ -922,6 +1032,194 @@ namespace RKE::TestSuite {
         // mesher, boundary, knock-out and payoff as before, so it is the same double.
         BOOST_TEST_MESSAGE("without " << plain << ", with " << withProbabilities);
         BOOST_CHECK_EQUAL(withProbabilities, plain);
+    }
+
+    BOOST_AUTO_TEST_CASE(
+        testBonusClassicOptionFdLocalVolGuard) { // NOLINT(misc-use-internal-linkage):
+                                                 // the struct is the macro's
+        BOOST_TEST_MESSAGE("BonusClassicOption FD engine refuses a smile without localVol and "
+                           "accepts a strike-independent volatility either way");
+
+        const auto flat = makeFlatCase();
+        const auto smile = makeSmileCase(false);
+
+        // Off the flag the operator would read the surface at the bonus level and price the
+        // smile as a flat market, so the constructor fails loud instead.
+        BOOST_CHECK_THROW(FdBlackScholesBonusClassicEngine(smile.process, mcTimeStepsPerYear,
+                                                           fdTimeGrid, fdSpaceGrid, 0,
+                                                           FdmSchemeDesc::TrBDF2(), false, false),
+                          Error);
+        BOOST_CHECK_NO_THROW(
+            FdBlackScholesBonusClassicEngine(smile.process, mcTimeStepsPerYear, fdTimeGrid,
+                                             fdSpaceGrid, 0, FdmSchemeDesc::TrBDF2(), false, true));
+
+        // The type test reads the process's local volatility, so the smile is refused as an
+        // external local volatility beside a flat Black volatility too, the case the Black
+        // volatility's type alone would miss.
+        const auto externalSmile = ext::make_shared<GeneralizedBlackScholesProcess>(
+            smile.process->stateVariable(), smile.process->dividendYield(),
+            smile.process->riskFreeRate(),
+            RKE::Common::flatVol(flat.today, flat.marketData.volatility, Actual360()),
+            Handle<LocalVolTermStructure>(ext::make_shared<LocalVolSurface>(
+                smile.process->blackVolatility(), smile.process->riskFreeRate(),
+                smile.process->dividendYield(), smile.process->stateVariable())));
+        BOOST_CHECK_THROW(FdBlackScholesBonusClassicEngine(externalSmile, mcTimeStepsPerYear),
+                          Error);
+
+        // A constant local volatility passes, derived from the flat Black volatility or given
+        // beside it, and so does the curve the process derives from a variance curve.
+        BOOST_CHECK_NO_THROW(FdBlackScholesBonusClassicEngine(flat.process, mcTimeStepsPerYear));
+        BOOST_CHECK_NO_THROW(FdBlackScholesBonusClassicEngine(
+            RKE::Common::externalLocalVolProcess(flat.today), mcTimeStepsPerYear));
+        BOOST_CHECK_NO_THROW(FdBlackScholesBonusClassicEngine(
+            RKE::Common::varianceCurveProcess(flat.today), mcTimeStepsPerYear));
+
+        const auto engine = makeFdEngine(smile.process, true, true);
+        BOOST_CHECK(engine->usesLocalVolatility());
+        BOOST_CHECK(!makeFdEngine(flat.process, true, false)->usesLocalVolatility());
+    }
+
+    BOOST_AUTO_TEST_CASE(
+        testBonusClassicOptionFdLocalVolFlat) { // NOLINT(misc-use-internal-linkage):
+                                                // the struct is the macro's
+        BOOST_TEST_MESSAGE("BonusClassicOption FD engine prices the flat market the same with "
+                           "and without localVol");
+
+        const auto flat = makeFlatCase();
+
+        for (const bool isBiased : {true, false}) {
+            flat.option->setPricingEngine(makeFdEngine(flat.process, isBiased, false));
+            const auto plain = flat.option->NPV();
+            const auto plainProbabilities = engineProbabilities(*flat.option);
+
+            // The process derives a LocalConstantVol from the flat BlackConstantVol, so both
+            // operators carry the same sigma^2 on every node: the flat one as the forward
+            // variance over the step divided by its length, the local one squared from the
+            // constant. The difference is the rounding of that quotient: measured 2.3e-14
+            // relative discrete and 4.9e-14 continuous for the price, 1.3e-14 and 3.7e-14 for
+            // hit, 2.3e-14 and 4.9e-14 for bonus. The bound leaves twenty times the largest.
+            flat.option->setPricingEngine(makeFdEngine(flat.process, isBiased, true));
+            const auto local = flat.option->NPV();
+            const auto localProbabilities = engineProbabilities(*flat.option);
+
+            BOOST_TEST_MESSAGE(
+                (isBiased ? "discrete " : "continuous ")
+                << plain << ", local vol " << local << ", relative difference "
+                << std::fabs(local - plain) / plain << "; hit "
+                << relativeDifference(localProbabilities.hit, plainProbabilities.hit) << ", bonus "
+                << relativeDifference(localProbabilities.bonus, plainProbabilities.bonus));
+            BOOST_CHECK_CLOSE_FRACTION(plain, local, 1e-12);
+            BOOST_CHECK_LE(relativeDifference(localProbabilities.hit, plainProbabilities.hit),
+                           1e-12);
+            BOOST_CHECK_LE(relativeDifference(localProbabilities.bonus, plainProbabilities.bonus),
+                           1e-12);
+        }
+    }
+
+    BOOST_AUTO_TEST_CASE(
+        testBonusClassicOptionFdSmileValuation) { // NOLINT(misc-use-internal-linkage):
+                                                  // the struct is the macro's
+        BOOST_TEST_MESSAGE("BonusClassicOption FD smile valuation test");
+
+        struct Lock {
+            bool isBicubic;
+            bool isBiased;
+            Real npv;
+            Probabilities probabilities;
+        };
+        // Regression locks: the engine's own output on this grid and scheme under local
+        // volatility, not externally validated numbers. See
+        // testBonusClassicOptionFdSmileVersusMc for that on the bicubic surface; the bilinear
+        // values carry the kink defect testBonusClassicOptionFdSmileKink pins, so they lock
+        // that defect along with the engine.
+        const std::vector<Lock> locks = {
+            {false, true, 118.8968756495899, {0.018663548537463093, 0.9249709380056883}},
+            {false, false, 118.74078054420303, {0.020580682785420662, 0.93461616443619178}},
+            {true, true, 119.01149265518772, {0.015993408894794697, 0.92822438247016947}},
+            {true, false, 118.83036726419061, {0.019959179508870793, 0.92425995043463294}},
+        };
+        for (const auto& lock : locks) {
+            const auto smile = makeSmileCase(lock.isBicubic);
+            smile.option->setPricingEngine(makeFdEngine(smile.process, lock.isBiased, true));
+            const auto npv = smile.option->NPV();
+            const auto probabilities = engineProbabilities(*smile.option);
+
+            BOOST_TEST_MESSAGE(surfaceName(lock.isBicubic)
+                               << (lock.isBiased ? " discrete " : " continuous ")
+                               << std::setprecision(17) << npv << ", hit " << probabilities.hit
+                               << ", bonus " << probabilities.bonus);
+            BOOST_CHECK_CLOSE_FRACTION(lock.npv, npv, 1e-8);
+            BOOST_CHECK_CLOSE_FRACTION(lock.probabilities.hit, probabilities.hit, 1e-8);
+            BOOST_CHECK_CLOSE_FRACTION(lock.probabilities.bonus, probabilities.bonus, 1e-8);
+        }
+    }
+
+    BOOST_AUTO_TEST_CASE(
+        testBonusClassicOptionFdSmileVersusMc) { // NOLINT(misc-use-internal-linkage):
+                                                 // the struct is the macro's
+        BOOST_TEST_MESSAGE("BonusClassicOption FD smile versus MC test");
+
+        // The bicubic surface: smooth in strike, so LocalVolSurface's stencil is sound on every
+        // node. The bilinear surface is not, see testBonusClassicOptionFdSmileKink.
+        const auto smile = makeSmileCase(true);
+
+        // Measured residuals at 50,000 paths: discrete 6.0e-5 relative for the price, 7.3e-5
+        // absolute for hit and 1.0e-4 for bonus; continuous 1.4e-4, 2.8e-4 and 9.7e-5. The grid
+        // is converged: at 4 times both grids the FD price moves by 6e-6 relative discrete and
+        // 3e-6 continuous, the probabilities by 1.3e-5 and 6e-6 absolute at most. The rest is
+        // the Monte Carlo side, the Euler step's bias plus sampling: at 200,000 paths the price
+        // sits 2.7e-5 discrete and 1.4e-5 continuous above its 50,000-path value, and still
+        // 8.1e-5 and 1.5e-4 above the refined FD price. Each bound leaves about three times its
+        // residual, rounded up to one digit.
+        const auto discrete = checkFdSmileVersusMc(smile, true, {2e-4, 3e-4, 3e-4});
+        const auto continuous = checkFdSmileVersusMc(smile, false, {5e-4, 9e-4, 3e-4});
+
+        // Continuous monitoring knocks out everything the grid knocks out and more, and a
+        // knock-out only removes the bonus put, so the continuous price is lower.
+        BOOST_TEST_MESSAGE("discrete " << discrete << ", continuous " << continuous);
+        BOOST_CHECK_LT(continuous, discrete);
+    }
+
+    BOOST_AUTO_TEST_CASE(testBonusClassicOptionFdSmileKink) { // NOLINT(misc-use-internal-linkage):
+                                                              // the struct is the macro's
+        BOOST_TEST_MESSAGE("BonusClassicOption FD engine's local volatility on the bilinear "
+                           "surface collapses at the barrier node");
+
+        // The mechanism behind the engine's warning, pinned so a change in LocalVolSurface's
+        // stencil or in the surface's strikes shows up here and not as a moved lock: the
+        // bilinear surface is piecewise linear in strike, and its variance is convex there, so
+        // the stencil straddling a strike node sees a huge second derivative and returns a
+        // local variance near zero. 70 is both the barrier and a strike node, and in discrete
+        // monitoring a grid node. The bicubic surface is smooth in strike and unaffected.
+        const auto bilinear = makeSmileCase(false);
+        const auto bicubic = makeSmileCase(true);
+        const auto barrier = bilinear.optionData.barrier;
+        const auto bilinearVol = bilinear.process->localVolatility();
+        const auto bicubicVol = bicubic.process->localVolatility();
+
+        // Measured at t = 0.2: 0.036 against 0.263 on the node, a ratio of 0.14, and 0.257 and
+        // 0.272 against 0.263 one percent on either side of it, 2.3% below and 3.4% above. The
+        // bounds leave about twice the ratio and one and a half times the larger deviation,
+        // rounded up to one digit: the gap between 0.14 and 1 is what the test pins, not the
+        // digits of either side.
+        constexpr Time t = 0.2;
+        const auto onNode =
+            bilinearVol->localVol(t, barrier, true) / bicubicVol->localVol(t, barrier, true);
+        BOOST_TEST_MESSAGE("bilinear over bicubic local volatility at the barrier " << onNode);
+        BOOST_CHECK_LT(onNode, 0.25);
+        for (const Real level : {barrier * 0.99, barrier * 1.01}) {
+            const auto ratio =
+                bilinearVol->localVol(t, level, true) / bicubicVol->localVol(t, level, true);
+            BOOST_TEST_MESSAGE("bilinear over bicubic local volatility at " << level << ' '
+                                                                            << ratio);
+            BOOST_CHECK_CLOSE_FRACTION(ratio, 1.0, 0.05);
+        }
+
+        // What it does to the price: on the test grid the discrete bilinear FD price sits
+        // 8.5e-4 relative below MCBonusClassicEngine under LocalVolStepSingleVariate at
+        // 50,000 paths and moves by 1.2e-4 and 1.6e-4 at 2 and 4 times both grids, while the
+        // bicubic one sits 6.0e-5 off and moves by 6e-6. Not asserted: it depends on which
+        // nodes land in a stencil window, the barrier node always, and others by chance.
     }
 
     BOOST_AUTO_TEST_CASE(

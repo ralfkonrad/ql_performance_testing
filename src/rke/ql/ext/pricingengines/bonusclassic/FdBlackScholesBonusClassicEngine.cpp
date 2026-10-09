@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include <rke/ql/ext/pricingengines/bonusclassic/FdBlackScholesBonusClassicEngine.hpp>
+#include <rke/ql/ext/processes/StrikeIndependentVolatility.hpp>
 #include <ql/exercise.hpp>
 #include <ql/math/comparison.hpp>
 #include <ql/methods/finitedifferences/meshers/concentrating1dmesher.hpp>
@@ -181,11 +182,16 @@ namespace RKE::QL::Ext {
         Size xGrid,
         Size dampingSteps,
         const FdmSchemeDesc& schemeDesc,
-        bool calculateProbabilities)
+        bool calculateProbabilities,
+        bool localVol)
     : process_(std::move(process)), monitoringStepsPerYear_(monitoringStepsPerYear), tGrid_(tGrid),
       xGrid_(xGrid), dampingSteps_(dampingSteps), schemeDesc_(schemeDesc),
-      calculateProbabilities_(calculateProbabilities) {
+      calculateProbabilities_(calculateProbabilities), localVol_(localVol) {
         QL_REQUIRE(process_, "null process given");
+        // Without the flag the operator reads one Black variance at the bonus level, which
+        // prices a smile as a flat market; see the class description.
+        QL_REQUIRE(localVol_ || hasStrikeIndependentVolatility(*process_),
+                   "a spot-dependent local volatility needs localVol = true");
         // Without this, NPV() keeps returning the first price.
         registerWith(process_);
     }
@@ -196,6 +202,10 @@ namespace RKE::QL::Ext {
 
     bool FdBlackScholesBonusClassicEngine::calculatesProbabilities() const {
         return calculateProbabilities_;
+    }
+
+    bool FdBlackScholesBonusClassicEngine::usesLocalVolatility() const {
+        return localVol_;
     }
 
     TimeGrid FdBlackScholesBonusClassicEngine::timeGrid() const {
@@ -227,10 +237,13 @@ namespace RKE::QL::Ext {
         const FdmSolverDesc solverDesc = {
             mesher, boundaries, conditions, calculator, maturity, tGrid_, dampingSteps_,
         };
-        // The bonus level is the strike at which the operator reads the volatility.
+        // The bonus level is the strike the operator reads the Black variance at with localVol
+        // off; with it on the operator squares the process's local volatility at every node
+        // and step instead, and the solver's overwrite for a negative local variance stays at
+        // its default, so such a surface throws.
         return ext::make_shared<FdmBlackScholesSolver>(
             Handle<GeneralizedBlackScholesProcess>(process_), certificate.bonusLevel(), solverDesc,
-            schemeDesc_);
+            schemeDesc_, localVol_);
     }
 
     void FdBlackScholesBonusClassicEngine::calculate() const {

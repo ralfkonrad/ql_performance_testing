@@ -123,6 +123,23 @@ namespace RKE::QL::Ext {
         Delta and gamma come from the solver's spline at the spot, theta from
         a snapshot of the rollback at \f$ 0.99 / 365 \f$.
 
+        localVol selects where \f$ \sigma \f$ comes from, as it does in
+        QuantLib::FdBlackScholesBarrierEngine:
+
+        - false: one Black forward variance per time step, read from the
+          process's Black volatility at the bonus level, the strike of the
+          replicating put. Exact for a constant or a time-dependent
+          volatility; the constructor refuses a process whose local
+          volatility depends on the spot, see below.
+        - true: the process's
+          QuantLib::GeneralizedBlackScholesProcess::localVolatility(),
+          squared at every node and at each time step's midpoint, as
+          QuantLib::FdmBlackScholesOp does. The smile markets' process
+          derives it through QuantLib::LocalVolSurface, the surface
+          MCBonusClassicEngine steps through under
+          LocalVolStepSingleVariate. A negative local variance throws: the
+          solver's illegalLocalVolOverwrite is left at its default.
+
         With calculateProbabilities = true the engine also reports, in
         Instrument::additionalResults(), read with
         Instrument::result<Real>("barrierHitProbability") and
@@ -169,9 +186,23 @@ namespace RKE::QL::Ext {
         \warning \f$ P_q(t) \f$ reads \f$ t \f$ in the dividend curve's day
                  counter, the same approximation QuantLib's engines make;
                  it is exact when both curves share a day counter.
-        \warning neither discrete dividends nor local volatility are
-                 supported. Under a smile the operator reads the variance at
-                 the bonus level.
+        \warning discrete dividends are not supported.
+        \warning with localVol = true QuantLib::LocalVolSurface differences
+                 the Black variance in strike at \f$ K e^{\pm \delta} \f$
+                 around every grid node, \f$ \delta = 10^{-4} |\ln(K / F)| \f$
+                 beyond a tenth of a percent of the forward and \f$ 10^{-6} \f$
+                 within. A node on a strike node of a surface that is
+                 piecewise linear in strike straddles the kink there, and the
+                 local variance at that node is wrong: near zero where the
+                 variance is convex in strike. The barrier is a grid node in
+                 both modes, the lowest one under continuous monitoring, so a
+                 surface with a strike node on the barrier has this at the
+                 barrier itself: on the bilinear test surface the local
+                 volatility there is 0.04 instead of 0.26, the discrete price
+                 sits 8.5e-4 relative below the Monte Carlo one and does not
+                 converge in the grid. Any other node lands in such a window
+                 by chance. A surface smooth in strike, the bicubic one, is
+                 unaffected.
         \warning with calculateProbabilities = true calculate() runs three
                  rollbacks instead of one, each on the full grid.
 
@@ -198,6 +229,22 @@ namespace RKE::QL::Ext {
               monitoring grid.
         \test the default engine reports neither key, and the price is the
               same double with and without the probabilities.
+        \test with localVol = true on the flat market the price and both
+              probabilities are checked to match the flat operator's to
+              rounding in both monitoring modes.
+        \test the constructor is checked to refuse a smile and a smile
+              given as an external local volatility without localVol = true,
+              and to accept the flat market, a variance curve, a flat
+              external local volatility and the smile with it.
+        \test the smile values and probabilities are regression-locked for a
+              fixed grid on a bilinear and a bicubic surface in both
+              monitoring modes.
+        \test the smile values and probabilities are checked against
+              MCBonusClassicEngine under LocalVolStepSingleVariate on the same
+              monitoring grid and continuously, on the bicubic surface.
+        \test the collapse of the bilinear surface's local volatility on
+              the barrier node, the mechanism behind the warning above, is
+              pinned against the bicubic surface.
     */
     class FdBlackScholesBonusClassicEngine : public BonusClassicOption::engine {
       public:
@@ -219,7 +266,16 @@ namespace RKE::QL::Ext {
                                          barrierHitProbability and
                                          bonusProbability, two more rollbacks;
                                          off by default
+            \param localVol              whether every rollback reads the
+                                         process's local volatility at each
+                                         node, as the class description says;
+                                         off by default
             \pre \p process is not null; QL_REQUIRE checks this.
+            \pre \p localVol is true, or the process's local volatility is a
+                 QuantLib::LocalConstantVol or a QuantLib::LocalVolCurve, i.e.
+                 its Black volatility a QuantLib::BlackConstantVol or a
+                 QuantLib::BlackVarianceCurve and no external local volatility
+                 of another type beside it; QL_REQUIRE checks this.
         */
         explicit FdBlackScholesBonusClassicEngine(
             QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process,
@@ -228,7 +284,8 @@ namespace RKE::QL::Ext {
             QuantLib::Size xGrid = 100,
             QuantLib::Size dampingSteps = 0,
             const QuantLib::FdmSchemeDesc& schemeDesc = QuantLib::FdmSchemeDesc::TrBDF2(),
-            bool calculateProbabilities = false);
+            bool calculateProbabilities = false,
+            bool localVol = false);
 
         void calculate() const override;
 
@@ -240,6 +297,8 @@ namespace RKE::QL::Ext {
         [[nodiscard]] bool monitorsContinuously() const;
         //! whether calculate() reports the two probabilities beside the price
         [[nodiscard]] bool calculatesProbabilities() const;
+        //! whether the rollbacks read the process's local volatility at each node
+        [[nodiscard]] bool usesLocalVolatility() const;
 
       private:
         //! the solver of one rollback: mesher, boundary, knock-out and inner value
@@ -263,6 +322,7 @@ namespace RKE::QL::Ext {
         QuantLib::Size dampingSteps_;
         QuantLib::FdmSchemeDesc schemeDesc_;
         bool calculateProbabilities_;
+        bool localVol_;
     };
 }
 
