@@ -1132,6 +1132,15 @@ namespace RKE::TestSuite {
         // testBonusClassicOptionFdSmileVersusMc for that on the bicubic surface; the bilinear
         // values carry the kink defect testBonusClassicOptionFdSmileKink pins, so they lock
         // that defect along with the engine.
+        //
+        // The values are clang's on x86-64. LocalVolSurface differences the Black variance twice
+        // in strike over a log-strike step down to 1e-7 and divides by its square, so a last-bit
+        // difference in the variance becomes a visible one in the local variance, and the CI
+        // matrix differs in those last bits by compiler and platform. Across it the locks moved
+        // by up to 3.5e-10 relative for the price, 6.2e-8 for hit and 5.0e-9 for bonus, hit the
+        // most because it is the smallest number; the flat locks agree to 1e-8 on the same
+        // matrix. The bound leaves three times the largest move, rounded up to one digit.
+        constexpr Real platformTolerance = 2e-7;
         const std::vector<Lock> locks = {
             {false, true, 118.8968756495899, {0.018663548537463093, 0.9249709380056883}},
             {false, false, 118.74078054420303, {0.020580682785420662, 0.93461616443619178}},
@@ -1148,9 +1157,11 @@ namespace RKE::TestSuite {
                                << (lock.isBiased ? " discrete " : " continuous ")
                                << std::setprecision(17) << npv << ", hit " << probabilities.hit
                                << ", bonus " << probabilities.bonus);
-            BOOST_CHECK_CLOSE_FRACTION(lock.npv, npv, 1e-8);
-            BOOST_CHECK_CLOSE_FRACTION(lock.probabilities.hit, probabilities.hit, 1e-8);
-            BOOST_CHECK_CLOSE_FRACTION(lock.probabilities.bonus, probabilities.bonus, 1e-8);
+            BOOST_CHECK_CLOSE_FRACTION(lock.npv, npv, platformTolerance);
+            BOOST_CHECK_CLOSE_FRACTION(lock.probabilities.hit, probabilities.hit,
+                                       platformTolerance);
+            BOOST_CHECK_CLOSE_FRACTION(lock.probabilities.bonus, probabilities.bonus,
+                                       platformTolerance);
         }
     }
 
