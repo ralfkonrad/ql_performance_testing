@@ -16,7 +16,11 @@
 // The rows are grouped by monitoring, then market. The flat rows price at a production run's
 // 2^16 paths; the smile rows at 2^10, since the example runs as a smoke test on every pull
 // request and the bicubic surface under SingleVariate is slow. A smile row prints no
-// reference: there is none under local volatility.
+// reference: there is none under local volatility. The smile finite-difference rows are
+// deterministic beside Monte-Carlo rows at 2^10 paths; the test suite checks the bicubic ones
+// against 50,000 paths. The bilinear finite-difference rows carry the defect the engine's
+// header warns about: 70 is a strike node of the surface as well as the barrier, and
+// QuantLib::LocalVolSurface's stencil collapses the local volatility on the grid node there.
 
 #include <rke/common/BonusClassicOptionSetup.hpp>
 #include <ql/exercise.hpp>
@@ -322,16 +326,13 @@ namespace RKE::Example {
             return references.continuous;
         }
 
-        // The setup rejects the other engines off the flat market and the tree under
-        // continuous monitoring.
+        // The setup rejects the tree off the flat market and under continuous monitoring.
         bool admits(bool isDiscrete, Market market, Pricer pricer) {
-            const auto isFlat = market == Market::Flat;
-            return (pricer.engine == Engine::MonteCarlo || isFlat) &&
-                   (pricer.engine != Engine::Binomial || isDiscrete);
+            return pricer.engine != Engine::Binomial || (market == Market::Flat && isDiscrete);
         }
 
-        // Every permutation the setup admits, in the table's order. The finite-difference row
-        // under discrete monitoring is priced already: its grid gave the step the discrete
+        // Every permutation the setup admits, in the table's order. The flat finite-difference
+        // row under discrete monitoring is priced already: its grid gave the step the discrete
         // reference corrects for.
         std::vector<Row> priceRows(const References& references,
                                    const Valuation& fdDiscreteValuation) {
@@ -350,8 +351,8 @@ namespace RKE::Example {
                             continue;
                         }
                         const auto isMonteCarlo = pricer.engine == Engine::MonteCarlo;
-                        const auto isFdDiscrete =
-                            pricer.engine == Engine::FiniteDifference && isDiscrete;
+                        const auto isFdDiscrete = pricer.engine == Engine::FiniteDifference &&
+                                                  isDiscrete && market == Market::Flat;
                         const auto samples =
                             market == Market::Flat ? productionSamples : smileSamples;
                         rows.push_back({

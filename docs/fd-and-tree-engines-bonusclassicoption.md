@@ -117,11 +117,13 @@ i.e. `exp(x_0) · qTS.discount(T) / qTS.discount(t)`; `FdmLogInnerValue(payoff, 
 with the `BonusClassicPayoff` itself, which already pays `S` at or below `H` and so
 monitors maturity in discrete mode, and reduces to `max(S, B)` on a grid that starts at
 `H`; `FdmSolverDesc{mesher, bcSet, condition, calculator, maturity, tGrid, dampingSteps}`;
-`FdmBlackScholesSolver(Handle(process_), B, desc, schemeDesc_)`; then `value`, `delta`,
-`gamma`, `theta` into `results_`, `value` first: `valueAt`, `deltaAt` and `gammaAt` run
-the rollback, `thetaAt` reads its snapshot without running it. `B` is also the strike
-`FdmBlackScholesOp` reads its variance slice at; under a smile that choice is the engine's,
-and the tests use a flat volatility.
+`FdmBlackScholesSolver(Handle(process_), B, desc, schemeDesc_, localVol_)`; then `value`,
+`delta`, `gamma`, `theta` into `results_`, `value` first: `valueAt`, `deltaAt` and
+`gammaAt` run the rollback, `thetaAt` reads its snapshot without running it. `B` is also
+the strike `FdmBlackScholesOp` reads its variance slice at with `localVol_` off; with it
+on, the operator squares the process's local volatility at every node and step instead,
+and the constructor refuses a spot-dependent local volatility without it, so a smile is
+never priced as a flat market by default. The flag follows `FdBlackScholesBarrierEngine`.
 
 The step condition stores `exp(mesher->locations(0))` the way `FdmDividendHandler` does,
 finds the node `k` on `H` once in its constructor, by `close_enough` since the mesher
@@ -225,8 +227,9 @@ five `\warning` entries: discrete mode is second order only because a node is fo
 discrete monitoring, TrBDF2 does not; the barrier has to lie inside
 `FdmBlackScholesMesher`'s range in discrete mode; `qTS->discount(t)` reads `t` in the
 dividend curve's day counter, the same approximation QuantLib's engines make and exact
-when both curves share a day counter; neither discrete dividends nor local volatility are
-supported. The instrument header's
+when both curves share a day counter; discrete dividends are not supported; under
+`localVol` a grid node on a strike node of a surface piecewise linear in strike gets a
+collapsed local volatility from `LocalVolSurface`'s stencil. The instrument header's
 `\warning no default engine is set` and its `\test` line gain the new engines.
 
 ### 3.5 Changes to QuantLib

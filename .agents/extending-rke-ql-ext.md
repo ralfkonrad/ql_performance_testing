@@ -106,6 +106,12 @@ calculator into an `FdmSolverDesc` for `FdmBlackScholesSolver`, as
   converges at second order there and is the engine's default.
 - Exposes monitoring times as `timeGrid()`, as the Monte Carlo engine does: they
   define the product.
+- Takes local volatility as a caller's flag, as `FdBlackScholesBarrierEngine` does,
+  and refuses a spot-dependent local volatility without it; `hasStrikeIndependentVolatility`
+  in `src/rke/ql/ext/processes/StrikeIndependentVolatility.hpp` is the type test the step
+  cache uses too, reading the process's local volatility so an external one counts. Expect `LocalVolSurface` to return a collapsed local volatility on a
+  grid node that sits on a strike node of a surface piecewise linear in strike: its
+  stencil straddles the kink. The barrier is such a node in discrete monitoring.
 
 A tree engine pairs a `QuantLib::DiscretizedAsset` subclass with an engine that
 derives from the instrument's `engine`, as `DiscretizedBonusClassicOption` and

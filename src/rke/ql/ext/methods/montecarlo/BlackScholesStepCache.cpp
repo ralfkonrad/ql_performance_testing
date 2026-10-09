@@ -2,24 +2,13 @@
 // SPDX-License-Identifier: MIT
 
 #include "BlackScholesStepCache.hpp"
-#include <ql/termstructures/volatility/equityfx/blackconstantvol.hpp>
-#include <ql/termstructures/volatility/equityfx/blackvariancecurve.hpp>
+#include <rke/ql/ext/processes/StrikeIndependentVolatility.hpp>
 #include <array>
 #include <utility>
 
 using namespace QuantLib;
 
 namespace RKE::QL::Ext {
-    namespace {
-        // The types GeneralizedBlackScholesProcess::localVolatility() treats as
-        // strike-independent.
-        bool hasStrikeIndependentVolatility(const GeneralizedBlackScholesProcess& process) {
-            const auto& vol = *process.blackVolatility();
-            return ext::dynamic_pointer_cast<BlackConstantVol>(vol) != nullptr ||
-                   ext::dynamic_pointer_cast<BlackVarianceCurve>(vol) != nullptr;
-        }
-    }
-
     BlackScholesStepCache::BlackScholesStepCache(
         const ext::shared_ptr<GeneralizedBlackScholesProcess>& process, const TimeGrid& grid) {
         QL_REQUIRE(process, "null process given");

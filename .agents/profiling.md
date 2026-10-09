@@ -50,12 +50,15 @@ fewer paths, `--samples=256` as the smoke tests do, and quote it per step.
 
 `fd` is `FdBlackScholesBonusClassicEngine` on `rke_common`'s `fdTimeGrid` by
 `fdSpaceGrid`, monitored on the Monte-Carlo grid under `discrete` and continuously
-otherwise; `binomial` is `BinomialBonusClassicEngine<CoxRossRubinstein>` at
-`treeTimeSteps` with Boyle-Lau on, which monitors on every step, so it refuses
-`continuous`. Both price `flat` only and ignore `--path-generation` and `--samples`;
-the result line prints the grid they priced on in place of the path count, the
-lattice after Boyle-Lau in particular. One pricing takes milliseconds, so nothing
-needs shrinking for callgrind.
+otherwise, and under the local volatility on the smiles, where every time step asks
+`LocalVolSurface` for a volatility at every node: tens of milliseconds a pricing on
+`smile-bilinear`, a few hundred on `smile-bicubic`. `binomial` is
+`BinomialBonusClassicEngine<CoxRossRubinstein>` at `treeTimeSteps` with Boyle-Lau on,
+which monitors on every step and flattens the volatility, so it refuses `continuous`
+and prices `flat` only. Both ignore `--path-generation` and `--samples`; the result line
+prints the grid they priced on in place of the path count, the lattice after Boyle-Lau
+in particular. A flat pricing takes milliseconds, so nothing needs shrinking for
+callgrind.
 
 Every recipe ends in a text file, so an agent reads the result rather than a
 picture.

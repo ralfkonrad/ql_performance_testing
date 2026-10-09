@@ -36,10 +36,12 @@ namespace RKE::Common {
     // MonteCarlo is MCBonusClassicEngine under LowDiscrepancy on monitoringStepsPerYear, in
     // either monitoring mode and on every market, and the only engine that reads pathGeneration
     // and samples. FiniteDifference is FdBlackScholesBonusClassicEngine on fdTimeGrid x
-    // fdSpaceGrid, monitored continuously or on the Monte-Carlo grid. Binomial is
+    // fdSpaceGrid, monitored continuously or on the Monte-Carlo grid, under the local
+    // volatility on the smiles; on the bilinear smile its price carries the defect the engine's
+    // header warns about, a strike node of the surface on the barrier. Binomial is
     // BinomialBonusClassicEngine<QuantLib::CoxRossRubinstein> on treeTimeSteps with Boyle-Lau,
-    // monitoring on every step, so discretely only. Neither of the last two supports local
-    // volatility, so both price the flat market only.
+    // monitoring on every step, so discretely only; it flattens the volatility, so it prices
+    // the flat market only.
     enum class Engine : std::uint8_t { MonteCarlo, FiniteDifference, Binomial };
 
     // The reference date every test, benchmark and profile prices as of.
@@ -131,8 +133,7 @@ namespace RKE::Common {
     // on the same time grid. calculateProbabilities switches the barrier-hit and bonus
     // probabilities on in FiniteDifference and Binomial, which MonteCarlo reports always; the
     // benchmarks and profiles leave it off, so they keep measuring the price alone. QL_REQUIRE
-    // rejects FiniteDifference and Binomial off the flat market, and Binomial under continuous
-    // monitoring.
+    // rejects Binomial off the flat market and under continuous monitoring.
     [[nodiscard]] BonusClassicOptionSetup
     makeBonusClassicOptionSetup(bool isBiased,
                                 PathGeneration pathGeneration = PathGeneration::CachedStep,

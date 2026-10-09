@@ -118,8 +118,9 @@ namespace RKE::Common {
                                                         Size samples,
                                                         Engine engine,
                                                         bool calculateProbabilities) {
-        QL_REQUIRE(engine == Engine::MonteCarlo || market == Market::Flat,
-                   "only the Monte-Carlo engine prices a smile market");
+        QL_REQUIRE(engine != Engine::Binomial || market == Market::Flat,
+                   "the binomial engine flattens the volatility, so it prices the flat market "
+                   "only");
         QL_REQUIRE(engine != Engine::Binomial || isBiased,
                    "the binomial engine monitors on every step, never continuously");
 
@@ -137,11 +138,13 @@ namespace RKE::Common {
             if (engine == Engine::FiniteDifference) {
                 // Discrete monitoring on the Monte-Carlo grid, so the two prices compare; the
                 // rollback merges those dates into its own tGrid steps. No damping steps and
-                // TrBDF2 are the engine's own defaults, spelled out to reach the flag behind
-                // them.
+                // TrBDF2 are the engine's own defaults, spelled out to reach the flags behind
+                // them. The smiles take the local volatility, the surface the Monte-Carlo
+                // engine steps through; the engine refuses them without it.
                 return ext::make_shared<FdBlackScholesBonusClassicEngine>(
                     process, isBiased ? monitoringStepsPerYear : Null<Size>(), fdTimeGrid,
-                    fdSpaceGrid, 0, FdmSchemeDesc::TrBDF2(), calculateProbabilities);
+                    fdSpaceGrid, 0, FdmSchemeDesc::TrBDF2(), calculateProbabilities,
+                    market != Market::Flat);
             }
             if (engine == Engine::Binomial) {
                 // Boyle-Lau on, maxTimeSteps at its default: without it the first knocked-out

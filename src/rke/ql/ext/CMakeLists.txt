@@ -22,6 +22,7 @@ set(RKE_QL_EXT_HEADER
         pricingengines/bonusclassic/DiscretizedBonusClassicOption.hpp
         pricingengines/bonusclassic/FdBlackScholesBonusClassicEngine.hpp
         pricingengines/bonusclassic/MCBonusClassicEngine.hpp
+        processes/StrikeIndependentVolatility.hpp
 )
 
 add_library(rke_ql_ext STATIC
