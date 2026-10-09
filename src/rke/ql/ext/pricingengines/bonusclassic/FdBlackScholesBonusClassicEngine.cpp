@@ -12,6 +12,7 @@
 #include <ql/methods/finitedifferences/solvers/fdmsolverdesc.hpp>
 #include <ql/methods/finitedifferences/stepconditions/fdmstepconditioncomposite.hpp>
 #include <ql/methods/finitedifferences/utilities/fdmboundaryconditionset.hpp>
+#include <ql/methods/finitedifferences/utilities/fdmdirichletboundary.hpp>
 #include <ql/methods/finitedifferences/utilities/fdmdiscountdirichletboundary.hpp>
 #include <ql/methods/finitedifferences/utilities/fdminnervaluecalculator.hpp>
 #include <boost/range/algorithm/find.hpp>
@@ -19,6 +20,8 @@
 #include <cmath>
 #include <limits>
 #include <list>
+#include <sstream>
+#include <string>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -27,6 +30,42 @@ using namespace QuantLib;
 
 namespace RKE::QL::Ext {
     namespace {
+        using KnockedOutValue = FdmBonusClassicKnockOutCondition::KnockedOutValue;
+
+        // 1 on (lower, upper] and 0 elsewhere: the indicator of an event at maturity, rolled
+        // back like a payoff. The hit indicator is (0, H], the barrier being inclusive; the
+        // bonus indicator (H, B], where at S = B itself the certificate pays max(S, B) = S
+        // either way, so the closed upper end moves nothing. FdmLogInnerValue averages it over
+        // each cell, so the node on H takes its cell's share below H, the weight the knock-out
+        // condition uses, up to SimpsonIntegral's quadrature error on a step; where that
+        // integral does not converge FdmCellAveragingInnerValue falls back to the point value.
+        class IndicatorPayoff : public Payoff {
+          public:
+            IndicatorPayoff(Real lower, Real upper) : lower_(lower), upper_(upper) {}
+
+            [[nodiscard]] std::string name() const override { return "Indicator"; }
+            [[nodiscard]] std::string description() const override {
+                std::ostringstream out;
+                out << name() << " on (" << lower_ << ", " << upper_ << "]";
+                return out.str();
+            }
+            Real operator()(Real price) const override {
+                return (lower_ < price && price <= upper_) ? 1.0 : 0.0;
+            }
+            void accept(AcyclicVisitor& acyclic_visitor) override {
+                auto* visitor = dynamic_cast<Visitor<IndicatorPayoff>*>(&acyclic_visitor);
+                if (visitor != nullptr) {
+                    visitor->visit(*this);
+                } else {
+                    Payoff::accept(acyclic_visitor);
+                }
+            }
+
+          private:
+            Real lower_;
+            Real upper_;
+        };
+
         // The largest log-spot whose exponential does not exceed level. A grid node at
         // std::log(level) maps back above level for about a third of all levels, and the
         // payoff's point value there would be the bonus, not the knocked-out asset.
@@ -38,16 +77,43 @@ namespace RKE::QL::Ext {
             return x;
         }
 
-        // The asset leg A(S, t) = S * P_q(T) / P_q(t) at the lowest node: there the certificate
-        // is knocked out and worth the asset it still delivers.
+        // The curve a knocked-out value is grown or discounted on from maturity: the dividend
+        // curve carries the asset leg, the risk-free curve a unit of cash, and nothing needs
+        // none.
+        ext::shared_ptr<YieldTermStructure>
+        knockedOutCurve(const ext::shared_ptr<GeneralizedBlackScholesProcess>& process,
+                        KnockedOutValue knockedOutValue) {
+            switch (knockedOutValue) {
+                case KnockedOutValue::AssetLeg:
+                    return process->dividendYield().currentLink();
+                case KnockedOutValue::Cash:
+                    return process->riskFreeRate().currentLink();
+                case KnockedOutValue::Nothing:
+                    return nullptr;
+            }
+            QL_FAIL("unknown knocked-out value");
+        }
+
+        // The knocked-out value at the lowest node, where the certificate is knocked out in
+        // either monitoring mode: the asset leg A(S, t) = S * P_q(T) / P_q(t) it still
+        // delivers, a unit of cash P_r(T) / P_r(t), or zero.
         FdmBoundaryConditionSet
-        assetLegBoundary(const ext::shared_ptr<FdmMesher>& mesher,
-                         const ext::shared_ptr<GeneralizedBlackScholesProcess>& process,
-                         Time maturity) {
-            const auto lowestSpot = std::exp(mesher->locations(0).front());
+        lowerBoundary(const ext::shared_ptr<FdmMesher>& mesher,
+                      const ext::shared_ptr<GeneralizedBlackScholesProcess>& process,
+                      Time maturity,
+                      KnockedOutValue knockedOutValue) {
+            if (knockedOutValue == KnockedOutValue::Nothing) {
+                return {
+                    ext::make_shared<FdmDirichletBoundary>(mesher, 0.0, 0,
+                                                           FdmDirichletBoundary::Lower),
+                };
+            }
+            const auto unit = knockedOutValue == KnockedOutValue::AssetLeg ?
+                                  std::exp(mesher->locations(0).front()) :
+                                  1.0;
             return {
                 ext::make_shared<FdmDiscountDirichletBoundary>(
-                    mesher, process->dividendYield().currentLink(), maturity, lowestSpot, 0,
+                    mesher, knockedOutCurve(process, knockedOutValue), maturity, unit, 0,
                     FdmDiscountDirichletBoundary::Lower),
             };
         }
@@ -96,11 +162,12 @@ namespace RKE::QL::Ext {
         knockOutConditions(const ext::shared_ptr<FdmMesher>& mesher,
                            const TimeGrid& grid,
                            const ext::shared_ptr<GeneralizedBlackScholesProcess>& process,
-                           const BonusClassicPayoff& payoff) {
+                           const BonusClassicPayoff& payoff,
+                           KnockedOutValue knockedOutValue) {
             std::vector<Time> monitoringTimes(grid.begin() + 1, grid.end() - 1);
             const auto condition = ext::make_shared<FdmBonusClassicKnockOutCondition>(
-                mesher, monitoringTimes, payoff.barrier(), grid.back(),
-                process->dividendYield().currentLink());
+                mesher, monitoringTimes, payoff.barrier(), grid.back(), knockedOutValue,
+                knockedOutCurve(process, knockedOutValue));
             return ext::make_shared<FdmStepConditionComposite>(
                 std::list<std::vector<Time>>{std::move(monitoringTimes)},
                 FdmStepConditionComposite::Conditions{condition});
@@ -113,9 +180,11 @@ namespace RKE::QL::Ext {
         Size tGrid,
         Size xGrid,
         Size dampingSteps,
-        const FdmSchemeDesc& schemeDesc)
+        const FdmSchemeDesc& schemeDesc,
+        bool calculateProbabilities)
     : process_(std::move(process)), monitoringStepsPerYear_(monitoringStepsPerYear), tGrid_(tGrid),
-      xGrid_(xGrid), dampingSteps_(dampingSteps), schemeDesc_(schemeDesc) {
+      xGrid_(xGrid), dampingSteps_(dampingSteps), schemeDesc_(schemeDesc),
+      calculateProbabilities_(calculateProbabilities) {
         QL_REQUIRE(process_, "null process given");
         // Without this, NPV() keeps returning the first price.
         registerWith(process_);
@@ -123,6 +192,10 @@ namespace RKE::QL::Ext {
 
     bool FdBlackScholesBonusClassicEngine::monitorsContinuously() const {
         return monitoringStepsPerYear_ == Null<Size>();
+    }
+
+    bool FdBlackScholesBonusClassicEngine::calculatesProbabilities() const {
+        return calculateProbabilities_;
     }
 
     TimeGrid FdBlackScholesBonusClassicEngine::timeGrid() const {
@@ -133,6 +206,31 @@ namespace RKE::QL::Ext {
                                   monitoringStepsPerYear_);
         }
         QL_FAIL("the barrier is monitored continuously, on no time grid");
+    }
+
+    ext::shared_ptr<FdmBlackScholesSolver>
+    FdBlackScholesBonusClassicEngine::makeSolver(const BonusClassicPayoff& certificate,
+                                                 Time maturity,
+                                                 const ext::shared_ptr<Payoff>& innerValue,
+                                                 KnockedOutValue knockedOutValue) const {
+        const auto mesher = monitorsContinuously() ?
+                                continuousMesher(xGrid_, process_, maturity, certificate) :
+                                discreteMesher(xGrid_, process_, maturity, certificate);
+        const auto boundaries = lowerBoundary(mesher, process_, maturity, knockedOutValue);
+        const auto conditions =
+            monitorsContinuously() ?
+                ext::make_shared<FdmStepConditionComposite>(
+                    std::list<std::vector<Time>>(), FdmStepConditionComposite::Conditions()) :
+                knockOutConditions(mesher, timeGrid(), process_, certificate, knockedOutValue);
+        const auto calculator = ext::make_shared<FdmLogInnerValue>(innerValue, mesher, 0);
+
+        const FdmSolverDesc solverDesc = {
+            mesher, boundaries, conditions, calculator, maturity, tGrid_, dampingSteps_,
+        };
+        // The bonus level is the strike at which the operator reads the volatility.
+        return ext::make_shared<FdmBlackScholesSolver>(
+            Handle<GeneralizedBlackScholesProcess>(process_), certificate.bonusLevel(), solverDesc,
+            schemeDesc_);
     }
 
     void FdBlackScholesBonusClassicEngine::calculate() const {
@@ -149,31 +247,40 @@ namespace RKE::QL::Ext {
 
         const auto maturity = process_->time(arguments_.exercise->lastDate());
 
-        const auto mesher = monitorsContinuously() ?
-                                continuousMesher(xGrid_, process_, maturity, *payoff) :
-                                discreteMesher(xGrid_, process_, maturity, *payoff);
-        const auto boundaries = assetLegBoundary(mesher, process_, maturity);
-        const auto conditions =
-            monitorsContinuously() ?
-                ext::make_shared<FdmStepConditionComposite>(
-                    std::list<std::vector<Time>>(), FdmStepConditionComposite::Conditions()) :
-                knockOutConditions(mesher, timeGrid(), process_, *payoff);
-        const auto calculator = ext::make_shared<FdmLogInnerValue>(payoff, mesher, 0);
-
-        const FdmSolverDesc solverDesc = {
-            mesher, boundaries, conditions, calculator, maturity, tGrid_, dampingSteps_,
-        };
-        // The bonus level is the strike at which the operator reads the volatility.
-        const auto solver = ext::make_shared<FdmBlackScholesSolver>(
-            Handle<GeneralizedBlackScholesProcess>(process_), payoff->bonusLevel(), solverDesc,
-            schemeDesc_);
-
+        const auto solver = makeSolver(*payoff, maturity, payoff, KnockedOutValue::AssetLeg);
         // valueAt() runs the rollback; thetaAt() reads its snapshot without triggering it, so
         // it has to come after one of the other three.
-        results_.value = solver->valueAt(spot);
-        results_.delta = solver->deltaAt(spot);
-        results_.gamma = solver->gammaAt(spot);
-        results_.theta = solver->thetaAt(spot);
+        const auto value = solver->valueAt(spot);
+        const auto delta = solver->deltaAt(spot);
+        const auto gamma = solver->gammaAt(spot);
+        const auto theta = solver->thetaAt(spot);
+
+        results_.value = value;
+        results_.delta = delta;
+        results_.gamma = gamma;
+        results_.theta = theta;
+
+        if (!calculateProbabilities_) {
+            return;
+        }
+
+        // Each indicator rolls back under the same PDE, which discounts at r, so its value at
+        // the spot is E[P_r(T) 1_A] = P_r(T) P(A) for the deterministic curve; the division
+        // takes the discount factor off. The hit is worth one unit at maturity once it has
+        // happened, the bonus nothing, and the lowest node holds the same.
+        const auto discount = process_->riskFreeRate()->discount(maturity);
+        const auto hitSolver =
+            makeSolver(*payoff, maturity, ext::make_shared<IndicatorPayoff>(0.0, payoff->barrier()),
+                       KnockedOutValue::Cash);
+        const auto bonusSolver =
+            makeSolver(*payoff, maturity,
+                       ext::make_shared<IndicatorPayoff>(payoff->barrier(), payoff->bonusLevel()),
+                       KnockedOutValue::Nothing);
+        const Real barrierHitProbability = hitSolver->valueAt(spot) / discount;
+        const Real bonusProbability = bonusSolver->valueAt(spot) / discount;
+
+        results_.additionalResults["barrierHitProbability"] = barrierHitProbability;
+        results_.additionalResults["bonusProbability"] = bonusProbability;
     }
 
     FdmBonusClassicKnockOutCondition::FdmBonusClassicKnockOutCondition(
@@ -181,11 +288,13 @@ namespace RKE::QL::Ext {
         std::vector<Time> monitoringTimes,
         Real barrier,
         Time maturity,
-        ext::shared_ptr<YieldTermStructure> dividendYield)
+        KnockedOutValue knockedOutValue,
+        ext::shared_ptr<YieldTermStructure> curve)
     : spots_(Exp(mesher->locations(0))), monitoringTimes_(std::move(monitoringTimes)),
-      maturity_(maturity), dividendYield_(std::move(dividendYield)) {
+      maturity_(maturity), knockedOutValue_(knockedOutValue), curve_(std::move(curve)) {
         QL_REQUIRE(mesher->layout()->dim().size() == 1, "one-dimensional mesher required");
-        QL_REQUIRE(dividendYield_, "null dividend curve given");
+        QL_REQUIRE(knockedOutValue_ == KnockedOutValue::Nothing || curve_,
+                   "null curve given for the knocked-out value");
 
         const auto x = mesher->locations(0);
         const auto logBarrier = std::log(barrier);
@@ -214,11 +323,20 @@ namespace RKE::QL::Ext {
         }
         lastApplied_ = t;
 
-        const auto growth = dividendYield_->discount(maturity_) / dividendYield_->discount(t);
+        // The knocked-out value is unit(i) * factor: the spot grown on the dividend curve for
+        // the asset leg, one unit discounted on the risk-free curve for cash, and zero for
+        // nothing, whose curve is never read. The products keep the asset leg's association,
+        // weight_ * spot * growth, so the price path is unchanged to the double.
+        const auto factor = knockedOutValue_ == KnockedOutValue::Nothing ?
+                                0.0 :
+                                curve_->discount(maturity_) / curve_->discount(t);
+        const auto unit = [this](Size i) {
+            return knockedOutValue_ == KnockedOutValue::AssetLeg ? spots_[i] : 1.0;
+        };
         for (Size i = 0; i < barrierIndex_; ++i) {
-            a[i] = spots_[i] * growth;
+            a[i] = unit(i) * factor;
         }
         a[barrierIndex_] =
-            (weight_ * spots_[barrierIndex_] * growth) + ((1.0 - weight_) * a[barrierIndex_]);
+            (weight_ * unit(barrierIndex_) * factor) + ((1.0 - weight_) * a[barrierIndex_]);
     }
 }

@@ -8,13 +8,82 @@
 #include <ql/math/array.hpp>
 #include <ql/methods/finitedifferences/meshers/fdmmesher.hpp>
 #include <ql/methods/finitedifferences/solvers/fdmbackwardsolver.hpp>
+#include <ql/methods/finitedifferences/solvers/fdmblackscholessolver.hpp>
 #include <ql/methods/finitedifferences/stepcondition.hpp>
+#include <ql/payoff.hpp>
 #include <ql/processes/blackscholesprocess.hpp>
 #include <ql/termstructures/yieldtermstructure.hpp>
 #include <ql/timegrid.hpp>
+#include <cstdint>
 #include <vector>
 
 namespace RKE::QL::Ext {
+    //! Discrete knock-out of a bonus certificate on a log-spot grid
+    /*! On each monitoring time \f$ t \f$ the nodes below the barrier take the
+        knocked-out value \f$ K(S_i, t) \f$, and the node \f$ k \f$ on the
+        barrier the average over its cell, knocked out below \f$ \ln H \f$
+        and alive above:
+        \f[
+            a_k \leftarrow w \, K(S_k, t) + (1 - w) \, a_k, \qquad
+            w = \frac{\Delta x_k^-}{\Delta x_k^- + \Delta x_k^+}.
+        \f]
+        Nodes above the barrier are left alone. A node on the barrier taking
+        one side's value would move the effective barrier by half a cell.
+
+        KnockedOutValue selects \f$ K \f$, and the curve passed with it is
+        what grows or discounts it from maturity \f$ T \f$ to \f$ t \f$:
+
+        - AssetLeg: \f$ K(S, t) = S \, P_q(T) / P_q(t) \f$, the asset a
+          knocked-out certificate still delivers, on the dividend curve
+          \f$ P_q \f$.
+        - Cash: \f$ K(S, t) = P_r(T) / P_r(t) \f$, one unit paid at maturity,
+          on the risk-free curve \f$ P_r \f$.
+        - Nothing: \f$ K(S, t) = 0 \f$. No curve is read; null is accepted.
+
+        The finite-difference model calls applyTo() after every time step, so
+        the condition acts on its own monitoring times only, compared
+        exactly, and on each of them once.
+
+        \pre one inner node of \p mesher lies on \f$ \ln H \f$; QL_REQUIRE
+             checks this.
+        \pre \p curve is not null unless \p knockedOutValue is Nothing;
+             QL_REQUIRE checks this.
+    */
+    class FdmBonusClassicKnockOutCondition : public QuantLib::StepCondition<QuantLib::Array> {
+      public:
+        //! what a knocked-out node is worth; see the class description
+        enum class KnockedOutValue : std::uint8_t { AssetLeg, Cash, Nothing };
+
+        /*! \param monitoringTimes times in the process's measure, maturity
+                                   excluded
+            \param maturity        the time the knocked-out value is paid at
+            \param knockedOutValue what the nodes below the barrier are set to
+            \param curve           the curve \f$ K \f$ is grown or discounted
+                                   on: the dividend curve for AssetLeg, the
+                                   risk-free curve for Cash; ignored for
+                                   Nothing
+        */
+        FdmBonusClassicKnockOutCondition(
+            const QuantLib::ext::shared_ptr<QuantLib::FdmMesher>& mesher,
+            std::vector<QuantLib::Time> monitoringTimes,
+            QuantLib::Real barrier,
+            QuantLib::Time maturity,
+            KnockedOutValue knockedOutValue,
+            QuantLib::ext::shared_ptr<QuantLib::YieldTermStructure> curve);
+
+        void applyTo(QuantLib::Array& a, QuantLib::Time t) const override;
+
+      private:
+        QuantLib::Array spots_;
+        std::vector<QuantLib::Time> monitoringTimes_;
+        QuantLib::Size barrierIndex_ = 0;
+        QuantLib::Real weight_ = 0.0;
+        QuantLib::Time maturity_;
+        KnockedOutValue knockedOutValue_;
+        QuantLib::ext::shared_ptr<QuantLib::YieldTermStructure> curve_;
+        mutable QuantLib::Time lastApplied_ = QuantLib::Null<QuantLib::Time>();
+    };
+
     //! Finite-difference Black-Scholes engine for bonus certificates
     /*! Solves the Black-Scholes PDE in \f$ x = \ln S \f$ backwards from
         maturity \f$ T \f$,
@@ -54,6 +123,30 @@ namespace RKE::QL::Ext {
         Delta and gamma come from the solver's spline at the spot, theta from
         a snapshot of the rollback at \f$ 0.99 / 365 \f$.
 
+        With calculateProbabilities = true the engine also reports, in
+        Instrument::additionalResults(), read with
+        Instrument::result<Real>("barrierHitProbability") and
+        Instrument::result<Real>("bonusProbability"), the same two
+        probabilities as MCBonusClassicEngine, under the process's measure:
+        that the barrier is hit, i.e. the spot is at or below \f$ H \f$ on a
+        monitoring time after \f$ t = 0 \f$ or, continuously monitored, at
+        any time; and that it never is and \f$ S_T < B \f$, i.e. that the
+        bonus is paid. Each is a rollback of the same PDE on the same grid,
+        seeded with the cell-averaged indicator of its event at maturity,
+        \f$ \mathbf{1}_{\{S \le H\}} \f$ and
+        \f$ \mathbf{1}_{\{H < S < B\}} \f$, and knocked out to what the
+        event is then worth instead of the asset leg: one unit paid at
+        maturity, \f$ P_r(T) / P_r(t) \f$ on the risk-free curve
+        \f$ P_r \f$, for the hit, and zero for the bonus; the lowest node
+        holds the same value as its Dirichlet condition. The PDE discounts
+        at \f$ r \f$, so each rollback's value at the spot is
+        \f$ E[P_r(T) \, \mathbf{1}_A] = P_r(T) \, P(A) \f$ for the
+        deterministic curve, and the engine divides it by \f$ P_r(T) \f$.
+        The bonus level is a concentration point of both grids, not a node,
+        so the bonus indicator's jump at \f$ B \f$ lies between nodes and is
+        averaged over the cell holding it; that is part of the residual the
+        tests measure, and making \f$ B \f$ a node would move the price.
+
         \warning discrete monitoring converges at second order in the grid
                  spacing only because a node sits on the barrier and takes
                  the average of its cell there; a barrier between nodes moves
@@ -79,6 +172,8 @@ namespace RKE::QL::Ext {
         \warning neither discrete dividends nor local volatility are
                  supported. Under a smile the operator reads the variance at
                  the bonus level.
+        \warning with calculateProbabilities = true calculate() runs three
+                 rollbacks instead of one, each on the full grid.
 
         \ingroup barrierengines
 
@@ -92,6 +187,17 @@ namespace RKE::QL::Ext {
         \test both values are regression-locked for a fixed grid.
         \test the continuously monitored value is checked to lie below the
               discretely monitored one.
+        \test both probabilities are regression-locked for a fixed grid in
+              both monitoring modes.
+        \test both probabilities are checked against
+              QuantLib::AnalyticBinaryBarrierEngine, the continuously
+              monitored ones at the barrier itself and the discretely
+              monitored ones at the Broadie-Glasserman-Kou shifted barrier.
+        \test the discretely monitored probabilities are checked against
+              MCBonusClassicEngine with isBiased = true on the same 42-step
+              monitoring grid.
+        \test the default engine reports neither key, and the price is the
+              same double with and without the probabilities.
     */
     class FdBlackScholesBonusClassicEngine : public BonusClassicOption::engine {
       public:
@@ -109,6 +215,10 @@ namespace RKE::QL::Ext {
             \param schemeDesc            the time-stepping scheme; TrBDF2 by
                                          default, not QuantLib's Douglas, see
                                          the warning above
+            \param calculateProbabilities whether calculate() also reports
+                                         barrierHitProbability and
+                                         bonusProbability, two more rollbacks;
+                                         off by default
             \pre \p process is not null; QL_REQUIRE checks this.
         */
         explicit FdBlackScholesBonusClassicEngine(
@@ -117,7 +227,8 @@ namespace RKE::QL::Ext {
             QuantLib::Size tGrid = 100,
             QuantLib::Size xGrid = 100,
             QuantLib::Size dampingSteps = 0,
-            const QuantLib::FdmSchemeDesc& schemeDesc = QuantLib::FdmSchemeDesc::TrBDF2());
+            const QuantLib::FdmSchemeDesc& schemeDesc = QuantLib::FdmSchemeDesc::TrBDF2(),
+            bool calculateProbabilities = false);
 
         void calculate() const override;
 
@@ -127,59 +238,31 @@ namespace RKE::QL::Ext {
         [[nodiscard]] QuantLib::TimeGrid timeGrid() const;
         //! whether the barrier is monitored continuously, i.e. no monitoring step was given
         [[nodiscard]] bool monitorsContinuously() const;
+        //! whether calculate() reports the two probabilities beside the price
+        [[nodiscard]] bool calculatesProbabilities() const;
 
       private:
+        //! the solver of one rollback: mesher, boundary, knock-out and inner value
+        /*! \param certificate     the payoff the grid is built around
+            \param maturity        \f$ T \f$ in the process's measure
+            \param innerValue      the payoff whose cell averages seed the
+                                   rollback at maturity
+            \param knockedOutValue what the knock-out writes on the monitoring
+                                   times, and what the lowest node holds
+        */
+        [[nodiscard]] QuantLib::ext::shared_ptr<QuantLib::FdmBlackScholesSolver>
+        makeSolver(const BonusClassicPayoff& certificate,
+                   QuantLib::Time maturity,
+                   const QuantLib::ext::shared_ptr<QuantLib::Payoff>& innerValue,
+                   FdmBonusClassicKnockOutCondition::KnockedOutValue knockedOutValue) const;
+
         QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process_;
         QuantLib::Size monitoringStepsPerYear_;
         QuantLib::Size tGrid_;
         QuantLib::Size xGrid_;
         QuantLib::Size dampingSteps_;
         QuantLib::FdmSchemeDesc schemeDesc_;
-    };
-
-    //! Discrete knock-out of a bonus certificate on a log-spot grid
-    /*! On each monitoring time \f$ t \f$ the nodes below the barrier take the
-        asset leg \f$ A(S_i, t) = S_i \, P_q(T) / P_q(t) \f$, and the node
-        \f$ k \f$ on the barrier the average over its cell, knocked out below
-        \f$ \ln H \f$ and alive above:
-        \f[
-            a_k \leftarrow w \, A(S_k, t) + (1 - w) \, a_k, \qquad
-            w = \frac{\Delta x_k^-}{\Delta x_k^- + \Delta x_k^+}.
-        \f]
-        Nodes above the barrier are left alone. A node on the barrier taking
-        one side's value would move the effective barrier by half a cell.
-
-        The finite-difference model calls applyTo() after every time step, so
-        the condition acts on its own monitoring times only, compared
-        exactly, and on each of them once.
-
-        \pre one inner node of \p mesher lies on \f$ \ln H \f$; QL_REQUIRE
-             checks this.
-    */
-    class FdmBonusClassicKnockOutCondition : public QuantLib::StepCondition<QuantLib::Array> {
-      public:
-        /*! \param monitoringTimes times in the process's measure, maturity
-                                   excluded
-            \param maturity        the time the asset is delivered at
-            \param dividendYield   the curve \f$ P_q \f$ is read from
-        */
-        FdmBonusClassicKnockOutCondition(
-            const QuantLib::ext::shared_ptr<QuantLib::FdmMesher>& mesher,
-            std::vector<QuantLib::Time> monitoringTimes,
-            QuantLib::Real barrier,
-            QuantLib::Time maturity,
-            QuantLib::ext::shared_ptr<QuantLib::YieldTermStructure> dividendYield);
-
-        void applyTo(QuantLib::Array& a, QuantLib::Time t) const override;
-
-      private:
-        QuantLib::Array spots_;
-        std::vector<QuantLib::Time> monitoringTimes_;
-        QuantLib::Size barrierIndex_ = 0;
-        QuantLib::Real weight_ = 0.0;
-        QuantLib::Time maturity_;
-        QuantLib::ext::shared_ptr<QuantLib::YieldTermStructure> dividendYield_;
-        mutable QuantLib::Time lastApplied_ = QuantLib::Null<QuantLib::Time>();
+        bool calculateProbabilities_;
     };
 }
 
