@@ -7,10 +7,13 @@
 #include <rke/ql/ext/pricingengines/bonusclassic/BinomialBonusClassicEngine.hpp>
 #include <rke/ql/ext/pricingengines/bonusclassic/FdBlackScholesBonusClassicEngine.hpp>
 #include <rke/ql/ext/pricingengines/bonusclassic/MCBonusClassicEngine.hpp>
+#include <ql/exercise.hpp>
 #include <ql/instruments/barrieroption.hpp>
+#include <ql/instruments/payoffs.hpp>
 #include <ql/methods/lattices/binomialtree.hpp>
 #include <ql/methods/montecarlo/mctraits.hpp>
 #include <ql/pricingengines/barrier/analyticbarrierengine.hpp>
+#include <ql/pricingengines/barrier/analyticbinarybarrierengine.hpp>
 #include <ql/processes/blackscholesprocess.hpp>
 #include <boost/test/unit_test.hpp>
 #include <cmath>
@@ -29,8 +32,33 @@ namespace RKE::TestSuite {
     using RKE::Common::treeTimeSteps;
 
     namespace {
+        // The probability that the barrier is touched and the probability that it never is and
+        // S_T < B, i.e. that the bonus is paid: the two results MCBonusClassicEngine reports
+        // beside the price, and what the analytic reference gives for them.
+        struct Probabilities {
+            Real hit;
+            Real bonus;
+        };
+
+        // The engine's additional results after NPV() has run; result() throws if a key is
+        // missing.
+        Probabilities engineProbabilities(const BonusClassicOption& option) {
+            return {
+                option.result<Real>("barrierHitProbability"),
+                option.result<Real>("bonusProbability"),
+            };
+        }
+
+        // |value - reference| over |reference|, or over 1 where the reference is zero: a
+        // probability's absolute scale, so a zero on both sides is no difference and a zero on
+        // one side is the whole other value.
+        Real relativeDifference(Real value, Real reference) {
+            const auto scale = reference == 0.0 ? 1.0 : std::fabs(reference);
+            return std::fabs(value - reference) / scale;
+        }
+
         // Prices under LocalVolStepSingleVariate and SingleVariate, both monitoring modes, and
-        // requires them within the relative tolerance.
+        // requires the prices and both probabilities within the relative tolerance.
         void checkLocalVolStepPrices(Date today,
                                      const ext::shared_ptr<GeneralizedBlackScholesProcess>& process,
                                      Real tolerance) {
@@ -45,6 +73,7 @@ namespace RKE::TestSuite {
                         process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(), isBiased, true,
                         42));
                 const auto cached = bonusClassicOption->NPV();
+                const auto cachedProbabilities = engineProbabilities(*bonusClassicOption);
 
                 bonusClassicOption->setPricingEngine(
                     ext::make_shared<
@@ -52,11 +81,27 @@ namespace RKE::TestSuite {
                         process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(), isBiased, true,
                         42));
                 const auto plain = bonusClassicOption->NPV();
+                const auto plainProbabilities = engineProbabilities(*bonusClassicOption);
 
                 BOOST_TEST_MESSAGE((isBiased ? "discrete " : "continuous ")
                                    << cached << ", relative difference "
                                    << std::fabs(cached - plain) / plain);
                 BOOST_CHECK_CLOSE_FRACTION(cached, plain, tolerance);
+
+                // The probabilities are means of the same per-path quantities the price is
+                // built from, so they agree to the same rounding. At 1,000 paths a hit
+                // probability can be zero, which relativeDifference scales absolutely.
+                BOOST_TEST_MESSAGE(
+                    "hit " << cachedProbabilities.hit << ", relative difference "
+                           << relativeDifference(cachedProbabilities.hit, plainProbabilities.hit)
+                           << "; bonus " << cachedProbabilities.bonus << ", relative difference "
+                           << relativeDifference(cachedProbabilities.bonus,
+                                                 plainProbabilities.bonus));
+                BOOST_CHECK_LE(relativeDifference(cachedProbabilities.hit, plainProbabilities.hit),
+                               tolerance);
+                BOOST_CHECK_LE(
+                    relativeDifference(cachedProbabilities.bonus, plainProbabilities.bonus),
+                    tolerance);
             }
         }
 
@@ -87,6 +132,41 @@ namespace RKE::TestSuite {
             downOutPut.setPricingEngine(ext::make_shared<AnalyticBarrierEngine>(process));
 
             return assetLeg + downOutPut.NPV();
+        }
+
+        // AnalyticBinaryBarrierEngine (Haug, "The complete guide to option pricing formulas",
+        // 2nd ed., p. 176 ff.) prices a cash-or-nothing payoff paid at expiry under continuous
+        // monitoring of the barrier given here. Its calculate() takes an AmericanExercise with
+        // payoffAtExpiry = true whose first date is at or before the volatility's reference
+        // date, so the exercise starts today. Paying 1 at expiry, the down-and-in call and put
+        // struck at the bonus level together pay 1 iff the barrier was touched, and the
+        // down-and-out put, the engine's "strike >= barrier" branch, pays 1 iff it never was
+        // and S_T < B. The curve is deterministic, so E[D(T) 1_A] = D(T) P(A) and each price
+        // over D(T) is the probability of its event.
+        Probabilities
+        referenceProbabilities(const ext::shared_ptr<GeneralizedBlackScholesProcess>& process,
+                               const RKE::Common::OptionData& data,
+                               Date today,
+                               Date exerciseDate,
+                               Real barrier) {
+            const auto exercise = ext::make_shared<AmericanExercise>(today, exerciseDate, true);
+            const auto cashOrNothingPrice = [&](Barrier::Type barrierType,
+                                                Option::Type optionType) {
+                auto option = BarrierOption(
+                    barrierType, barrier, 0.0,
+                    ext::make_shared<CashOrNothingPayoff>(optionType, data.bonusLevel, 1.0),
+                    exercise);
+                option.setPricingEngine(ext::make_shared<AnalyticBinaryBarrierEngine>(process));
+                return option.NPV();
+            };
+            const auto discount = process->riskFreeRate()->discount(exerciseDate);
+
+            return {
+                (cashOrNothingPrice(Barrier::DownIn, Option::Call) +
+                 cashOrNothingPrice(Barrier::DownIn, Option::Put)) /
+                    discount,
+                cashOrNothingPrice(Barrier::DownOut, Option::Put) / discount,
+            };
         }
 
         // The flat market every case prices: the option with its maturity cut to 5M and the
@@ -291,6 +371,105 @@ namespace RKE::TestSuite {
     }
 
     BOOST_AUTO_TEST_CASE(
+        testBonusClassicOptionProbabilities) { // NOLINT(misc-use-internal-linkage):
+                                               // the struct is the macro's
+        BOOST_TEST_MESSAGE("BonusClassicOption probabilities test");
+
+        const auto flat = makeFlatCase();
+
+        // The configuration of testBonusClassicOptionValuation's lock.
+        const auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
+            flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), true, true, 42);
+        flat.option->setPricingEngine(mcEngine);
+        static_cast<void>(flat.option->NPV());
+        const auto probabilities = engineProbabilities(*flat.option);
+
+        // Touching the barrier and paying the bonus are disjoint, and a path that never
+        // touches it and ends at or above the bonus level is in neither.
+        BOOST_CHECK_GT(probabilities.hit, 0.0);
+        BOOST_CHECK_GT(probabilities.bonus, 0.0);
+        BOOST_CHECK_LT(probabilities.hit + probabilities.bonus, 1.0);
+
+        // Regression lock, as in testBonusClassicOptionValuation: the engine's own output for
+        // a fixed seed and grid, not externally validated probabilities. The independent check
+        // follows below.
+        BOOST_CHECK_CLOSE_FRACTION(0.0067000000000000002, probabilities.hit, 1e-8);
+        BOOST_CHECK_CLOSE_FRACTION(0.93015999999999999, probabilities.bonus, 1e-8);
+
+        // AnalyticBinaryBarrierEngine assumes continuous monitoring, while the engine monitors
+        // on its time grid only, so the reference takes the Broadie-Glasserman-Kou barrier for
+        // the step the paths were monitored on.
+        const auto dt = mcEngine->timeGrid().dt(0);
+        const auto reference = referenceProbabilities(
+            flat.process, flat.optionData, flat.today, flat.exerciseDate,
+            bgkShiftedBarrier(flat.optionData.barrier, flat.marketData.volatility, dt));
+
+        // Spot 100 against barrier 70 over 5M leaves a small hit probability, so the residuals
+        // are absolute, not relative.
+        // Measured residuals 7.57e-5 absolute for hit and 1.02e-4 absolute for bonus. Both mix
+        // the correction's own O(1 / sqrt(steps)) error on 42 steps with the sampling error of
+        // the indicator estimator, which is not measured separately; the continuous case below
+        // measures its own, bridge-weighted estimator. Each bound leaves about three times its
+        // residual, rounded up to one digit.
+        BOOST_TEST_MESSAGE("MC hit " << probabilities.hit << ", reference " << reference.hit
+                                     << ", absolute residual "
+                                     << std::fabs(probabilities.hit - reference.hit));
+        BOOST_TEST_MESSAGE("MC bonus " << probabilities.bonus << ", reference " << reference.bonus
+                                       << ", absolute residual "
+                                       << std::fabs(probabilities.bonus - reference.bonus));
+        BOOST_CHECK_SMALL(probabilities.hit - reference.hit, 3e-4);
+        BOOST_CHECK_SMALL(probabilities.bonus - reference.bonus, 4e-4);
+    }
+
+    BOOST_AUTO_TEST_CASE(
+        testBonusClassicOptionContinuousProbabilities) { // NOLINT(misc-use-internal-linkage):
+                                                         // the struct is the macro's
+        BOOST_TEST_MESSAGE("BonusClassicOption continuous probabilities test");
+
+        const auto flat = makeFlatCase();
+
+        // The configuration of testBonusClassicOptionContinuousValuation's lock.
+        const auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
+            flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), false, true, 42);
+        flat.option->setPricingEngine(mcEngine);
+        static_cast<void>(flat.option->NPV());
+        const auto probabilities = engineProbabilities(*flat.option);
+
+        // Each path contributes its bridge probabilities, 1 - P to hit and P * 1{S_T < B} to
+        // bonus, so the means are still disjoint probabilities with the no-hit, no-bonus
+        // paths' share left over.
+        BOOST_CHECK_GT(probabilities.hit, 0.0);
+        BOOST_CHECK_GT(probabilities.bonus, 0.0);
+        BOOST_CHECK_LT(probabilities.hit + probabilities.bonus, 1.0);
+
+        // Regression lock, as in testBonusClassicOptionContinuousValuation: the engine's own
+        // output for a fixed seed and grid, not externally validated probabilities. The
+        // independent check follows below.
+        BOOST_CHECK_CLOSE_FRACTION(0.0086433804772671641, probabilities.hit, 1e-8);
+        BOOST_CHECK_CLOSE_FRACTION(0.92821661952273349, probabilities.bonus, 1e-8);
+
+        // The engine monitors continuously, as AnalyticBinaryBarrierEngine assumes, so the
+        // reference takes the barrier itself and no Broadie-Glasserman-Kou shift applies.
+        const auto reference = referenceProbabilities(flat.process, flat.optionData, flat.today,
+                                                      flat.exerciseDate, flat.optionData.barrier);
+
+        // Spot 100 against barrier 70 over 5M leaves a small hit probability, so the residuals
+        // are absolute, not relative.
+        // With flat r, q and sigma the bridge is exact, so the residual is sampling error
+        // alone: measured 1.9e-4 absolute for hit and 2.2e-4 absolute for bonus at 50,000
+        // paths, 4.3e-5 and 4.4e-5 at 200,000. Each bound leaves three times its 50,000-path
+        // residual, rounded up to one digit.
+        BOOST_TEST_MESSAGE("MC hit " << probabilities.hit << ", reference " << reference.hit
+                                     << ", absolute residual "
+                                     << std::fabs(probabilities.hit - reference.hit));
+        BOOST_TEST_MESSAGE("MC bonus " << probabilities.bonus << ", reference " << reference.bonus
+                                       << ", absolute residual "
+                                       << std::fabs(probabilities.bonus - reference.bonus));
+        BOOST_CHECK_SMALL(probabilities.hit - reference.hit, 6e-4);
+        BOOST_CHECK_SMALL(probabilities.bonus - reference.bonus, 7e-4);
+    }
+
+    BOOST_AUTO_TEST_CASE(
         testBonusClassicOptionMonitoringOrder) { // NOLINT(misc-use-internal-linkage):
                                                  // the struct is the macro's
         BOOST_TEST_MESSAGE("BonusClassicOption monitoring order test");
@@ -300,15 +479,27 @@ namespace RKE::TestSuite {
         flat.option->setPricingEngine(ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
             flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), true, true, 42));
         const auto discrete = flat.option->NPV();
+        const auto discreteProbabilities = engineProbabilities(*flat.option);
 
         flat.option->setPricingEngine(ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
             flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), false, true, 42));
         const auto continuous = flat.option->NPV();
+        const auto continuousProbabilities = engineProbabilities(*flat.option);
 
         // Continuous monitoring sees every crossing the grid sees and more, and a knock-out
         // only removes the bonus put, so on the same paths the continuous price is lower.
         BOOST_TEST_MESSAGE("discrete " << discrete << ", continuous " << continuous);
         BOOST_CHECK_LT(continuous, discrete);
+
+        // The bridge adds a crossing probability to every surviving path and takes none away,
+        // so the hit probability rises and the bonus probability, its complement on the paths
+        // ending below the bonus level, falls.
+        BOOST_TEST_MESSAGE("discrete hit " << discreteProbabilities.hit << ", continuous hit "
+                                           << continuousProbabilities.hit << "; discrete bonus "
+                                           << discreteProbabilities.bonus << ", continuous bonus "
+                                           << continuousProbabilities.bonus);
+        BOOST_CHECK_GT(continuousProbabilities.hit, discreteProbabilities.hit);
+        BOOST_CHECK_LT(continuousProbabilities.bonus, discreteProbabilities.bonus);
     }
 
     BOOST_AUTO_TEST_CASE(
@@ -324,17 +515,26 @@ namespace RKE::TestSuite {
                 flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), isBiased, true,
                 42));
             const auto cached = flat.option->NPV();
+            const auto cachedProbabilities = engineProbabilities(*flat.option);
 
             flat.option->setPricingEngine(
                 ext::make_shared<MCBonusClassicEngine<LowDiscrepancy, Statistics, SingleVariate>>(
                     flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), isBiased, true,
                     42));
             const auto plain = flat.option->NPV();
+            const auto plainProbabilities = engineProbabilities(*flat.option);
 
             // Exact on purpose: the cached step is the double QuantLib::PathGenerator evolves,
             // so the traits move no price.
             BOOST_TEST_MESSAGE((isBiased ? "discrete " : "continuous ") << cached);
             BOOST_CHECK_EQUAL(cached, plain);
+
+            // The same paths and, in continuous mode, the same step variance the cache
+            // reproduces from the process, so the probabilities are the same doubles too.
+            BOOST_TEST_MESSAGE("hit " << cachedProbabilities.hit << ", bonus "
+                                      << cachedProbabilities.bonus);
+            BOOST_CHECK_EQUAL(cachedProbabilities.hit, plainProbabilities.hit);
+            BOOST_CHECK_EQUAL(cachedProbabilities.bonus, plainProbabilities.bonus);
         }
     }
 
@@ -537,6 +737,194 @@ namespace RKE::TestSuite {
     }
 
     BOOST_AUTO_TEST_CASE(
+        testBonusClassicOptionFdProbabilities) { // NOLINT(misc-use-internal-linkage):
+                                                 // the struct is the macro's
+        BOOST_TEST_MESSAGE("BonusClassicOption FD probabilities test");
+
+        const auto flat = makeFlatCase();
+
+        // The grid of testBonusClassicOptionFdValuation's lock with the probabilities on; the
+        // damping steps and the scheme are the defaults, spelled out to reach the flag.
+        const auto fdEngine = ext::make_shared<FdBlackScholesBonusClassicEngine>(
+            flat.process, mcTimeStepsPerYear, fdTimeGrid, fdSpaceGrid, 0, FdmSchemeDesc::TrBDF2(),
+            true);
+        flat.option->setPricingEngine(fdEngine);
+        static_cast<void>(flat.option->NPV());
+        const auto probabilities = engineProbabilities(*flat.option);
+
+        // Touching the barrier and paying the bonus are disjoint, and a path that never
+        // touches it and ends at or above the bonus level is in neither.
+        BOOST_CHECK_GT(probabilities.hit, 0.0);
+        BOOST_CHECK_GT(probabilities.bonus, 0.0);
+        BOOST_CHECK_LT(probabilities.hit + probabilities.bonus, 1.0);
+
+        // Regression lock, as in testBonusClassicOptionFdValuation: the engine's own output on
+        // this grid and scheme, not externally validated probabilities. The independent check
+        // follows below.
+        BOOST_CHECK_CLOSE_FRACTION(0.0069741235334948581, probabilities.hit, 1e-8);
+        BOOST_CHECK_CLOSE_FRACTION(0.92987764314443611, probabilities.bonus, 1e-8);
+
+        // AnalyticBinaryBarrierEngine assumes continuous monitoring, while the engine monitors
+        // on its time grid only, so the reference takes the Broadie-Glasserman-Kou barrier for
+        // the grid's step.
+        const auto dt = fdEngine->timeGrid().dt(0);
+        const auto reference = referenceProbabilities(
+            flat.process, flat.optionData, flat.today, flat.exerciseDate,
+            bgkShiftedBarrier(flat.optionData.barrier, flat.marketData.volatility, dt));
+
+        // Spot 100 against barrier 70 over 5M leaves a small hit probability, so the residuals
+        // are absolute, not relative.
+        // Measured residuals 1.98e-4 absolute for hit and 1.81e-4 absolute for bonus. Both are
+        // deterministic: the engine at 16 times both grids, 6,400 nodes and 3,200 steps, is
+        // 1.4e-5 below this grid's hit and 3.4e-6 below its bonus, and still 1.84e-4 off the
+        // reference on each, so nearly all of it is the correction's own O(1 / sqrt(steps))
+        // error on 42 steps; the bonus indicator's jump at the bonus level lies between nodes
+        // and is averaged over its cell. Each bound leaves about three times its residual,
+        // rounded up to one digit.
+        BOOST_TEST_MESSAGE("FD hit " << probabilities.hit << ", reference " << reference.hit
+                                     << ", absolute residual "
+                                     << std::fabs(probabilities.hit - reference.hit));
+        BOOST_TEST_MESSAGE("FD bonus " << probabilities.bonus << ", reference " << reference.bonus
+                                       << ", absolute residual "
+                                       << std::fabs(probabilities.bonus - reference.bonus));
+        BOOST_CHECK_SMALL(probabilities.hit - reference.hit, 6e-4);
+        BOOST_CHECK_SMALL(probabilities.bonus - reference.bonus, 6e-4);
+    }
+
+    BOOST_AUTO_TEST_CASE(
+        testBonusClassicOptionFdContinuousProbabilities) { // NOLINT(misc-use-internal-linkage):
+                                                           // the struct is the macro's
+        BOOST_TEST_MESSAGE("BonusClassicOption FD continuous probabilities test");
+
+        const auto flat = makeFlatCase();
+
+        // The grid of testBonusClassicOptionFdContinuousValuation's lock with the
+        // probabilities on; the damping steps and the scheme are the defaults, spelled out to
+        // reach the flag.
+        flat.option->setPricingEngine(ext::make_shared<FdBlackScholesBonusClassicEngine>(
+            flat.process, Null<Size>(), fdTimeGrid, fdSpaceGrid, 0, FdmSchemeDesc::TrBDF2(), true));
+        static_cast<void>(flat.option->NPV());
+        const auto probabilities = engineProbabilities(*flat.option);
+
+        // Touching the barrier and paying the bonus are disjoint, and a path that never
+        // touches it and ends at or above the bonus level is in neither.
+        BOOST_CHECK_GT(probabilities.hit, 0.0);
+        BOOST_CHECK_GT(probabilities.bonus, 0.0);
+        BOOST_CHECK_LT(probabilities.hit + probabilities.bonus, 1.0);
+
+        // Regression lock, as in testBonusClassicOptionFdContinuousValuation: the engine's own
+        // output on this grid and scheme, not externally validated probabilities. The
+        // independent check follows below.
+        BOOST_CHECK_CLOSE_FRACTION(0.0088426988831812846, probabilities.hit, 1e-8);
+        BOOST_CHECK_CLOSE_FRACTION(0.92796933820531924, probabilities.bonus, 1e-8);
+
+        // The engine monitors continuously, as AnalyticBinaryBarrierEngine assumes, so the
+        // reference takes the barrier itself and no Broadie-Glasserman-Kou shift applies.
+        const auto reference = referenceProbabilities(flat.process, flat.optionData, flat.today,
+                                                      flat.exerciseDate, flat.optionData.barrier);
+
+        // Spot 100 against barrier 70 over 5M leaves a small hit probability, so the residuals
+        // are absolute, not relative.
+        // Both sides monitor continuously, so the residual is the grid's discretisation error
+        // alone: measured 9.1e-6 absolute for hit and 3.1e-5 absolute for bonus. The bonus
+        // residual is the larger because the indicator's jump at the bonus level lies between
+        // nodes and is averaged over its cell, while the hit indicator's jump sits on the node
+        // at ln H. Each bound leaves about three times its residual, rounded up to one digit.
+        BOOST_TEST_MESSAGE("FD hit " << probabilities.hit << ", reference " << reference.hit
+                                     << ", absolute residual "
+                                     << std::fabs(probabilities.hit - reference.hit));
+        BOOST_TEST_MESSAGE("FD bonus " << probabilities.bonus << ", reference " << reference.bonus
+                                       << ", absolute residual "
+                                       << std::fabs(probabilities.bonus - reference.bonus));
+        BOOST_CHECK_SMALL(probabilities.hit - reference.hit, 3e-5);
+        BOOST_CHECK_SMALL(probabilities.bonus - reference.bonus, 1e-4);
+    }
+
+    BOOST_AUTO_TEST_CASE(
+        testBonusClassicOptionFdProbabilitiesVersusMc) { // NOLINT(misc-use-internal-linkage):
+                                                         // the struct is the macro's
+        BOOST_TEST_MESSAGE("BonusClassicOption FD probabilities versus MC test");
+
+        const auto flat = makeFlatCase();
+
+        const auto fdEngine = ext::make_shared<FdBlackScholesBonusClassicEngine>(
+            flat.process, mcTimeStepsPerYear, fdTimeGrid, fdSpaceGrid, 0, FdmSchemeDesc::TrBDF2(),
+            true);
+        flat.option->setPricingEngine(fdEngine);
+        static_cast<void>(flat.option->NPV());
+        const auto fd = engineProbabilities(*flat.option);
+
+        // The configuration of testBonusClassicOptionProbabilities' lock.
+        const auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
+            flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), true, true, 42);
+        flat.option->setPricingEngine(mcEngine);
+        static_cast<void>(flat.option->NPV());
+        const auto mc = engineProbabilities(*flat.option);
+
+        // Both engines monitor the same events: the same 42 points after t = 0.
+        const auto fdGrid = fdEngine->timeGrid();
+        const auto mcGrid = mcEngine->timeGrid();
+        BOOST_CHECK_EQUAL(fdGrid.size() - 1, Size(42));
+        BOOST_REQUIRE_EQUAL(fdGrid.size(), mcGrid.size());
+        for (Size i = 0; i < fdGrid.size(); ++i) {
+            BOOST_CHECK_EQUAL(fdGrid[i], mcGrid[i]);
+        }
+
+        // Spot 100 against barrier 70 over 5M leaves a small hit probability, so the residuals
+        // are absolute, not relative.
+        // Measured residuals 2.74e-4 absolute for hit and 2.82e-4 absolute for bonus, the sum
+        // of two deterministic errors: the grid's discretisation error and the Monte Carlo
+        // lock's own distance from the discrete probabilities at 50,000 low-discrepancy paths,
+        // which testBonusClassicOptionProbabilities records against the analytic reference as
+        // 7.57e-5 and 1.02e-4 absolute. They add because the two engines sit on opposite sides
+        // of that reference: testBonusClassicOptionFdProbabilities measures the grid 1.98e-4
+        // above it for hit and 1.81e-4 below it for bonus, the Monte Carlo lock below and above.
+        // Each bound leaves about three times its residual, rounded up to one digit.
+        BOOST_TEST_MESSAGE("FD hit " << fd.hit << ", MC hit " << mc.hit << ", absolute difference "
+                                     << std::fabs(fd.hit - mc.hit));
+        BOOST_TEST_MESSAGE("FD bonus " << fd.bonus << ", MC bonus " << mc.bonus
+                                       << ", absolute difference "
+                                       << std::fabs(fd.bonus - mc.bonus));
+        BOOST_CHECK_SMALL(fd.hit - mc.hit, 9e-4);
+        BOOST_CHECK_SMALL(fd.bonus - mc.bonus, 9e-4);
+    }
+
+    BOOST_AUTO_TEST_CASE(
+        testBonusClassicOptionFdProbabilitiesOptIn) { // NOLINT(misc-use-internal-linkage):
+                                                      // the struct is the macro's
+        BOOST_TEST_MESSAGE("BonusClassicOption FD engine reports the probabilities only when "
+                           "asked, and the same price either way");
+
+        const auto flat = makeFlatCase();
+
+        // The default: the price alone, and reading a probability fails loud instead of
+        // returning a stale or zero value.
+        const auto plainEngine = ext::make_shared<FdBlackScholesBonusClassicEngine>(
+            flat.process, mcTimeStepsPerYear, fdTimeGrid, fdSpaceGrid);
+        BOOST_CHECK(!plainEngine->calculatesProbabilities());
+        flat.option->setPricingEngine(plainEngine);
+        const auto plain = flat.option->NPV();
+        BOOST_CHECK_THROW(static_cast<void>(flat.option->result<Real>("barrierHitProbability")),
+                          Error);
+        BOOST_CHECK_THROW(static_cast<void>(flat.option->result<Real>("bonusProbability")), Error);
+
+        const auto engine = ext::make_shared<FdBlackScholesBonusClassicEngine>(
+            flat.process, mcTimeStepsPerYear, fdTimeGrid, fdSpaceGrid, 0, FdmSchemeDesc::TrBDF2(),
+            true);
+        BOOST_CHECK(engine->calculatesProbabilities());
+        flat.option->setPricingEngine(engine);
+        const auto withProbabilities = flat.option->NPV();
+        const auto probabilities = engineProbabilities(*flat.option);
+        BOOST_CHECK_GT(probabilities.hit, 0.0);
+        BOOST_CHECK_GT(probabilities.bonus, 0.0);
+
+        // The probabilities come from two rollbacks of their own; the price's is the same
+        // mesher, boundary, knock-out and payoff as before, so it is the same double.
+        BOOST_TEST_MESSAGE("without " << plain << ", with " << withProbabilities);
+        BOOST_CHECK_EQUAL(withProbabilities, plain);
+    }
+
+    BOOST_AUTO_TEST_CASE(
         testBonusClassicOptionBinomialValuation) { // NOLINT(misc-use-internal-linkage):
                                                    // the struct is the macro's
         BOOST_TEST_MESSAGE("BonusClassicOption binomial valuation test");
@@ -612,6 +1000,91 @@ namespace RKE::TestSuite {
         BOOST_TEST_MESSAGE("relative residual with Boyle-Lau " << withBoyleLau << ", without "
                                                                << withoutBoyleLau);
         BOOST_CHECK_LT(withBoyleLau, withoutBoyleLau);
+    }
+
+    BOOST_AUTO_TEST_CASE(
+        testBonusClassicOptionBinomialProbabilities) { // NOLINT(misc-use-internal-linkage):
+                                                       // the struct is the macro's
+        BOOST_TEST_MESSAGE("BonusClassicOption binomial probabilities test");
+
+        const auto flat = makeFlatCase();
+
+        // The lattice of testBonusClassicOptionBinomialValuation's lock, with the two
+        // indicator legs rolled back beside the certificate.
+        const auto engine = ext::make_shared<BinomialBonusClassicEngine<CoxRossRubinstein>>(
+            flat.process, treeTimeSteps, 0, true);
+        flat.option->setPricingEngine(engine);
+        static_cast<void>(flat.option->NPV());
+        const auto probabilities = engineProbabilities(*flat.option);
+
+        // Boyle-Lau: the first floor(i^2 sigma^2 T / ln^2(S / H)) above 400, at i = 55.
+        BOOST_CHECK_EQUAL(engine->timeGrid().size() - 1, Size(404));
+
+        // Reaching a node at or below the barrier and paying the bonus are disjoint, and a
+        // lattice path that never does and ends at or above the bonus level is in neither.
+        BOOST_CHECK_GT(probabilities.hit, 0.0);
+        BOOST_CHECK_GT(probabilities.bonus, 0.0);
+        BOOST_CHECK_LT(probabilities.hit + probabilities.bonus, 1.0);
+
+        // Regression lock, as in testBonusClassicOptionBinomialValuation: the engine's own
+        // output on this lattice, not externally validated probabilities. The independent check
+        // follows below.
+        BOOST_CHECK_CLOSE_FRACTION(0.0087152329237066232, probabilities.hit, 1e-8);
+        BOOST_CHECK_CLOSE_FRACTION(0.93348793687522391, probabilities.bonus, 1e-8);
+
+        // The tree monitors on every step, and Boyle-Lau puts a layer of nodes at 69.9929, just
+        // below the barrier, so the reference takes the barrier itself and no
+        // Broadie-Glasserman-Kou shift applies.
+        const auto reference = referenceProbabilities(flat.process, flat.optionData, flat.today,
+                                                      flat.exerciseDate, flat.optionData.barrier);
+
+        // Spot 100 against barrier 70 over 5M leaves a small hit probability, so the residuals
+        // are absolute, not relative.
+        // Measured residuals 1.18e-4 absolute for hit and 5.49e-3 absolute for bonus at 404
+        // steps. Both are lattice discretisation error, not noise: the layer the Boyle-Lau
+        // floor leaves below the barrier, and for the bonus indicator its jump at B, which
+        // falls between lattice nodes, so the nodes next to B carry a whole or no unit instead
+        // of their cell's share. That jump is the whole bonus residual: with no reachable
+        // barrier the same 404-step lattice puts P(S_T < B) 5.37e-3 above
+        // AnalyticEuropeanEngine's cash-or-nothing put, and the residual oscillates with the
+        // step count as the nodes move past B, 6.3e-4 at 813 steps, 2.4e-3 at 1616, -4.7e-4 at
+        // 3210 and 8.7e-5 at 6409, while the hit residual falls monotonically to 6.1e-7. Each
+        // bound leaves about three times its residual, rounded up to one digit.
+        BOOST_TEST_MESSAGE("binomial hit " << probabilities.hit << ", reference " << reference.hit
+                                           << ", absolute residual "
+                                           << std::fabs(probabilities.hit - reference.hit));
+        BOOST_TEST_MESSAGE("binomial bonus " << probabilities.bonus << ", reference "
+                                             << reference.bonus << ", absolute residual "
+                                             << std::fabs(probabilities.bonus - reference.bonus));
+        BOOST_CHECK_SMALL(probabilities.hit - reference.hit, 4e-4);
+        BOOST_CHECK_SMALL(probabilities.bonus - reference.bonus, 2e-2);
+    }
+
+    BOOST_AUTO_TEST_CASE(
+        testBonusClassicOptionBinomialProbabilitiesOptIn) { // NOLINT(misc-use-internal-linkage):
+                                                            // the struct is the macro's
+        BOOST_TEST_MESSAGE("BonusClassicOption binomial engine reports the probabilities only "
+                           "with calculateProbabilities on");
+
+        const auto flat = makeFlatCase();
+
+        // The default engine prices as before and sets neither key: Instrument::result()
+        // throws on a key additionalResults does not hold.
+        const auto plainEngine = ext::make_shared<BinomialBonusClassicEngine<CoxRossRubinstein>>(
+            flat.process, treeTimeSteps);
+        BOOST_CHECK(!plainEngine->calculatesProbabilities());
+        flat.option->setPricingEngine(plainEngine);
+        static_cast<void>(flat.option->NPV());
+        BOOST_CHECK_THROW(static_cast<void>(flat.option->result<Real>("barrierHitProbability")),
+                          Error);
+        BOOST_CHECK_THROW(static_cast<void>(flat.option->result<Real>("bonusProbability")), Error);
+
+        const auto engine = ext::make_shared<BinomialBonusClassicEngine<CoxRossRubinstein>>(
+            flat.process, treeTimeSteps, 0, true);
+        BOOST_CHECK(engine->calculatesProbabilities());
+        flat.option->setPricingEngine(engine);
+        static_cast<void>(flat.option->NPV());
+        BOOST_CHECK_NO_THROW(static_cast<void>(engineProbabilities(*flat.option)));
     }
 
     BOOST_AUTO_TEST_SUITE_END()

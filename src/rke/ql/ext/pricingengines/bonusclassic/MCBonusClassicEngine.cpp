@@ -9,18 +9,13 @@ using namespace QuantLib;
 
 namespace RKE::QL::Ext {
     namespace {
-        // The continuously monitored value of a path no grid point of which is at or below the
-        // barrier: S_T plus the bonus put weighted with the Brownian-bridge survival probability
-        // over the steps, whose integrated variance stepVariance(i, path) supplies. The caller
-        // has tested the grid points, and t = 0 the engine's calculate(), so every log-distance
-        // below is positive.
+        // The Brownian-bridge survival probability P = prod_i (1 - p_i) of a path no grid point
+        // of which is at or below the barrier, over the steps whose integrated variance
+        // stepVariance(i, path) supplies. The caller has tested the grid points, and t = 0 the
+        // engine's calculate(), so every log-distance below is positive.
         template <class StepVariance>
-        Real continuousValue(const Path& path,
-                             const BonusClassicPayoff& payoff,
-                             DiscountFactor discountFactor,
-                             const StepVariance& stepVariance) {
+        Real continuousSurvival(const Path& path, Real barrier, const StepVariance& stepVariance) {
             const Size n = path.length();
-            const auto barrier = payoff.barrier();
 
             Real survival = 1.0;
             Real logDistance = std::log(path.front() / barrier);
@@ -32,17 +27,29 @@ namespace RKE::QL::Ext {
                 }
                 logDistance = nextLogDistance;
             }
-
-            // S_T > barrier here, so payoff(S_T) - S_T is the bonus put max(B - S_T, 0).
-            const auto finalPrice = path.back();
-            const auto bonusPut = payoff(finalPrice) - finalPrice;
-            return (finalPrice + (survival * bonusPut)) * discountFactor;
+            return survival;
         }
     }
 
     BonusClassicPathPricerBase::BonusClassicPathPricerBase(BonusClassicPayoff payoff,
                                                            DiscountFactor discountFactor)
     : payoff_(std::move(payoff)), discountFactor_(discountFactor) {}
+
+    Real BonusClassicPathPricerBase::barrierHitProbability() const {
+        QL_REQUIRE(samples_ > 0, "no path priced yet");
+        return hitSum_ / static_cast<Real>(samples_);
+    }
+
+    Real BonusClassicPathPricerBase::bonusProbability() const {
+        QL_REQUIRE(samples_ > 0, "no path priced yet");
+        return bonusSum_ / static_cast<Real>(samples_);
+    }
+
+    void BonusClassicPathPricerBase::record(Real hitProbability, Real bonusProbability) const {
+        hitSum_ += hitProbability;
+        bonusSum_ += bonusProbability;
+        ++samples_;
+    }
 
     bool BonusClassicPathPricerBase::knockedOut(const Path& path) const {
         const Size n = path.length();
@@ -58,15 +65,33 @@ namespace RKE::QL::Ext {
         return false;
     }
 
+    Real BonusClassicPathPricerBase::knockedOutValue(const Path& path) const {
+        record(1.0, 0.0);
+        return path.back() * discountFactor_;
+    }
+
+    Real BonusClassicPathPricerBase::continuousValue(const Path& path, Real survival) const {
+        // S_T > barrier here, so payoff(S_T) - S_T is the bonus put max(B - S_T, 0), and the
+        // surviving fraction of the path is paid the bonus iff that put is in the money.
+        const auto finalPrice = path.back();
+        const auto bonusPut = payoff_(finalPrice) - finalPrice;
+        record(1.0 - survival, finalPrice < payoff_.bonusLevel() ? survival : 0.0);
+        // Same operations in the same order as before the probabilities: the regression locks
+        // pin this double.
+        return (finalPrice + (survival * bonusPut)) * discountFactor_;
+    }
+
     BiasedBonusClassicPathPricer::BiasedBonusClassicPathPricer(BonusClassicPayoff payoff,
                                                                DiscountFactor discountFactor)
     : BonusClassicPathPricerBase(std::move(payoff), discountFactor) {}
 
     Real BiasedBonusClassicPathPricer::operator()(const Path& path) const {
         if (knockedOut(path)) {
-            return path.back() * discountFactor_;
+            return knockedOutValue(path);
         }
-        return payoff_(path.back()) * discountFactor_;
+        const auto finalPrice = path.back();
+        record(0.0, finalPrice < payoff_.bonusLevel() ? 1.0 : 0.0);
+        return payoff_(finalPrice) * discountFactor_;
     }
 
     BonusClassicPathPricer::BonusClassicPathPricer(
@@ -79,14 +104,16 @@ namespace RKE::QL::Ext {
 
     Real BonusClassicPathPricer::operator()(const Path& path) const {
         if (knockedOut(path)) {
-            return path.back() * discountFactor_;
+            return knockedOutValue(path);
         }
         // The integrated variance the path generator evolved this step with, so the bridge
         // matches the paths for flat and term-structured volatility alike.
-        return continuousValue(path, payoff_, discountFactor_, [this](Size i, const Path& p) {
-            const auto& grid = p.timeGrid();
-            return process_->variance(grid[i], p[i], grid.dt(i));
-        });
+        const auto survival =
+            continuousSurvival(path, payoff_.barrier(), [this](Size i, const Path& p) {
+                const auto& grid = p.timeGrid();
+                return process_->variance(grid[i], p[i], grid.dt(i));
+            });
+        return continuousValue(path, survival);
     }
 
     CachedStepBonusClassicPathPricer::CachedStepBonusClassicPathPricer(
@@ -103,12 +130,14 @@ namespace RKE::QL::Ext {
 
     Real CachedStepBonusClassicPathPricer::operator()(const Path& path) const {
         if (knockedOut(path)) {
-            return path.back() * discountFactor_;
+            return knockedOutValue(path);
         }
         QL_REQUIRE(stepCache_->size() == path.length() - 1, "path has " << path.length() - 1
                                                                         << " steps, the step cache "
                                                                         << stepCache_->size());
-        return continuousValue(path, payoff_, discountFactor_,
+        const auto survival =
+            continuousSurvival(path, payoff_.barrier(),
                                [this](Size i, const Path&) { return stepCache_->variance(i); });
+        return continuousValue(path, survival);
     }
 }

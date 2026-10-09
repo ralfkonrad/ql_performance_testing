@@ -128,14 +128,18 @@ namespace RKE::Common {
     // Sets the evaluation date to 22 Jun 2025 and prices with the engine on the market;
     // isBiased selects discrete monitoring, otherwise continuous. pathGeneration and samples
     // are read by MonteCarlo only; a smoke test passes fewer samples than productionSamples,
-    // on the same time grid. QL_REQUIRE rejects FiniteDifference and Binomial off the flat
-    // market, and Binomial under continuous monitoring.
+    // on the same time grid. calculateProbabilities switches the barrier-hit and bonus
+    // probabilities on in FiniteDifference and Binomial, which MonteCarlo reports always; the
+    // benchmarks and profiles leave it off, so they keep measuring the price alone. QL_REQUIRE
+    // rejects FiniteDifference and Binomial off the flat market, and Binomial under continuous
+    // monitoring.
     [[nodiscard]] BonusClassicOptionSetup
     makeBonusClassicOptionSetup(bool isBiased,
                                 PathGeneration pathGeneration = PathGeneration::CachedStep,
                                 Market market = Market::Flat,
                                 QuantLib::Size samples = productionSamples,
-                                Engine engine = Engine::MonteCarlo);
+                                Engine engine = Engine::MonteCarlo,
+                                bool calculateProbabilities = false);
 
     // The steps of the engine's monitoring grid: the finite-difference engine's discrete grid,
     // or the lattice after Boyle-Lau. Null<Size>() where there is nothing to report, i.e. under

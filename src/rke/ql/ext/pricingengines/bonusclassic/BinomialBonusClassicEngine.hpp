@@ -50,6 +50,22 @@ namespace RKE::QL::Ext {
 
         Time is the risk-free curve's day counter from its reference date.
 
+        With calculateProbabilities the engine reports, as
+        MCBonusClassicEngine does, two probabilities under the flattened
+        process's measure in Instrument::additionalResults(), read with
+        Instrument::result<Real>("barrierHitProbability") and
+        Instrument::result<Real>("bonusProbability"): the probability that a
+        lattice node at or below the barrier is reached, and the probability
+        that none is and \f$ S_T < B \f$, i.e. that the bonus is paid. Each
+        is the HitIndicator or BonusIndicator leg of
+        DiscretizedBonusClassicOption rolled back on the same lattice as the
+        price, over the lattice's discount factor from maturity: for a
+        deterministic curve \f$ E[D(T) \mathbf{1}_A] = D(T) P(A) \f$. The
+        tree monitors on every lattice step, so like the price they are of
+        the near-continuously monitored barrier, not of
+        MCBonusClassicEngine's grid. Without the flag neither key is set and
+        Instrument::result() throws on both.
+
         See P. Boyle and S.H. Lau, <i>Bumping up against the barrier with
         the binomial method</i>, Journal of Derivatives, 1994.
 
@@ -58,6 +74,9 @@ namespace RKE::QL::Ext {
         \warning the barrier is monitored on every lattice step, and the
                  step count is the engine's own, not MCBonusClassicEngine's
                  grid; timeGrid() reports it.
+        \warning with calculateProbabilities calculate() rolls back three
+                 assets on the lattice instead of one: the certificate and
+                 the two indicators.
         \warning Boyle-Lau raises the step count up to maxTimeSteps, by
                  default max(1000, 5 * timeSteps), and an even count is
                  rounded up for QuantLib::LeisenReimer and QuantLib::Joshi4.
@@ -81,6 +100,11 @@ namespace RKE::QL::Ext {
               QuantLib::AnalyticBarrierEngine.
         \test the Boyle-Lau count is checked to price closer to that
               replication than the uncorrected one.
+        \test both probabilities are regression-locked for
+              QuantLib::CoxRossRubinstein at 400 steps, 404 after Boyle-Lau.
+        \test both probabilities are checked against
+              QuantLib::AnalyticBinaryBarrierEngine at the barrier itself.
+        \test the default engine is checked to report neither key.
     */
     template <class Tree>
     class BinomialBonusClassicEngine : public BonusClassicOption::engine {
@@ -90,12 +114,18 @@ namespace RKE::QL::Ext {
             \param maxTimeSteps cap on the Boyle-Lau count; 0 means
                                 max(1000, 5 * timeSteps), and timeSteps
                                 disables Boyle-Lau
+            \param calculateProbabilities whether calculate() also reports
+                                "barrierHitProbability" and
+                                "bonusProbability" in additionalResults,
+                                rolling back the two indicator legs on the
+                                lattice beside the certificate
             \pre \p process is not null; QL_REQUIRE checks this.
         */
         BinomialBonusClassicEngine(
             QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process,
             QuantLib::Size timeSteps,
-            QuantLib::Size maxTimeSteps = 0);
+            QuantLib::Size maxTimeSteps = 0,
+            bool calculateProbabilities = false);
 
         void calculate() const override;
 
@@ -103,6 +133,9 @@ namespace RKE::QL::Ext {
         /*! \pre the instrument has set up the arguments, i.e. NPV() has run once;
                  QL_REQUIRE checks this. */
         [[nodiscard]] QuantLib::TimeGrid timeGrid() const;
+
+        //! whether calculate() reports the two probabilities in additionalResults
+        [[nodiscard]] bool calculatesProbabilities() const { return calculateProbabilities_; }
 
       private:
         //! rate, yield and volatility flattened at maturity, and the maturity itself
@@ -130,10 +163,16 @@ namespace RKE::QL::Ext {
                                             QuantLib::Real barrier,
                                             QuantLib::Volatility v,
                                             QuantLib::Time maturity);
+        //! an indicator leg rolled back on \p lattice, over the lattice's discount factor
+        [[nodiscard]] QuantLib::Real latticeProbability(
+            DiscretizedBonusClassicOption::Leg leg,
+            const QuantLib::ext::shared_ptr<QuantLib::BlackScholesLattice<Tree>>& lattice,
+            const FlatTerms& flat) const;
 
         QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process_;
         QuantLib::Size timeSteps_;
         QuantLib::Size maxTimeSteps_;
+        bool calculateProbabilities_;
     };
 
 
@@ -141,9 +180,11 @@ namespace RKE::QL::Ext {
     BinomialBonusClassicEngine<Tree>::BinomialBonusClassicEngine(
         QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process,
         QuantLib::Size timeSteps,
-        QuantLib::Size maxTimeSteps)
+        QuantLib::Size maxTimeSteps,
+        bool calculateProbabilities)
     : process_(std::move(process)), timeSteps_(timeSteps),
-      maxTimeSteps_(resolvedMaxTimeSteps(timeSteps, maxTimeSteps)) {
+      maxTimeSteps_(resolvedMaxTimeSteps(timeSteps, maxTimeSteps)),
+      calculateProbabilities_(calculateProbabilities) {
         QL_REQUIRE(process_, "null process given");
         // Without this, NPV() keeps returning the first price.
         registerWith(process_);
@@ -162,7 +203,9 @@ namespace RKE::QL::Ext {
         const auto lattice = QuantLib::ext::make_shared<QuantLib::BlackScholesLattice<Tree>>(
             tree, flat.r_, flat.maturity_, steps);
 
-        DiscretizedBonusClassicOption option(arguments_, flat.q_, flat.maturity_);
+        DiscretizedBonusClassicOption option(arguments_,
+                                             DiscretizedBonusClassicOption::Leg::Certificate,
+                                             flat.r_, flat.q_, flat.maturity_);
         option.initialize(lattice, flat.maturity_);
 
         // Delta and gamma from the nodes of the first and second step, as in
@@ -202,6 +245,31 @@ namespace RKE::QL::Ext {
              gamma == QuantLib::Null<QuantLib::Real>()) ?
                 QuantLib::Null<QuantLib::Real>() :
                 QuantLib::blackScholesTheta(flat.process_, results_.value, delta, gamma);
+
+        // Two more rollbacks on the same lattice, so the probabilities are of the same
+        // monitoring as the price. Instrument::results::reset() has cleared the keys, so with
+        // the flag off neither is set.
+        if (calculateProbabilities_) {
+            results_.additionalResults["barrierHitProbability"] =
+                latticeProbability(DiscretizedBonusClassicOption::Leg::HitIndicator, lattice, flat);
+            results_.additionalResults["bonusProbability"] = latticeProbability(
+                DiscretizedBonusClassicOption::Leg::BonusIndicator, lattice, flat);
+        }
+    }
+
+    template <class Tree>
+    QuantLib::Real BinomialBonusClassicEngine<Tree>::latticeProbability(
+        DiscretizedBonusClassicOption::Leg leg,
+        const QuantLib::ext::shared_ptr<QuantLib::BlackScholesLattice<Tree>>& lattice,
+        const FlatTerms& flat) const {
+        DiscretizedBonusClassicOption indicator(arguments_, leg, flat.r_, flat.q_, flat.maturity_);
+        indicator.initialize(lattice, flat.maturity_);
+        indicator.rollback(0.0);
+        // QuantLib::BlackScholesLattice discounts exp(-r dt) on every one of its steps, so the
+        // rolled-back indicator is exp(-r T) times the probability of its event, exp(-r T) being
+        // the lattice's own discount factor from maturity up to rounding. For a deterministic
+        // curve E[D(T) 1_A] = D(T) P(A).
+        return indicator.presentValue() / std::exp(-flat.r_ * flat.maturity_);
     }
 
     template <class Tree>
