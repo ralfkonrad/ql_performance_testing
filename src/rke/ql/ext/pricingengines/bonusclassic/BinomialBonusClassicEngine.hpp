@@ -75,7 +75,7 @@ namespace RKE::QL::Ext {
         \ingroup barrierengines
 
         \test the value is regression-locked for QuantLib::CoxRossRubinstein
-              at 400 steps, 442 after Boyle-Lau.
+              at 400 steps, 404 after Boyle-Lau.
         \test the value is checked against the asset plus a down-and-out put
               struck at the bonus level, priced with
               QuantLib::AnalyticBarrierEngine.

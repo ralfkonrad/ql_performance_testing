@@ -124,7 +124,7 @@ namespace RKE::TestSuite {
         const auto data = RKE::Common::OptionData();
         const auto payoff = BonusClassicPayoff(data.barrier, data.bonusLevel);
 
-        BOOST_CHECK_EQUAL(payoff(80.00), 80.00);
+        BOOST_CHECK_EQUAL(payoff(60.00), 60.00);
         // Pins the boundary convention: at the barrier itself the bonus is already gone.
         BOOST_CHECK_EQUAL(payoff(data.barrier), data.barrier);
         BOOST_CHECK_EQUAL(payoff(100.00), data.bonusLevel);
@@ -214,7 +214,7 @@ namespace RKE::TestSuite {
         // Regression lock. The low-discrepancy sequence is deterministic for a fixed seed
         // and time grid, so this pins the engine to its own output; it is not an
         // externally validated price. See testBonusClassicOptionReplication for that.
-        BOOST_CHECK_CLOSE_FRACTION(106.96041418042263, npv, 1e-8);
+        BOOST_CHECK_CLOSE_FRACTION(119.59926159811715, npv, 1e-8);
     }
 
     BOOST_AUTO_TEST_CASE(testBonusClassicOptionReplication) { // NOLINT(misc-use-internal-linkage):
@@ -237,8 +237,10 @@ namespace RKE::TestSuite {
             flat.process, flat.optionData, flat.exerciseDate,
             bgkShiftedBarrier(flat.optionData.barrier, flat.marketData.volatility, dt));
 
-        // Measured residual 3.8e-4 relative; the correction is O(1 / sqrt(steps)) and the
+        // Measured residual 1.3e-5 relative; the correction is O(1 / sqrt(steps)) and the
         // grid has 42 steps. Both sides are deterministic, so this is model error, not noise.
+        BOOST_TEST_MESSAGE("MC " << npv << ", relative residual "
+                                 << std::fabs(npv - replication) / replication);
         BOOST_CHECK_CLOSE_FRACTION(replication, npv, 1e-3);
     }
 
@@ -258,7 +260,7 @@ namespace RKE::TestSuite {
         // Regression lock, as in testBonusClassicOptionValuation: the engine's own output for
         // a fixed seed and grid, not an externally validated price. See
         // testBonusClassicOptionContinuousReplication for that.
-        BOOST_CHECK_CLOSE_FRACTION(105.88329042929441, npv, 1e-8);
+        BOOST_CHECK_CLOSE_FRACTION(119.50805355382055, npv, 1e-8);
     }
 
     BOOST_AUTO_TEST_CASE(
@@ -279,8 +281,10 @@ namespace RKE::TestSuite {
                                                   flat.optionData.barrier);
 
         // With flat r, q and sigma the bridge is exact, so the residual is sampling error
-        // alone: measured 6.5e-5 relative at 50,000 paths, 1.5e-5 at 200,000 and 2.3e-5 at
+        // alone: measured 6.3e-5 relative at 50,000 paths, 1.2e-5 at 200,000 and 7.3e-6 at
         // 400,000. The bound leaves three times the 50,000-path residual.
+        BOOST_TEST_MESSAGE("MC " << npv << ", relative residual "
+                                 << std::fabs(npv - replication) / replication);
         BOOST_CHECK_CLOSE_FRACTION(replication, npv, 2e-4);
     }
 
@@ -387,7 +391,7 @@ namespace RKE::TestSuite {
         // Regression lock: the engine's own output on this grid and the default TrBDF2 scheme,
         // not an externally validated price. See testBonusClassicOptionFdContinuousReplication
         // for that.
-        BOOST_CHECK_CLOSE_FRACTION(105.88958719924801, npv, 1e-8);
+        BOOST_CHECK_CLOSE_FRACTION(119.50008395648202, npv, 1e-8);
     }
 
     BOOST_AUTO_TEST_CASE(
@@ -397,9 +401,9 @@ namespace RKE::TestSuite {
 
         const auto flat = makeFlatCase();
 
-        // std::exp(std::log(85.0)) lies above 85, so a grid starting at std::log(85.0) would pay
+        // std::exp(std::log(70.0)) lies above 70, so a grid starting at std::log(70.0) would pay
         // the bonus on its first node at maturity; 90 maps back to itself.
-        for (const Real barrier : {flat.optionData.barrier, 85.0}) {
+        for (const Real barrier : {flat.optionData.barrier, 90.0}) {
             auto optionData = flat.optionData;
             optionData.barrier = barrier;
             const auto bonusClassicOption =
@@ -412,12 +416,11 @@ namespace RKE::TestSuite {
             const auto replication =
                 replicationPrice(flat.process, flat.optionData, flat.exerciseDate, barrier);
 
-            // Measured residuals 5.2e-6 relative at barrier 90 and 4.9e-6 at 85 under the
-            // default TrBDF2 scheme. They halve per doubling of both grids, to 1.4e-6 and 1.0e-6
-            // at 800 steps and 1,600 nodes: QuantLib imposes the Dirichlet value on the barrier
-            // node after each implicit solve, so the next node is coupled to the unconstrained
-            // one. A first node above 85 was 2.1e-4 off. The bound leaves nearly three times
-            // the larger residual.
+            // Measured residuals 3.3e-6 relative at barrier 70 and 5.2e-6 at 90 under the
+            // default TrBDF2 scheme, 2.4e-7 and 1.4e-6 at 800 steps and 1,600 nodes: QuantLib
+            // imposes the Dirichlet value on the barrier node after each implicit solve, so the
+            // next node is coupled to the unconstrained one. The bound leaves nearly three
+            // times the larger residual.
             BOOST_TEST_MESSAGE("barrier " << barrier << ": " << npv << ", relative residual "
                                           << std::fabs(npv - replication) / replication);
             BOOST_CHECK_CLOSE_FRACTION(replication, npv, 1.5e-5);
@@ -437,7 +440,7 @@ namespace RKE::TestSuite {
         // Regression lock: the engine's own output on this grid and scheme, not an externally
         // validated price. See testBonusClassicOptionFdReplication and
         // testBonusClassicOptionFdVersusMc for that.
-        BOOST_CHECK_CLOSE_FRACTION(106.95082725557951, npv, 1e-8);
+        BOOST_CHECK_CLOSE_FRACTION(119.58777203868031, npv, 1e-8);
     }
 
     BOOST_AUTO_TEST_CASE(
@@ -459,9 +462,9 @@ namespace RKE::TestSuite {
             flat.process, flat.optionData, flat.exerciseDate,
             bgkShiftedBarrier(flat.optionData.barrier, flat.marketData.volatility, dt));
 
-        // Measured residual 4.7e-4 relative. The engine at 6,400 nodes and 3,200 steps, 2.5e-7
-        // from its value at half that grid, is 4.5e-4 below the replication, so nearly all of it
-        // is the correction's own error on 42 steps; the Monte Carlo engine's is 3.8e-4.
+        // Measured residual 8.3e-5 relative. The engine at 6,400 nodes and 3,200 steps, 5.2e-8
+        // from its value at half that grid, is 7.7e-5 below the replication, so nearly all of it
+        // is the correction's own error on 42 steps; the Monte Carlo engine's is 1.3e-5.
         BOOST_TEST_MESSAGE("FD " << npv << ", relative residual "
                                  << std::fabs(npv - replication) / replication);
         BOOST_CHECK_CLOSE_FRACTION(replication, npv, 1e-3);
@@ -493,8 +496,8 @@ namespace RKE::TestSuite {
             BOOST_CHECK_EQUAL(fdGrid[i], mcGrid[i]);
         }
 
-        // Measured residual 9.0e-5 relative, the sum of two deterministic errors: the engine at
-        // 6,400 nodes and 3,200 steps is 2.8e-5 above this grid's value and 6.2e-5 below the
+        // Measured residual 9.6e-5 relative, the sum of two deterministic errors: the engine at
+        // 6,400 nodes and 3,200 steps is 5.5e-6 above this grid's value and 9.1e-5 below the
         // Monte Carlo lock, which is that lock's own distance from the discrete price at 50,000
         // low-discrepancy paths. The bound leaves three times the residual.
         BOOST_TEST_MESSAGE("FD " << fd << ", MC " << mc << ", relative difference "
@@ -542,12 +545,12 @@ namespace RKE::TestSuite {
         flat.option->setPricingEngine(engine);
         const auto npv = flat.option->NPV();
 
-        // Boyle-Lau: the first floor(i^2 sigma^2 T / ln^2(S / H)) above 400, at i = 17.
-        BOOST_CHECK_EQUAL(engine->timeGrid().size() - 1, Size(442));
+        // Boyle-Lau: the first floor(i^2 sigma^2 T / ln^2(S / H)) above 400, at i = 55.
+        BOOST_CHECK_EQUAL(engine->timeGrid().size() - 1, Size(404));
 
         // Regression lock: the engine's own output on this lattice, not an externally validated
         // price. See testBonusClassicOptionBinomialReplication for that.
-        BOOST_CHECK_CLOSE_FRACTION(105.89600347917739, npv, 1e-8);
+        BOOST_CHECK_CLOSE_FRACTION(119.50487799078239, npv, 1e-8);
     }
 
     BOOST_AUTO_TEST_CASE(
@@ -562,17 +565,17 @@ namespace RKE::TestSuite {
                                                                             treeTimeSteps));
         const auto npv = flat.option->NPV();
 
-        // The tree monitors on every step, and Boyle-Lau puts a layer of nodes at 89.9938, just
+        // The tree monitors on every step, and Boyle-Lau puts a layer of nodes at 69.9929, just
         // below the barrier, so the put takes the barrier itself and no Broadie-Glasserman-Kou
         // shift applies.
         const auto replication = replicationPrice(flat.process, flat.optionData, flat.exerciseDate,
                                                   flat.optionData.barrier);
 
-        // Measured residual 5.5e-5 relative at 442 steps. It is discretisation error, not
-        // noise, and it does not fall steadily with the steps: from 100 to 1600 requested steps
-        // it follows how far the Boyle-Lau floor leaves the layer below the barrier, 1.7e-6 at
-        // 810 steps with the layer 7e-4 below it, 2.3e-4 at 220 steps with it 1.1e-2 below.
-        // The bound leaves 3.6 times the 442-step residual.
+        // Measured residual 3.7e-5 relative at 404 steps. It is discretisation error, not
+        // noise, and it does not fall steadily with the steps: 8.5e-5 at 104 steps after
+        // Boyle-Lau, 1.2e-4 at 224, 2.2e-5 at 813 and 6.5e-6 at 1,616, as the layer the floor
+        // leaves below the barrier moves between 1e-6 and 5e-4 of it. The bound leaves 5.4
+        // times the 404-step residual.
         BOOST_TEST_MESSAGE("binomial " << npv << ", relative residual "
                                        << std::fabs(npv - replication) / replication);
         BOOST_CHECK_CLOSE_FRACTION(replication, npv, 2e-4);
@@ -600,8 +603,8 @@ namespace RKE::TestSuite {
         const auto withoutBoyleLau = std::fabs(flat.option->NPV() - replication) / replication;
         BOOST_CHECK_EQUAL(plainEngine->timeGrid().size() - 1, treeTimeSteps);
 
-        // Without Boyle-Lau the first knocked-out layer at 400 steps sits at 89.51, an effective
-        // barrier 0.55% low; measured residuals 5.5e-5 relative with Boyle-Lau and 4.9e-3
+        // Without Boyle-Lau the first knocked-out layer at 400 steps sits at 69.87, an effective
+        // barrier 0.19% low; measured residuals 3.7e-5 relative with Boyle-Lau and 1.7e-4
         // without.
         BOOST_TEST_MESSAGE("relative residual with Boyle-Lau " << withBoyleLau << ", without "
                                                                << withoutBoyleLau);
