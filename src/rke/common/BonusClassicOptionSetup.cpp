@@ -12,6 +12,7 @@
 #include <ql/math/randomnumbers/rngtraits.hpp>
 #include <ql/math/randomnumbers/sobolrsg.hpp>
 #include <ql/math/statistics/statistics.hpp>
+#include <ql/methods/finitedifferences/solvers/fdmbackwardsolver.hpp>
 #include <ql/methods/lattices/binomialtree.hpp>
 #include <ql/methods/montecarlo/mctraits.hpp>
 #include <ql/processes/eulerdiscretization.hpp>
@@ -111,8 +112,12 @@ namespace RKE::Common {
         }
     }
 
-    BonusClassicOptionSetup makeBonusClassicOptionSetup(
-        bool isBiased, PathGeneration pathGeneration, Market market, Size samples, Engine engine) {
+    BonusClassicOptionSetup makeBonusClassicOptionSetup(bool isBiased,
+                                                        PathGeneration pathGeneration,
+                                                        Market market,
+                                                        Size samples,
+                                                        Engine engine,
+                                                        bool calculateProbabilities) {
         QL_REQUIRE(engine == Engine::MonteCarlo || market == Market::Flat,
                    "only the Monte-Carlo engine prices a smile market");
         QL_REQUIRE(engine != Engine::Binomial || isBiased,
@@ -131,10 +136,12 @@ namespace RKE::Common {
         const auto pricingEngine = [&]() -> ext::shared_ptr<PricingEngine> {
             if (engine == Engine::FiniteDifference) {
                 // Discrete monitoring on the Monte-Carlo grid, so the two prices compare; the
-                // rollback merges those dates into its own tGrid steps.
+                // rollback merges those dates into its own tGrid steps. No damping steps and
+                // TrBDF2 are the engine's own defaults, spelled out to reach the flag behind
+                // them.
                 return ext::make_shared<FdBlackScholesBonusClassicEngine>(
                     process, isBiased ? monitoringStepsPerYear : Null<Size>(), fdTimeGrid,
-                    fdSpaceGrid);
+                    fdSpaceGrid, 0, FdmSchemeDesc::TrBDF2(), calculateProbabilities);
             }
             if (engine == Engine::Binomial) {
                 // Boyle-Lau on, maxTimeSteps at its default: without it the first knocked-out
@@ -142,7 +149,7 @@ namespace RKE::Common {
                 // replication, see testBonusClassicOptionBinomialBoyleLau. The lattice is
                 // therefore larger than treeTimeSteps; monitoringSteps() reports it.
                 return ext::make_shared<BinomialBonusClassicEngine<CoxRossRubinstein>>(
-                    process, treeTimeSteps);
+                    process, treeTimeSteps, 0, calculateProbabilities);
             }
             // The Null<Real>() tolerance is mandatory, not a default: with no error estimate
             // under LowDiscrepancy, McSimulation::calculate takes the fixed-sample branch and
