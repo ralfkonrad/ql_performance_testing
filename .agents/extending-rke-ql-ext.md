@@ -71,6 +71,16 @@ doubles. Then:
   an implicit product.
 - `pathPricer()`: `dynamic_pointer_cast` the payoff out of `arguments_` and
   `QL_REQUIRE` it.
+- A number beyond the value and the Greeks goes into `results_.additionalResults`
+  under a documented key and is read with `Instrument::result<T>("key")`. It
+  needs the same two kinds of test as a price — a regression lock and an
+  independent check, as under "Two Kinds of Price Test" — and its doc block names
+  them. `MCBonusClassicEngine`'s `barrierHitProbability` and `bonusProbability`
+  are the example: accumulated by the path pricer the engine keeps in
+  `pathPricer_`, checked against `AnalyticBinaryBarrierEngine`. A result that
+  costs a further rollback goes behind a `calculateProbabilities`-style
+  constructor flag defaulting to off, so the benchmarks keep measuring the
+  price alone.
 
 A template engine is header-only, and still has to be listed — in
 `RKE_QL_EXT_HEADER`.
