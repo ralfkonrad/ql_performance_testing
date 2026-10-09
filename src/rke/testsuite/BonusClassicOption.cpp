@@ -1002,6 +1002,91 @@ namespace RKE::TestSuite {
         BOOST_CHECK_LT(withBoyleLau, withoutBoyleLau);
     }
 
+    BOOST_AUTO_TEST_CASE(
+        testBonusClassicOptionBinomialProbabilities) { // NOLINT(misc-use-internal-linkage):
+                                                       // the struct is the macro's
+        BOOST_TEST_MESSAGE("BonusClassicOption binomial probabilities test");
+
+        const auto flat = makeFlatCase();
+
+        // The lattice of testBonusClassicOptionBinomialValuation's lock, with the two
+        // indicator legs rolled back beside the certificate.
+        const auto engine = ext::make_shared<BinomialBonusClassicEngine<CoxRossRubinstein>>(
+            flat.process, treeTimeSteps, 0, true);
+        flat.option->setPricingEngine(engine);
+        static_cast<void>(flat.option->NPV());
+        const auto probabilities = engineProbabilities(*flat.option);
+
+        // Boyle-Lau: the first floor(i^2 sigma^2 T / ln^2(S / H)) above 400, at i = 55.
+        BOOST_CHECK_EQUAL(engine->timeGrid().size() - 1, Size(404));
+
+        // Reaching a node at or below the barrier and paying the bonus are disjoint, and a
+        // lattice path that never does and ends at or above the bonus level is in neither.
+        BOOST_CHECK_GT(probabilities.hit, 0.0);
+        BOOST_CHECK_GT(probabilities.bonus, 0.0);
+        BOOST_CHECK_LT(probabilities.hit + probabilities.bonus, 1.0);
+
+        // Regression lock, as in testBonusClassicOptionBinomialValuation: the engine's own
+        // output on this lattice, not externally validated probabilities. The independent check
+        // follows below.
+        BOOST_CHECK_CLOSE_FRACTION(0.0087152329237066232, probabilities.hit, 1e-8);
+        BOOST_CHECK_CLOSE_FRACTION(0.93348793687522391, probabilities.bonus, 1e-8);
+
+        // The tree monitors on every step, and Boyle-Lau puts a layer of nodes at 69.9929, just
+        // below the barrier, so the reference takes the barrier itself and no
+        // Broadie-Glasserman-Kou shift applies.
+        const auto reference = referenceProbabilities(flat.process, flat.optionData, flat.today,
+                                                      flat.exerciseDate, flat.optionData.barrier);
+
+        // Spot 100 against barrier 70 over 5M leaves a small hit probability, so the residuals
+        // are absolute, not relative.
+        // Measured residuals 1.18e-4 absolute for hit and 5.49e-3 absolute for bonus at 404
+        // steps. Both are lattice discretisation error, not noise: the layer the Boyle-Lau
+        // floor leaves below the barrier, and for the bonus indicator its jump at B, which
+        // falls between lattice nodes, so the nodes next to B carry a whole or no unit instead
+        // of their cell's share. That jump is the whole bonus residual: with no reachable
+        // barrier the same 404-step lattice puts P(S_T < B) 5.37e-3 above
+        // AnalyticEuropeanEngine's cash-or-nothing put, and the residual oscillates with the
+        // step count as the nodes move past B, 6.3e-4 at 813 steps, 2.4e-3 at 1616, -4.7e-4 at
+        // 3210 and 8.7e-5 at 6409, while the hit residual falls monotonically to 6.1e-7. Each
+        // bound leaves about three times its residual, rounded up to one digit.
+        BOOST_TEST_MESSAGE("binomial hit " << probabilities.hit << ", reference " << reference.hit
+                                           << ", absolute residual "
+                                           << std::fabs(probabilities.hit - reference.hit));
+        BOOST_TEST_MESSAGE("binomial bonus " << probabilities.bonus << ", reference "
+                                             << reference.bonus << ", absolute residual "
+                                             << std::fabs(probabilities.bonus - reference.bonus));
+        BOOST_CHECK_SMALL(probabilities.hit - reference.hit, 4e-4);
+        BOOST_CHECK_SMALL(probabilities.bonus - reference.bonus, 2e-2);
+    }
+
+    BOOST_AUTO_TEST_CASE(
+        testBonusClassicOptionBinomialProbabilitiesOptIn) { // NOLINT(misc-use-internal-linkage):
+                                                            // the struct is the macro's
+        BOOST_TEST_MESSAGE("BonusClassicOption binomial engine reports the probabilities only "
+                           "with calculateProbabilities on");
+
+        const auto flat = makeFlatCase();
+
+        // The default engine prices as before and sets neither key: Instrument::result()
+        // throws on a key additionalResults does not hold.
+        const auto plainEngine = ext::make_shared<BinomialBonusClassicEngine<CoxRossRubinstein>>(
+            flat.process, treeTimeSteps);
+        BOOST_CHECK(!plainEngine->calculatesProbabilities());
+        flat.option->setPricingEngine(plainEngine);
+        static_cast<void>(flat.option->NPV());
+        BOOST_CHECK_THROW(static_cast<void>(flat.option->result<Real>("barrierHitProbability")),
+                          Error);
+        BOOST_CHECK_THROW(static_cast<void>(flat.option->result<Real>("bonusProbability")), Error);
+
+        const auto engine = ext::make_shared<BinomialBonusClassicEngine<CoxRossRubinstein>>(
+            flat.process, treeTimeSteps, 0, true);
+        BOOST_CHECK(engine->calculatesProbabilities());
+        flat.option->setPricingEngine(engine);
+        static_cast<void>(flat.option->NPV());
+        BOOST_CHECK_NO_THROW(static_cast<void>(engineProbabilities(*flat.option)));
+    }
+
     BOOST_AUTO_TEST_SUITE_END()
 
     BOOST_AUTO_TEST_SUITE_END()
