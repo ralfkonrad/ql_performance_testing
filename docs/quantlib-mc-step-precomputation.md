@@ -9,7 +9,7 @@ Which per-step computations of QuantLib's Monte Carlo path generation depend onl
 grid, and how this repository's step caches would be built inside QuantLib rather than beside it.
 Nothing here is implemented in QuantLib. Every QuantLib claim refers to the submodule at
 `966a4cc10`; every figure not quoted from
-[`profiling-bonusclassicoption.md`](profiling-bonusclassicoption.md) is unmeasured.
+[`profiling-bonusclassicoption-mc.md`](profiling-bonusclassicoption-mc.md) is unmeasured.
 
 ## 1. What Carries Over
 
