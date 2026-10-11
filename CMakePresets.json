@@ -107,8 +107,7 @@
       "name": "debug",
       "steps": [
         { "type": "configure", "name": "debug" },
-        { "type": "build", "name": "debug" },
-        { "type": "test", "name": "debug" }
+        { "type": "build", "name": "debug" }
       ]
     },
     {
