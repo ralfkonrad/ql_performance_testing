@@ -189,9 +189,10 @@ output and nothing more. Any change to the engine, the grid or the sample count
 moves it: re-derive it and say in the commit why it moved. Never widen the
 tolerance or paste a fresh number to make the test green.
 
-The externally checkable claim is `testBonusClassicOptionReplication` — asset leg
-plus a down-and-out put priced by `AnalyticBarrierEngine`, with the
-Broadie-Glasserman-Kou continuity correction for discrete monitoring, at `1e-3`.
+The externally checkable claim is `testBonusClassicOptionReplication` —
+`AnalyticBonusClassicEngine`, asset leg plus a down-and-out put priced by
+`AnalyticBarrierEngine`, with the Broadie-Glasserman-Kou continuity correction
+for discrete monitoring, at `1e-4`.
 New pricing code needs a test of that second kind as well, with a named reference
 and a tolerance justified in a comment.
 

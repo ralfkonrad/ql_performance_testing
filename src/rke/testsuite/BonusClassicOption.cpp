@@ -128,59 +128,30 @@ namespace RKE::TestSuite {
             return barrier * std::exp(-beta * volatility * std::sqrt(dt));
         }
 
-        // The certificate pays S_T once the barrier has been touched and max(S_T, bonusLevel)
-        // otherwise, i.e. S_T + 1{never touched} * max(bonusLevel - S_T, 0): the asset itself
-        // plus a down-and-out put struck at the bonus level. Receiving the asset at maturity is
-        // worth spot * exp(-q * T); AnalyticBarrierEngine prices the put under continuous
-        // monitoring of the barrier given here.
+        // The reference price every engine is checked against: AnalyticBonusClassicEngine, the
+        // asset leg plus a down-and-out put struck at the bonus level, the barrier given here
+        // monitored continuously; a discretely monitored engine passes the
+        // Broadie-Glasserman-Kou barrier. testBonusClassicOptionAnalyticReplication checks the
+        // engine against that decomposition priced with QuantLib's engines directly.
         Real replicationPrice(const ext::shared_ptr<GeneralizedBlackScholesProcess>& process,
                               const RKE::Common::OptionData& data,
                               Date exerciseDate,
                               Real barrier) {
-            const auto assetLeg = process->x0() * process->dividendYield()->discount(exerciseDate);
-
-            auto downOutPut =
-                BarrierOption(Barrier::DownOut, barrier, 0.0,
-                              ext::make_shared<PlainVanillaPayoff>(Option::Put, data.bonusLevel),
-                              ext::make_shared<EuropeanExercise>(exerciseDate));
-            downOutPut.setPricingEngine(ext::make_shared<AnalyticBarrierEngine>(process));
-
-            return assetLeg + downOutPut.NPV();
+            auto option = BonusClassicOption(barrier, data.bonusLevel, exerciseDate);
+            option.setPricingEngine(ext::make_shared<AnalyticBonusClassicEngine>(process));
+            return option.NPV();
         }
 
-        // AnalyticBinaryBarrierEngine (Haug, "The complete guide to option pricing formulas",
-        // 2nd ed., p. 176 ff.) prices a cash-or-nothing payoff paid at expiry under continuous
-        // monitoring of the barrier given here. Its calculate() takes an AmericanExercise with
-        // payoffAtExpiry = true whose first date is at or before the volatility's reference
-        // date, so the exercise starts today. Paying 1 at expiry, the down-and-in call and put
-        // struck at the bonus level together pay 1 iff the barrier was touched, and the
-        // down-and-out put, the engine's "strike >= barrier" branch, pays 1 iff it never was
-        // and S_T < B. The curve is deterministic, so E[D(T) 1_A] = D(T) P(A) and each price
-        // over D(T) is the probability of its event.
+        // The reference probabilities, from the same engine on the same barrier.
         Probabilities
         referenceProbabilities(const ext::shared_ptr<GeneralizedBlackScholesProcess>& process,
                                const RKE::Common::OptionData& data,
-                               Date today,
                                Date exerciseDate,
                                Real barrier) {
-            const auto exercise = ext::make_shared<AmericanExercise>(today, exerciseDate, true);
-            const auto cashOrNothingPrice = [&](Barrier::Type barrierType,
-                                                Option::Type optionType) {
-                auto option = BarrierOption(
-                    barrierType, barrier, 0.0,
-                    ext::make_shared<CashOrNothingPayoff>(optionType, data.bonusLevel, 1.0),
-                    exercise);
-                option.setPricingEngine(ext::make_shared<AnalyticBinaryBarrierEngine>(process));
-                return option.NPV();
-            };
-            const auto discount = process->riskFreeRate()->discount(exerciseDate);
-
-            return {
-                (cashOrNothingPrice(Barrier::DownIn, Option::Call) +
-                 cashOrNothingPrice(Barrier::DownIn, Option::Put)) /
-                    discount,
-                cashOrNothingPrice(Barrier::DownOut, Option::Put) / discount,
-            };
+            auto option = BonusClassicOption(barrier, data.bonusLevel, exerciseDate);
+            option.setPricingEngine(ext::make_shared<AnalyticBonusClassicEngine>(process, true));
+            static_cast<void>(option.NPV());
+            return engineProbabilities(option);
         }
 
         // The flat market every case prices: the option with its maturity cut to 5M and the
@@ -546,7 +517,7 @@ namespace RKE::TestSuite {
         // the step the paths were monitored on.
         const auto dt = mcEngine->timeGrid().dt(0);
         const auto reference = referenceProbabilities(
-            flat.process, flat.optionData, flat.today, flat.exerciseDate,
+            flat.process, flat.optionData, flat.exerciseDate,
             bgkShiftedBarrier(flat.optionData.barrier, flat.marketData.volatility, dt));
 
         // Spot 100 against barrier 70 over 5M leaves a small hit probability, so the residuals
@@ -596,7 +567,7 @@ namespace RKE::TestSuite {
 
         // The engine monitors continuously, as AnalyticBinaryBarrierEngine assumes, so the
         // reference takes the barrier itself and no Broadie-Glasserman-Kou shift applies.
-        const auto reference = referenceProbabilities(flat.process, flat.optionData, flat.today,
+        const auto reference = referenceProbabilities(flat.process, flat.optionData,
                                                       flat.exerciseDate, flat.optionData.barrier);
 
         // Spot 100 against barrier 70 over 5M leaves a small hit probability, so the residuals
@@ -920,7 +891,7 @@ namespace RKE::TestSuite {
         // the grid's step.
         const auto dt = fdEngine->timeGrid().dt(0);
         const auto reference = referenceProbabilities(
-            flat.process, flat.optionData, flat.today, flat.exerciseDate,
+            flat.process, flat.optionData, flat.exerciseDate,
             bgkShiftedBarrier(flat.optionData.barrier, flat.marketData.volatility, dt));
 
         // Spot 100 against barrier 70 over 5M leaves a small hit probability, so the residuals
@@ -971,7 +942,7 @@ namespace RKE::TestSuite {
 
         // The engine monitors continuously, as AnalyticBinaryBarrierEngine assumes, so the
         // reference takes the barrier itself and no Broadie-Glasserman-Kou shift applies.
-        const auto reference = referenceProbabilities(flat.process, flat.optionData, flat.today,
+        const auto reference = referenceProbabilities(flat.process, flat.optionData,
                                                       flat.exerciseDate, flat.optionData.barrier);
 
         // Spot 100 against barrier 70 over 5M leaves a small hit probability, so the residuals
@@ -1402,7 +1373,7 @@ namespace RKE::TestSuite {
         // The tree monitors on every step, and Boyle-Lau puts a layer of nodes at 69.9929, just
         // below the barrier, so the reference takes the barrier itself and no
         // Broadie-Glasserman-Kou shift applies.
-        const auto reference = referenceProbabilities(flat.process, flat.optionData, flat.today,
+        const auto reference = referenceProbabilities(flat.process, flat.optionData,
                                                       flat.exerciseDate, flat.optionData.barrier);
 
         // Spot 100 against barrier 70 over 5M leaves a small hit probability, so the residuals
@@ -1502,26 +1473,59 @@ namespace RKE::TestSuite {
         const auto npv = flat.option->NPV();
         const auto probabilities = engineProbabilities(*flat.option);
 
-        // Exact on purpose: the engine prices the replication the other engines are checked
-        // against, the same options in the same order. The checks at the barrier itself thus
-        // hold for this engine too: FdBlackScholesBonusClassicEngine to 1.5e-5 and
-        // MCBonusClassicEngine to 2e-4, both monitoring continuously.
-        BOOST_CHECK_EQUAL(replicationPrice(flat.process, flat.optionData, flat.exerciseDate,
-                                           flat.optionData.barrier),
-                          npv);
+        // The certificate pays S_T once the barrier has been touched and max(S_T, bonusLevel)
+        // otherwise, i.e. S_T + 1{never touched} * max(bonusLevel - S_T, 0): the asset itself
+        // plus a down-and-out put struck at the bonus level. Receiving the asset at maturity is
+        // worth spot * exp(-q * T); AnalyticBarrierEngine prices the put under continuous
+        // monitoring.
+        const auto assetLeg =
+            flat.process->x0() * flat.process->dividendYield()->discount(flat.exerciseDate);
+        auto downOutPut = BarrierOption(
+            Barrier::DownOut, flat.optionData.barrier, 0.0,
+            ext::make_shared<PlainVanillaPayoff>(Option::Put, flat.optionData.bonusLevel),
+            ext::make_shared<EuropeanExercise>(flat.exerciseDate));
+        downOutPut.setPricingEngine(ext::make_shared<AnalyticBarrierEngine>(flat.process));
 
-        // The bonus probability is the reference's down-and-out put again, the same double.
-        // The hit probability is one minus the down-and-out pair here and the down-and-in pair
-        // there; each in-out pair pays one unit iff S_T ends on its side of the bonus level, so
-        // they agree by parity, up to the rounding of AnalyticBinaryBarrierEngine's two
-        // branches: measured 6.6e-17 absolute. The bound is a hundred roundings of a
-        // probability near one, room for another platform's erf.
-        const auto reference = referenceProbabilities(flat.process, flat.optionData, flat.today,
-                                                      flat.exerciseDate, flat.optionData.barrier);
-        BOOST_CHECK_EQUAL(reference.bonus, probabilities.bonus);
+        // Exact on purpose: the engine prices these options in this order. Every other engine
+        // is checked against this one, so here is where those checks reach QuantLib's closed
+        // form.
+        BOOST_CHECK_EQUAL(assetLeg + downOutPut.NPV(), npv);
+
+        // AnalyticBinaryBarrierEngine (Haug, "The complete guide to option pricing formulas",
+        // 2nd ed., p. 176 ff.) prices a cash-or-nothing payoff paid at expiry under continuous
+        // monitoring. Its calculate() takes an AmericanExercise with payoffAtExpiry = true
+        // whose first date is at or before the volatility's reference date, so the exercise
+        // starts today. Paying 1 at expiry, the down-and-in call and put struck at the bonus
+        // level together pay 1 iff the barrier was touched, and the down-and-out put, the
+        // engine's "strike >= barrier" branch, pays 1 iff it never was and S_T < B. The curve
+        // is deterministic, so E[D(T) 1_A] = D(T) P(A) and each price over D(T) is the
+        // probability of its event.
+        const auto exercise =
+            ext::make_shared<AmericanExercise>(flat.today, flat.exerciseDate, true);
+        const auto cashOrNothingPrice = [&](Barrier::Type barrierType, Option::Type optionType) {
+            auto option = BarrierOption(
+                barrierType, flat.optionData.barrier, 0.0,
+                ext::make_shared<CashOrNothingPayoff>(optionType, flat.optionData.bonusLevel, 1.0),
+                exercise);
+            option.setPricingEngine(ext::make_shared<AnalyticBinaryBarrierEngine>(flat.process));
+            return option.NPV();
+        };
+        const auto discount = flat.process->riskFreeRate()->discount(flat.exerciseDate);
+        const auto downInHit = (cashOrNothingPrice(Barrier::DownIn, Option::Call) +
+                                cashOrNothingPrice(Barrier::DownIn, Option::Put)) /
+                               discount;
+        const auto downOutBonus = cashOrNothingPrice(Barrier::DownOut, Option::Put) / discount;
+
+        // The engine's bonus probability is the same down-and-out put, the same double. Its
+        // hit probability is one minus the down-and-out pair; each in-out pair pays one unit
+        // iff S_T ends on its side of the bonus level, so the two agree by parity, up to the
+        // rounding of AnalyticBinaryBarrierEngine's two branches: measured 6.6e-17 absolute.
+        // The bound is a hundred roundings of a probability near one, room for another
+        // platform's erf.
+        BOOST_CHECK_EQUAL(downOutBonus, probabilities.bonus);
         BOOST_TEST_MESSAGE("hit " << probabilities.hit << ", in-out parity residual "
-                                  << std::fabs(probabilities.hit - reference.hit));
-        BOOST_CHECK_SMALL(probabilities.hit - reference.hit, 1e-14);
+                                  << std::fabs(probabilities.hit - downInHit));
+        BOOST_CHECK_SMALL(probabilities.hit - downInHit, 1e-14);
     }
 
     BOOST_AUTO_TEST_CASE(

@@ -56,12 +56,17 @@ namespace RKE::QL::Ext {
 
         \test the value and both probabilities are regression-locked on the
               flat market.
-        \test the value is checked to be the same double as the replication
-              the test suite prices the other engines against, so the
-              continuously monitored FdBlackScholesBonusClassicEngine and
-              MCBonusClassicEngine are checked against it too, and the hit
-              probability against the down-and-in options that replication's
-              probabilities take, by in-out parity.
+        \test the value is checked to be the same double as the asset leg
+              plus the down-and-out put priced by
+              QuantLib::AnalyticBarrierEngine, the bonus probability as the
+              down-and-out cash-or-nothing put priced by
+              QuantLib::AnalyticBinaryBarrierEngine, and the hit probability
+              against the down-and-in pair by in-out parity.
+        \test it is the reference of the other engines' replication tests:
+              MCBonusClassicEngine and FdBlackScholesBonusClassicEngine at the
+              barrier when monitoring continuously and at the
+              Broadie-Glasserman-Kou barrier when monitoring discretely,
+              BinomialBonusClassicEngine at the barrier.
         \test with the barrier far below the spot the value is checked
               against the asset plus a vanilla put, and the bonus
               probability against a cash-or-nothing put, both priced by

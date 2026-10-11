@@ -171,18 +171,20 @@ New pricing code needs both, and they are not interchangeable:
    `testBonusClassicOptionValuation` does, so nobody later mistakes it for a
    validated price.
 2. **An independent check.** Replication against an analytic engine, or a
-   published reference. `testBonusClassicOptionReplication` decomposes the payoff
-   into an asset leg plus a down-and-out put, prices the put with
+   published reference. `testBonusClassicOptionReplication` prices the payoff with
+   `AnalyticBonusClassicEngine`, an asset leg plus a down-and-out put priced by
    `AnalyticBarrierEngine`, and corrects that engine's continuous-monitoring
    assumption with the Broadie-Glasserman-Kou shift — Broadie, Glasserman and Kou
    (1997), _A continuity correction for discrete barrier options_, Mathematical
-   Finance 7(4), 325-349.
+   Finance 7(4), 325-349. `testBonusClassicOptionAnalyticReplication` holds the
+   analytic engine to that decomposition priced with QuantLib's engines directly,
+   so the chain ends in QuantLib's closed form, not in code of ours.
    `testBonusClassicOptionContinuousReplication` checks the continuously
    monitored pricer the same way, at the barrier itself: both sides monitor
    continuously, so no shift applies.
 
 The tolerance of the second kind needs a comment saying where it comes from. The
-existing one records a measured residual of 3.8e-4 relative against a `1e-3`
+existing one records a measured residual of 1.3e-5 relative against a `1e-4`
 bound, and why the remainder is model error rather than Monte Carlo noise. "Close
 enough" is not a tolerance.
 
