@@ -368,7 +368,7 @@ namespace RKE::TestSuite {
             ext::make_shared<MCBonusClassicEngine<CachedStepSingleVariate, LowDiscrepancy>>(
                 flat.process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(),
                 BarrierMonitoring::Discrete, true, 42),
-            ext::make_shared<FdBlackScholesBonusClassicEngine>(flat.process),
+            ext::make_shared<FdBlackScholesBonusClassicEngine>(flat.process, Null<Size>()),
             ext::make_shared<BinomialBonusClassicEngine<CoxRossRubinstein>>(flat.process,
                                                                             treeTimeSteps),
             ext::make_shared<AnalyticBonusClassicEngine>(flat.process),

@@ -277,9 +277,9 @@ namespace RKE::QL::Ext {
                  QuantLib::BlackVarianceCurve and no external local volatility
                  of another type beside it; QL_REQUIRE checks this.
         */
-        explicit FdBlackScholesBonusClassicEngine(
+        FdBlackScholesBonusClassicEngine(
             QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process,
-            QuantLib::Size monitoringStepsPerYear = QuantLib::Null<QuantLib::Size>(),
+            QuantLib::Size monitoringStepsPerYear,
             QuantLib::Size tGrid = 100,
             QuantLib::Size xGrid = 100,
             QuantLib::Size dampingSteps = 0,
