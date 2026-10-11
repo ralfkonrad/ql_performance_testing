@@ -10,22 +10,36 @@
 // example counterpart of rke_profile_bonusclassicoption, which prices the same setups for perf
 // and valgrind.
 //
-//     rke_example_bonusclassicoption
+//     rke_example_bonusclassicoption [--barrier <level>] [--bonus-level <level>]
+//                                    [--volatility <decimal>] [--riskfree-rate <decimal>]
+//                                    [--dividend-yield <decimal>]
+//
+// An option left out keeps rke_common's OptionData or FlatMarketData value, so the CTest smoke
+// test prices the defaults. The levels reach every row. The volatility and the two rates,
+// zero rates continuously compounded on Actual360, set the flat market, and
+// RKE::Common::smileMarketDataAround moves the smiles with it: their curves shift in parallel,
+// their smile scales with the volatility. A bonus level at or below the barrier is refused,
+// since the bonus then never pays; a barrier at or above the spot every engine refuses as
+// touched.
 //
 // The rows are grouped by monitoring, then market. The flat rows price at a production run's
 // 2^16 paths; the smile rows at 2^10, since the example runs as a smoke test on every pull
 // request and the bicubic surface under SingleVariate is slow. A smile row prints no
 // reference: there is none under local volatility. The smile finite-difference rows are
 // deterministic beside Monte-Carlo rows at 2^10 paths; the test suite checks the bicubic ones
-// against 50,000 paths. The bilinear finite-difference rows carry the defect the engine's
-// header warns about: 70 is a strike node of the surface as well as the barrier, and
-// QuantLib::LocalVolSurface's stencil collapses the local volatility on the grid node there.
+// against 50,000 paths. At the default barrier the bilinear finite-difference rows carry the
+// defect the engine's header warns about: 70 is a node of SmileMarketData::strikes as well as
+// the barrier, and QuantLib::LocalVolSurface's stencil collapses the local volatility on the
+// grid node there. A barrier on another strike node does the same; one between them keeps the
+// defect off the barrier.
 
 #include <rke/common/BonusClassicOptionSetup.hpp>
 #include <rke/common/MarketData.hpp>
 #include <rke/ql/ext/instruments/BonusClassicOption.hpp>
 #include <rke/ql/ext/pricingengines/bonusclassic/AnalyticBonusClassicEngine.hpp>
+#include <ql/errors.hpp>
 #include <ql/processes/blackscholesprocess.hpp>
+#include <CLI/CLI.hpp>
 #include <cmath>
 #include <exception>
 #include <iomanip>
@@ -176,7 +190,7 @@ namespace RKE::Example {
                       << flatMarket.dividendYield * 100 << "%, continuously compounded, vol "
                       << flatMarket.volatility * 100 << "%, Actual360, NullCalendar\n"
                       << "  smile markets: zero curves and a Black variance surface around the "
-                         "same levels, RKE::Common::SmileMarketData\n\n";
+                         "same levels, RKE::Common::smileMarketDataAround\n\n";
         }
 
         // The label columns both tables share, 57 characters.
@@ -352,10 +366,50 @@ namespace RKE::Example {
             return rows;
         }
 
-        void run() {
-            const auto option = OptionData();
-            const auto flatMarket = FlatMarketData();
-            const auto smileMarket = SmileMarketData();
+        // The command line: rke_common's defaults until an option sets a value.
+        struct Arguments {
+            OptionData option;
+            FlatMarketData flatMarket;
+        };
+
+        void addOptions(CLI::App& app, Arguments& arguments) {
+            app.add_option("--barrier", arguments.option.barrier,
+                           "Knock-out barrier, below the spot")
+                ->capture_default_str();
+            app.add_option("--bonus-level", arguments.option.bonusLevel,
+                           "Bonus level, above the barrier")
+                ->capture_default_str();
+            // BlackConstantVol stores any value, AnalyticBarrierEngine divides by its standard
+            // deviation, and smileMarketDataAround scales the smile by it.
+            app.add_option("--volatility", arguments.flatMarket.volatility,
+                           "Black volatility of the flat market, a decimal; the smile scales "
+                           "with it")
+                ->capture_default_str()
+                ->check(CLI::PositiveNumber);
+            app.add_option("--riskfree-rate", arguments.flatMarket.riskfreeRate,
+                           "Risk-free zero rate of the flat market, a decimal, continuously "
+                           "compounded on Actual360; the smile's curve shifts with it")
+                ->capture_default_str();
+            app.add_option("--dividend-yield", arguments.flatMarket.dividendYield,
+                           "Dividend yield of the flat market, a decimal, continuously "
+                           "compounded on Actual360; the smile's curve shifts with it")
+                ->capture_default_str();
+
+            // BonusClassicOption requires both levels positive only. With the bonus level at or
+            // below the barrier the bonus never pays and BonusClassicPayoff collapses to S_T. The
+            // final callback runs after both values are parsed.
+            app.final_callback([&arguments] {
+                const auto& option = arguments.option;
+                QL_REQUIRE(option.bonusLevel > option.barrier,
+                           "--bonus-level " << option.bonusLevel << " is not above --barrier "
+                                            << option.barrier << ", so the bonus never pays");
+            });
+        }
+
+        void run(const Arguments& arguments) {
+            const auto& option = arguments.option;
+            const auto& flatMarket = arguments.flatMarket;
+            const auto smileMarket = smileMarketDataAround(flatMarket);
 
             // The finite-difference engine under discrete monitoring goes first: its grid is
             // the one every discrete flat row monitors on, Monte Carlo's dates merged into the
@@ -401,9 +455,17 @@ namespace RKE::Example {
     }
 }
 
-int main() {
+int main(int argc, char* argv[]) {
     try {
-        RKE::Example::run();
+        auto app = CLI::App("Prices a BonusClassicOption on every engine and market rke_common "
+                            "sets up, beside its analytic references. The market options set the "
+                            "flat market and move the smile markets around it.");
+        auto arguments = RKE::Example::Arguments();
+        RKE::Example::addOptions(app, arguments);
+        // Returns from main on a parse error or --help, with CLI11's exit code.
+        CLI11_PARSE(app, argc, argv);
+
+        RKE::Example::run(arguments);
         return 0;
     } catch (const std::exception& e) {
         std::cerr << e.what() << '\n';
