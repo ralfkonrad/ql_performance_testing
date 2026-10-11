@@ -107,7 +107,7 @@ namespace RKE::Common {
             // maxSamples is McSimulation's own no-bound default; samples + 1 would wrap for the
             // largest count the --samples options admit.
             return ext::make_shared<MCBonusClassicEngine<MC, LowDiscrepancyJoeKuoD7>>(
-                process, timeStepsPerYear, samples, QL_MAX_INTEGER, Null<Real>(), monitoring, true,
+                process, timeStepsPerYear, true, samples, Null<Real>(), QL_MAX_INTEGER, monitoring,
                 42);
         }
 

@@ -132,27 +132,27 @@ namespace RKE::QL::Ext {
                                     max(floor(timeStepsPerYear * T), 1) steps
                                     for residual time \f$ T \f$, and
                                     Null<Size>() fails at calculation
-            \param requiredSamples  number of paths when no tolerance is given
-            \param maxSamples       upper bound on paths when a tolerance is given
-            \param requiredTolerance target error estimate, or Null<Real>() to
-                                    run requiredSamples paths
-            \param monitoring       Discrete monitors the barrier on the grid
-                                    points, Continuous through the
-                                    Brownian-bridge survival probability
             \param brownianBridge   whether paths are built with a Brownian
                                     bridge (affects path construction, not the
                                     barrier check)
+            \param requiredSamples  number of paths when no tolerance is given
+            \param requiredTolerance target error estimate, or Null<Real>() to
+                                    run requiredSamples paths
+            \param maxSamples       upper bound on paths when a tolerance is given
+            \param monitoring       Discrete monitors the barrier on the grid
+                                    points, Continuous through the
+                                    Brownian-bridge survival probability
             \param seed             seed of the sequence generator
             \pre \p process is not null; QL_REQUIRE checks this.
         */
         MCBonusClassicEngine(
             QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process,
             QuantLib::Size timeStepsPerYear,
-            QuantLib::Size requiredSamples,
-            QuantLib::Size maxSamples,
-            QuantLib::Real requiredTolerance,
-            BarrierMonitoring monitoring,
             bool brownianBridge,
+            QuantLib::Size requiredSamples,
+            QuantLib::Real requiredTolerance,
+            QuantLib::Size maxSamples,
+            BarrierMonitoring monitoring,
             QuantLib::BigNatural seed);
 
         void calculate() const override;
@@ -380,11 +380,11 @@ namespace RKE::QL::Ext {
     MCBonusClassicEngine<MC, RNG, S>::MCBonusClassicEngine(
         QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process,
         QuantLib::Size timeStepsPerYear,
-        QuantLib::Size requiredSamples,
-        QuantLib::Size maxSamples,
-        QuantLib::Real requiredTolerance,
-        BarrierMonitoring monitoring,
         bool brownianBridge,
+        QuantLib::Size requiredSamples,
+        QuantLib::Real requiredTolerance,
+        QuantLib::Size maxSamples,
+        BarrierMonitoring monitoring,
         QuantLib::BigNatural seed)
     : QuantLib::McSimulation<MC, RNG, S>(false, false), process_(std::move(process)),
       timeStepsPerYear_(timeStepsPerYear), requiredSamples_(requiredSamples),
