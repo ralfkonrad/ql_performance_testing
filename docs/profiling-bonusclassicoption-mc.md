@@ -17,7 +17,7 @@ Section 8 profiles a smile market, and section 9 lists the QuantLib changes it c
 | Build    | `profile` preset: `-O3 -g -fno-omit-frame-pointer`, Homebrew clang 23.1.2, C++17, QuantLib shared as it then defaulted to; a second `profile` tree with `-DBUILD_SHARED_LIBS=OFF`. Since 4.3 the preset links statically, so the shared figures need `-DBUILD_SHARED_LIBS=ON`                                    |
 | Machine  | WSL2 laptop, no hardware counters                                                                                                                                                                                                                                                                                |
 | Tools    | valgrind 3.27.1 (callgrind, cachegrind, DHAT, massif), `perf` in `cpu-clock` mode, google-benchmark from the submodule                                                                                                                                                                                           |
-| Runs     | `discrete 1` and `continuous 1` of the engine before 4.1, which `--path-generation uncached` runs today, the default `cached` being 4.1's path; shared and static; one repricing, since callgrind counts exactly. Prototypes of 4.1 and 4.2 under callgrind; 4.1's implementation at `8a9fafe` against `7e29f80` |
+| Runs     | `discrete 1` and `continuous 1` of the engine before 4.1, which `--path-generation uncached` runs today, `cached` being 4.1's path; shared and static; one repricing, since callgrind counts exactly. Prototypes of 4.1 and 4.2 under callgrind; 4.1's implementation at `8a9fafe` against `7e29f80`             |
 
 The workload is `makeBonusClassicOptionSetup` in `src/rke/common/BonusClassicOptionSetup.cpp`:
 
@@ -485,7 +485,7 @@ Under `build/profile/prof/rke_profile_bonusclassicoption/`:
   counts its executed lock-prefixed instructions
 - `byfn.py`, which sums callgrind_annotate rows per function, inlined rows merged
 - `cachegrind-discrete.{out,txt}`, `dhat-discrete-{1,2}.json`, `massif-discrete.{out,txt}`
-- `perf.data` and `flat.txt`, the `cpu-clock` pass at the default 10 iterations
+- `perf.data` and `flat.txt`, the `cpu-clock` pass at 10 iterations
 - `benchmark-release-shared-static.txt`, the runs of section 7
 - `prototype/`: `proto.cpp`, which prices `prod` or `lock` configurations with the
   `engine`, `cached` (4.1) or `directfwd` (4.2) variant; `lock-bits.txt`, every variant's
