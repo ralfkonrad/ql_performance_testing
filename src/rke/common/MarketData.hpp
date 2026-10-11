@@ -16,16 +16,21 @@ namespace RKE::Common {
         return {22, QuantLib::Jun, 2025};
     }
 
+    // The levels every market shares: the spot, and the volatility, flat on FlatMarketData and
+    // at the money on SmileMarketData.
+    inline constexpr QuantLib::Real referenceSpot = 100.0;
+    inline constexpr QuantLib::Volatility referenceVolatility = 0.20;
+
     // The flat reference market: the tests validate it, the benchmarks and profiles measure it.
     // Flat forward curves and a constant Black volatility, Actual360 and NullCalendar
     // throughout, under EulerDiscretization. forceDiscretization = true makes evolve() take
     // Euler steps over the flat volatility, which coincide with the exact step in exact
     // arithmetic.
     struct FlatMarketData {
-        QuantLib::Real spot = 100.00;
+        QuantLib::Real spot = referenceSpot;
         QuantLib::Real riskfreeRate = 0.01;
         QuantLib::Real dividendYield = 0.03;
-        QuantLib::Volatility volatility = 0.20;
+        QuantLib::Volatility volatility = referenceVolatility;
 
         [[nodiscard]] QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess>
         makeGeneralizedBlackScholesProcess(QuantLib::Date today,
@@ -36,7 +41,7 @@ namespace RKE::Common {
     // zero rates linear between the nodes, continuously compounded, and a Black variance surface
     // bilinear or bicubic in time and strike. Actual360 and NullCalendar throughout.
     struct SmileMarketData {
-        QuantLib::Real spot = 100.00;
+        QuantLib::Real spot = referenceSpot;
         std::vector<QuantLib::Period> curveTenors = {
             QuantLib::Period(3, QuantLib::Months),
             QuantLib::Period(6, QuantLib::Months),
@@ -60,7 +65,7 @@ namespace RKE::Common {
         // sigma(K) = atmVolatility - skew * ln(K / spot) on every date. Total variance
         // sigma(K)^2 * T rises in time, and the skew is mild enough that LocalVolSurface's
         // Dupire denominator stays positive on every strike a path reaches.
-        QuantLib::Volatility atmVolatility = 0.20;
+        QuantLib::Volatility atmVolatility = referenceVolatility;
         QuantLib::Real skew = 0.08;
 
         [[nodiscard]] QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess>

@@ -17,7 +17,7 @@ namespace RKE::Common {
     // BlackScholesStepCache refuses and LocalVolStepCache takes through LocalVolSurface, and an
     // external local volatility for the Euler step the type check alone would miss. Every Euler
     // step here sits on the zero curves: on flat ones under a constant volatility it coincides
-    // with the exact step in exact arithmetic. Spot is FlatMarketData's, Actual360 and NullCalendar
+    // with the exact step in exact arithmetic. Spot is referenceSpot, Actual360 and NullCalendar
     // throughout, referenced to today.
 
     // Zero rates linear between the nodes today, 3M, 1Y and 2Y, continuously compounded.
