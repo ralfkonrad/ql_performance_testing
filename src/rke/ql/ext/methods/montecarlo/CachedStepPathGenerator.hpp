@@ -27,7 +27,7 @@ namespace RKE::QL::Ext {
         is within the StepCache's stepTolerance of the process's from the same
         point.
     */
-    template <class GSG, class StepCache = BlackScholesStepCache>
+    template <class GSG, class StepCache>
     class CachedStepPathGenerator {
       public:
         using sample_type = QuantLib::Sample<QuantLib::Path>;
@@ -78,7 +78,7 @@ namespace RKE::QL::Ext {
         using path_type = QuantLib::Path;
         using path_pricer_type = QuantLib::PathPricer<path_type>;
         using rsg_type = typename RNG::rsg_type;
-        using path_generator_type = CachedStepPathGenerator<rsg_type>;
+        using path_generator_type = CachedStepPathGenerator<rsg_type, BlackScholesStepCache>;
         static constexpr bool allowsErrorEstimate = RNG::allowsErrorEstimate != 0;
     };
 
