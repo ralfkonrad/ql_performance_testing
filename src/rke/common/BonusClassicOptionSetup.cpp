@@ -65,7 +65,10 @@ namespace RKE::Common {
     }
 
     BonusClassicOptionSetup
-    makeBonusClassicOptionSetup(BarrierMonitoring monitoring,
+    makeBonusClassicOptionSetup(const OptionData& optionData,
+                                const FlatMarketData& flatMarketData,
+                                const SmileMarketData& smileMarketData,
+                                BarrierMonitoring monitoring,
                                 PathGeneration pathGeneration,
                                 Market market,
                                 Size samples,
@@ -74,15 +77,12 @@ namespace RKE::Common {
         requireSupported(monitoring, market, engine);
         const auto calculateProbabilities = probabilityCalculation == ProbabilityCalculation::On;
 
-        const auto option_data = OptionData();
-        const auto market_data = FlatMarketData();
-
         const auto today = evaluationDate();
         Settings::instance().evaluationDate() = today;
 
         const auto process = market == Market::Flat ?
-                                 market_data.makeGeneralizedBlackScholesProcess(today) :
-                                 SmileMarketData().makeGeneralizedBlackScholesProcess(
+                                 flatMarketData.makeGeneralizedBlackScholesProcess(today) :
+                                 smileMarketData.makeGeneralizedBlackScholesProcess(
                                      today, market == Market::SmileBicubic);
         const auto pricingEngine = [&]() -> ext::shared_ptr<PricingEngine> {
             if (engine == Engine::FiniteDifference) {
@@ -124,7 +124,7 @@ namespace RKE::Common {
                                                              samples, monitoring);
         }();
 
-        const auto bonusClassicOption = makeBonusClassicOption(option_data, today);
+        const auto bonusClassicOption = makeBonusClassicOption(optionData, today);
         bonusClassicOption->setPricingEngine(pricingEngine);
 
         return {process, pricingEngine, bonusClassicOption};

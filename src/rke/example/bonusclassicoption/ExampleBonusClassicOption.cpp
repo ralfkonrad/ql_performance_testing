@@ -10,22 +10,45 @@
 // example counterpart of rke_profile_bonusclassicoption, which prices the same setups for perf
 // and valgrind.
 //
-//     rke_example_bonusclassicoption
+//     rke_example_bonusclassicoption [--barrier <level>] [--bonus-level <level>]
+//                                    [--volatility <decimal>] [--riskfree-rate <decimal>]
+//                                    [--dividend-yield <decimal>]
+//
+// An option left out keeps rke_common's OptionData or FlatMarketData value, so the CTest smoke
+// test prices the defaults. The levels reach every row. The volatility and the two rates,
+// zero rates continuously compounded on Actual360, set the flat market, and
+// RKE::Common::smileMarketDataAround moves the smiles with it: their curves shift in parallel,
+// their smile scales with the volatility. A bonus level at or below the barrier is refused,
+// since the bonus then never pays; a barrier at or above the spot every engine refuses as
+// touched.
+//
+// A row whose engine throws on the inputs prints "-", its message follows the tables, and the
+// example exits 1, so the smoke test still fails on one. At the default levels and rates every
+// row prices for a volatility from 0.065 to 0.32, measured in steps of 0.005 to 0.01. Below,
+// the finite-difference grids under discrete monitoring no longer reach the barrier; above,
+// QuantLib::LocalVolSurface finds a negative local variance on the bilinear smile near its 25
+// node, and by 0.48 on the bicubic one near its 10 node too. Monte Carlo generates whole paths
+// before the barrier applies, so its rows are refused there as well.
 //
 // The rows are grouped by monitoring, then market. The flat rows price at a production run's
 // 2^16 paths; the smile rows at 2^10, since the example runs as a smoke test on every pull
 // request and the bicubic surface under SingleVariate is slow. A smile row prints no
 // reference: there is none under local volatility. The smile finite-difference rows are
 // deterministic beside Monte-Carlo rows at 2^10 paths; the test suite checks the bicubic ones
-// against 50,000 paths. The bilinear finite-difference rows carry the defect the engine's
-// header warns about: 70 is a strike node of the surface as well as the barrier, and
-// QuantLib::LocalVolSurface's stencil collapses the local volatility on the grid node there.
+// against 50,000 paths. At the default barrier the bilinear finite-difference rows carry the
+// defect the engine's header warns about: 70 is a node of SmileMarketData::strikes as well as
+// the barrier, and QuantLib::LocalVolSurface's stencil collapses the local volatility on the
+// grid node there. A barrier on another strike node does the same; one between them keeps the
+// defect off the barrier.
 
 #include <rke/common/BonusClassicOptionSetup.hpp>
 #include <rke/common/MarketData.hpp>
 #include <rke/ql/ext/instruments/BonusClassicOption.hpp>
 #include <rke/ql/ext/pricingengines/bonusclassic/AnalyticBonusClassicEngine.hpp>
+#include <ql/errors.hpp>
 #include <ql/processes/blackscholesprocess.hpp>
+#include <boost/algorithm/cxx11/none_of.hpp>
+#include <CLI/CLI.hpp>
 #include <cmath>
 #include <exception>
 #include <iomanip>
@@ -66,14 +89,32 @@ namespace RKE::Example {
             Probabilities probabilities;
         };
 
+        // Null<Real>() throughout: the reference of a smile row, or the valuation of a row the
+        // engine refused.
+        Valuation noValuation() {
+            return {Null<Real>(), {Null<Real>(), Null<Real>()}};
+        }
+
+        // An engine's valuation, or none and the engine's message where it throws: a command line
+        // can leave a grid or a surface behind that an engine refuses.
+        struct Outcome {
+            Valuation valuation;
+            std::string refusal; // Empty where the engine priced.
+        };
+
         struct Row {
             BarrierMonitoring monitoring;
             Market market;
             Pricer pricer;
             Size paths;          // Null<Size>() off the Monte-Carlo engine.
-            Valuation valuation; // The engine's.
-            Valuation reference; // Null<Real>() throughout on the smiles.
+            Valuation valuation; // The engine's, noValuation() where it refused.
+            Valuation reference; // noValuation() on the smiles.
+            std::string refusal; // The engine's message, empty where it priced.
         };
+
+        bool isRefused(const Row& row) {
+            return !row.refusal.empty();
+        }
 
         // Broadie, Glasserman and Kou (1997), "A continuity correction for discrete barrier
         // options", Mathematical Finance 7(4), 325-349: a down barrier monitored every dt prices
@@ -115,11 +156,24 @@ namespace RKE::Example {
             };
         }
 
-        Valuation price(BarrierMonitoring monitoring, Market market, Pricer pricer, Size samples) {
-            const auto setup =
-                makeBonusClassicOptionSetup(monitoring, pricer.pathGeneration, market, samples,
-                                            pricer.engine, ProbabilityCalculation::On);
-            return value(setup);
+        Outcome valueOrRefusal(const BonusClassicOptionSetup& setup) {
+            try {
+                return {value(setup), {}};
+            } catch (const std::exception& e) {
+                return {noValuation(), e.what()};
+            }
+        }
+
+        Outcome price(const OptionData& option,
+                      const FlatMarketData& flatMarket,
+                      const SmileMarketData& smileMarket,
+                      BarrierMonitoring monitoring,
+                      Market market,
+                      Pricer pricer,
+                      Size samples) {
+            return valueOrRefusal(makeBonusClassicOptionSetup(
+                option, flatMarket, smileMarket, monitoring, pricer.pathGeneration, market, samples,
+                pricer.engine, ProbabilityCalculation::On));
         }
 
         std::string name(Pricer pricer) {
@@ -161,16 +215,16 @@ namespace RKE::Example {
         }
 
         void
-        printHeader(const OptionData& option, const FlatMarketData& market, Date exerciseDate) {
+        printHeader(const OptionData& option, const FlatMarketData& flatMarket, Date exerciseDate) {
             std::cout << "BonusClassicOption as of " << evaluationDate() << ", maturity "
                       << exerciseDate << " (" << option.ttm << ")\n"
                       << "  barrier " << option.barrier << ", bonus level " << option.bonusLevel
-                      << ", spot " << market.spot << '\n'
-                      << "  flat market: r " << market.riskfreeRate * 100 << "%, q "
-                      << market.dividendYield * 100 << "%, continuously compounded, vol "
-                      << market.volatility * 100 << "%, Actual360, NullCalendar\n"
+                      << ", spot " << flatMarket.spot << '\n'
+                      << "  flat market: r " << flatMarket.riskfreeRate * 100 << "%, q "
+                      << flatMarket.dividendYield * 100 << "%, continuously compounded, vol "
+                      << flatMarket.volatility * 100 << "%, Actual360, NullCalendar\n"
                       << "  smile markets: zero curves and a Black variance surface around the "
-                         "same levels, RKE::Common::SmileMarketData\n\n";
+                         "same levels, RKE::Common::smileMarketDataAround\n\n";
         }
 
         // The label columns both tables share, 57 characters.
@@ -211,6 +265,15 @@ namespace RKE::Example {
             constexpr int priceWidth = 10;
             constexpr int differenceWidth = 10;
 
+            const auto printPrice = [&](Real price) {
+                if (price == Null<Real>()) {
+                    std::cout << std::setw(priceWidth) << "-";
+                } else {
+                    std::cout << std::fixed << std::setprecision(3) << std::setw(priceWidth)
+                              << price;
+                }
+            };
+
             printTable(
                 rows,
                 [&] {
@@ -227,13 +290,13 @@ namespace RKE::Example {
                     }
                     const auto npv = row.valuation.npv;
                     const auto reference = row.reference.npv;
-                    std::cout << std::fixed << std::setprecision(3) << std::setw(priceWidth) << npv;
-                    if (reference == Null<Real>()) {
-                        std::cout << std::setw(priceWidth) << "-" << std::setw(differenceWidth)
-                                  << "-";
+                    printPrice(npv);
+                    printPrice(reference);
+                    if (npv == Null<Real>() || reference == Null<Real>()) {
+                        std::cout << std::setw(differenceWidth) << "-";
                     } else {
-                        std::cout << std::setw(priceWidth) << reference << std::scientific
-                                  << std::setprecision(1) << std::setw(differenceWidth)
+                        std::cout << std::scientific << std::setprecision(1)
+                                  << std::setw(differenceWidth)
                                   << std::fabs(npv - reference) / reference;
                     }
                 });
@@ -267,6 +330,20 @@ namespace RKE::Example {
                 });
         }
 
+        // The rows an engine refused, each with its message; nothing if every row priced.
+        void printRefusals(const std::vector<Row>& rows) {
+            if (boost::algorithm::none_of(rows, isRefused)) {
+                return;
+            }
+            std::cout << "\nRefused for the inputs above:\n";
+            for (const auto& row : rows) {
+                if (isRefused(row)) {
+                    std::cout << "  " << name(row.monitoring) << ", " << name(row.market) << ", "
+                              << name(row.pricer) << ": " << row.refusal << '\n';
+                }
+            }
+        }
+
         // AnalyticBonusClassicEngine monitors continuously. The continuous rows and the tree, whose
         // Boyle-Lau layer sits at the barrier, compare against the barrier itself; the rows
         // monitored every dt against the Broadie-Glasserman-Kou barrier.
@@ -280,7 +357,7 @@ namespace RKE::Example {
                             Market market,
                             Pricer pricer) {
             if (market != Market::Flat) {
-                return {Null<Real>(), {Null<Real>(), Null<Real>()}};
+                return noValuation();
             }
             if (monitoring == BarrierMonitoring::Discrete && pricer.engine != Engine::Binomial) {
                 return references.discrete;
@@ -303,8 +380,11 @@ namespace RKE::Example {
         // Every permutation the setup admits, in the table's order. The flat finite-difference
         // row under discrete monitoring is priced already: its grid gave the step the discrete
         // reference corrects for.
-        std::vector<Row> priceRows(const References& references,
-                                   const Valuation& fdDiscreteValuation) {
+        std::vector<Row> priceRows(const OptionData& option,
+                                   const FlatMarketData& flatMarket,
+                                   const SmileMarketData& smileMarket,
+                                   const References& references,
+                                   const Outcome& fdDiscreteOutcome) {
             const auto pricers = std::vector<Pricer>{
                 {Engine::MonteCarlo, PathGeneration::CachedStep},
                 {Engine::MonteCarlo, PathGeneration::Uncached},
@@ -327,14 +407,18 @@ namespace RKE::Example {
                                                   market == Market::Flat;
                         const auto samples =
                             market == Market::Flat ? productionSamples : smileSamples;
+                        const auto outcome = isFdDiscrete ?
+                                                 fdDiscreteOutcome :
+                                                 price(option, flatMarket, smileMarket, monitoring,
+                                                       market, pricer, samples);
                         rows.push_back({
                             monitoring,
                             market,
                             pricer,
                             isMonteCarlo ? samples : Null<Size>(),
-                            isFdDiscrete ? fdDiscreteValuation :
-                                           price(monitoring, market, pricer, samples),
+                            outcome.valuation,
                             reference(references, monitoring, market, pricer),
+                            outcome.refusal,
                         });
                     }
                 }
@@ -342,40 +426,97 @@ namespace RKE::Example {
             return rows;
         }
 
-        void run() {
-            const auto option = OptionData();
-            const auto market = FlatMarketData();
+        // The command line: rke_common's defaults until an option sets a value.
+        struct Arguments {
+            OptionData option;
+            FlatMarketData flatMarket;
+        };
+
+        void addOptions(CLI::App& app, Arguments& arguments) {
+            app.add_option("--barrier", arguments.option.barrier,
+                           "Knock-out barrier, below the spot")
+                ->capture_default_str();
+            app.add_option("--bonus-level", arguments.option.bonusLevel,
+                           "Bonus level, above the barrier")
+                ->capture_default_str();
+            // BlackConstantVol stores any value, AnalyticBarrierEngine divides by its standard
+            // deviation, and smileMarketDataAround scales the smile by it.
+            app.add_option("--volatility", arguments.flatMarket.volatility,
+                           "Black volatility of the flat market, a decimal; the smile scales "
+                           "with it")
+                ->capture_default_str()
+                ->check(CLI::PositiveNumber);
+            app.add_option("--riskfree-rate", arguments.flatMarket.riskfreeRate,
+                           "Risk-free zero rate of the flat market, a decimal, continuously "
+                           "compounded on Actual360; the smile's curve shifts with it")
+                ->capture_default_str();
+            app.add_option("--dividend-yield", arguments.flatMarket.dividendYield,
+                           "Dividend yield of the flat market, a decimal, continuously "
+                           "compounded on Actual360; the smile's curve shifts with it")
+                ->capture_default_str();
+
+            // BonusClassicOption requires both levels positive only. With the bonus level at or
+            // below the barrier the bonus never pays and BonusClassicPayoff collapses to S_T. The
+            // final callback runs after both values are parsed.
+            app.final_callback([&arguments] {
+                const auto& option = arguments.option;
+                QL_REQUIRE(option.bonusLevel > option.barrier,
+                           "--bonus-level " << option.bonusLevel << " is not above --barrier "
+                                            << option.barrier << ", so the bonus never pays");
+            });
+        }
+
+        // Whether every row priced. A refused row fails the run, so the smoke test on the
+        // defaults still catches an engine that throws.
+        bool run(const Arguments& arguments) {
+            const auto& option = arguments.option;
+            const auto& flatMarket = arguments.flatMarket;
+            const auto smileMarket = smileMarketDataAround(flatMarket);
 
             // The finite-difference engine under discrete monitoring goes first: its grid is
             // the one every discrete flat row monitors on, Monte Carlo's dates merged into the
-            // rollback, so its step is the one the continuity correction takes.
+            // rollback, so its step is the one the continuity correction takes. Where the
+            // engine refuses, there is no step and no discrete reference.
             const auto fdDiscrete = makeBonusClassicOptionSetup(
-                BarrierMonitoring::Discrete, PathGeneration::CachedStep, Market::Flat,
-                productionSamples, Engine::FiniteDifference, ProbabilityCalculation::On);
-            const auto fdDiscreteValuation = value(fdDiscrete);
+                option, flatMarket, smileMarket, BarrierMonitoring::Discrete,
+                PathGeneration::CachedStep, Market::Flat, productionSamples,
+                Engine::FiniteDifference, ProbabilityCalculation::On);
+            const auto fdDiscreteOutcome = valueOrRefusal(fdDiscrete);
             const auto exerciseDate = fdDiscrete.option->exercise()->lastDate();
-            const auto dt = fdDiscrete.process->time(exerciseDate) /
-                            static_cast<Real>(monitoringSteps(fdDiscrete));
+            const auto steps =
+                fdDiscreteOutcome.refusal.empty() ? monitoringSteps(fdDiscrete) : Null<Size>();
 
-            printHeader(option, market, exerciseDate);
+            printHeader(option, flatMarket, exerciseDate);
 
-            const auto shiftedBarrier = bgkShiftedBarrier(option.barrier, market.volatility, dt);
+            const auto shiftedBarrier =
+                steps == Null<Size>() ? Null<Real>() :
+                                        bgkShiftedBarrier(option.barrier, flatMarket.volatility,
+                                                          fdDiscrete.process->time(exerciseDate) /
+                                                              static_cast<Real>(steps));
             const auto references = References{
                 analyticValuation(fdDiscrete.process, option, exerciseDate, option.barrier),
-                analyticValuation(fdDiscrete.process, option, exerciseDate, shiftedBarrier),
+                shiftedBarrier == Null<Real>() ?
+                    noValuation() :
+                    analyticValuation(fdDiscrete.process, option, exerciseDate, shiftedBarrier),
             };
 
             std::cout << std::fixed << std::setprecision(3)
                       << "Reference, AnalyticBonusClassicEngine, the asset leg plus a "
                          "down-and-out put struck at\nthe bonus level:\n"
                       << "  continuous monitoring, barrier " << option.barrier << ": "
-                      << references.continuous.npv << '\n'
-                      << "  discrete monitoring on " << monitoringSteps(fdDiscrete)
-                      << " steps, Broadie-Glasserman-Kou barrier " << shiftedBarrier << ": "
-                      << references.discrete.npv << "\n\n"
-                      << std::defaultfloat;
+                      << references.continuous.npv << '\n';
+            if (steps == Null<Size>()) {
+                std::cout << "  discrete monitoring: -, the finite-difference engine it takes its "
+                             "step from refused\n\n";
+            } else {
+                std::cout << "  discrete monitoring on " << steps
+                          << " steps, Broadie-Glasserman-Kou barrier " << shiftedBarrier << ": "
+                          << references.discrete.npv << "\n\n";
+            }
+            std::cout << std::defaultfloat;
 
-            const auto rows = priceRows(references, fdDiscreteValuation);
+            const auto rows =
+                priceRows(option, flatMarket, smileMarket, references, fdDiscreteOutcome);
             printPrices(rows);
 
             std::cout << "\nProbabilities under the process's measure: hit, the barrier touched "
@@ -383,14 +524,24 @@ namespace RKE::Example {
                          "bonus level. Reference:\nAnalyticBonusClassicEngine on the barriers "
                          "above.\n\n";
             printProbabilities(rows);
+
+            printRefusals(rows);
+            return boost::algorithm::none_of(rows, isRefused);
         }
     }
 }
 
-int main() {
+int main(int argc, char* argv[]) {
     try {
-        RKE::Example::run();
-        return 0;
+        auto app = CLI::App("Prices a BonusClassicOption on every engine and market rke_common "
+                            "sets up, beside its analytic references. The market options set the "
+                            "flat market and move the smile markets around it.");
+        auto arguments = RKE::Example::Arguments();
+        RKE::Example::addOptions(app, arguments);
+        // Returns from main on a parse error or --help, with CLI11's exit code.
+        CLI11_PARSE(app, argc, argv);
+
+        return RKE::Example::run(arguments) ? 0 : 1;
     } catch (const std::exception& e) {
         std::cerr << e.what() << '\n';
         return 1;

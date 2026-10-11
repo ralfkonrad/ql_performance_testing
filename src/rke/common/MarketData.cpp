@@ -3,6 +3,7 @@
 
 #include "MarketData.hpp"
 #include "FlatTermStructures.hpp"
+#include <ql/errors.hpp>
 #include <ql/math/interpolations/bicubicsplineinterpolation.hpp>
 #include <ql/math/interpolations/bilinearinterpolation.hpp>
 #include <ql/math/matrix.hpp>
@@ -68,5 +69,24 @@ namespace RKE::Common {
         return ext::make_shared<BlackScholesMertonProcess>(
             Handle<Quote>(spotQuote), Handle<YieldTermStructure>(qTS),
             Handle<YieldTermStructure>(rTS), Handle<BlackVolTermStructure>(volTS));
+    }
+
+    SmileMarketData smileMarketDataAround(const FlatMarketData& flat) {
+        QL_REQUIRE(flat.volatility > 0.0,
+                   "the smile scales with the volatility, which has to be positive, not "
+                       << flat.volatility);
+        const auto defaults = FlatMarketData();
+        auto smile = SmileMarketData();
+        smile.spot = flat.spot;
+        for (auto& rate : smile.riskfreeRates) {
+            rate += flat.riskfreeRate - defaults.riskfreeRate;
+        }
+        for (auto& yield : smile.dividendYields) {
+            yield += flat.dividendYield - defaults.dividendYield;
+        }
+        const auto scale = flat.volatility / smile.atmVolatility;
+        smile.atmVolatility = flat.volatility;
+        smile.skew *= scale;
+        return smile;
     }
 }

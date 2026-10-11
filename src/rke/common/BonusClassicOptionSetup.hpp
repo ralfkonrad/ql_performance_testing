@@ -4,6 +4,7 @@
 #ifndef BONUSCLASSICOPTIONSETUP_HPP
 #define BONUSCLASSICOPTIONSETUP_HPP
 
+#include <rke/common/MarketData.hpp>
 #include <rke/ql/ext/instruments/BonusClassicOption.hpp>
 #include <rke/ql/ext/pricingengines/bonusclassic/BarrierMonitoring.hpp>
 #include <ql/instrument.hpp>
@@ -78,14 +79,18 @@ namespace RKE::Common {
     // The step count QuantLib's own barrier tests price Haug's table with, before Boyle-Lau.
     inline constexpr QuantLib::Size treeTimeSteps = 400;
 
-    // Sets the evaluation date to 22 Jun 2025 and prices with the engine on the market, the
-    // barrier monitored as monitoring says. pathGeneration and samples are read by MonteCarlo
-    // only; a smoke test passes fewer samples than productionSamples, on the same time grid.
-    // The benchmarks and profiles pass ProbabilityCalculation::Off, so they keep measuring the
-    // price alone. QL_REQUIRE rejects Binomial and Analytic off the flat market, Binomial under
+    // Sets the evaluation date to 22 Jun 2025 and prices the certificate on optionData's levels
+    // with the engine on the market, the barrier monitored as monitoring says: flatMarketData on
+    // Market::Flat, smileMarketData on the smiles. pathGeneration and samples are read by
+    // MonteCarlo only; a smoke test passes fewer samples than productionSamples, on the same time
+    // grid. The benchmarks and profiles pass ProbabilityCalculation::Off, so they keep measuring
+    // the price alone. QL_REQUIRE rejects Binomial and Analytic off the flat market, Binomial under
     // continuous monitoring and Analytic under discrete.
     [[nodiscard]] BonusClassicOptionSetup
-    makeBonusClassicOptionSetup(RKE::QL::Ext::BarrierMonitoring monitoring,
+    makeBonusClassicOptionSetup(const OptionData& optionData,
+                                const FlatMarketData& flatMarketData,
+                                const SmileMarketData& smileMarketData,
+                                RKE::QL::Ext::BarrierMonitoring monitoring,
                                 PathGeneration pathGeneration,
                                 Market market,
                                 QuantLib::Size samples,
