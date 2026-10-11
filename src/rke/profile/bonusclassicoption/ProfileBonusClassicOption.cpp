@@ -47,10 +47,10 @@ namespace RKE::Profile {
             Size samples = 0;
         };
 
-        // One table per option: CLI::IsMember validates against the keys, run() looks the value
-        // up, so a name accepted here cannot mean something else there. Function-local, since a
-        // namespace-scope map's initialization could throw before main().
-        struct Tables {
+        // One map of choices per option: CLI::IsMember validates against the keys, run() looks the
+        // value up, so a name accepted here cannot mean something else there. Function-local, since
+        // a namespace-scope map's initialization could throw before main().
+        struct Choices {
             std::map<std::string, BarrierMonitoring> monitorings = {
                 {"discrete", BarrierMonitoring::Discrete},
                 {"continuous", BarrierMonitoring::Continuous},
@@ -72,15 +72,15 @@ namespace RKE::Profile {
             };
         };
 
-        const Tables& tables() {
-            static const auto instance = Tables();
+        const Choices& choices() {
+            static const auto instance = Choices();
             return instance;
         }
 
         void addOptions(CLI::App& app, Arguments& arguments) {
             app.add_option("--monitoring", arguments.monitoring, "Barrier monitoring")
                 ->required()
-                ->check(CLI::IsMember(&tables().monitorings));
+                ->check(CLI::IsMember(&choices().monitorings));
             app.add_option("--iterations", arguments.iterations,
                            "Pricings, each of the same low-discrepancy paths")
                 ->required()
@@ -91,16 +91,16 @@ namespace RKE::Profile {
                            "tree on the flat market under discrete monitoring only, the closed "
                            "form on the flat market under continuous monitoring only")
                 ->required()
-                ->check(CLI::IsMember(&tables().engines));
+                ->check(CLI::IsMember(&choices().engines));
             app.add_option("--market", arguments.market,
                            "Flat curves and volatility, or zero curves and a smile surface")
                 ->required()
-                ->check(CLI::IsMember(&tables().markets));
+                ->check(CLI::IsMember(&choices().markets));
             const auto* pathGeneration =
                 app.add_option("--path-generation", arguments.pathGeneration,
                                "The market's step cache or QuantLib::SingleVariate; required "
                                "with --engine mc")
-                    ->check(CLI::IsMember(&tables().pathGenerations));
+                    ->check(CLI::IsMember(&choices().pathGenerations));
             const auto* samples = RKE::Cli::addSamplesOption(app, arguments.samples)
                                       ->description("Paths per pricing; required with --engine mc");
 
@@ -109,7 +109,7 @@ namespace RKE::Profile {
             // callback runs after CLI11 has checked the required options and the --engine value.
             app.final_callback([&arguments, pathGeneration, samples] {
                 const auto isMonteCarlo =
-                    tables().engines.at(arguments.engine) == Engine::MonteCarlo;
+                    choices().engines.at(arguments.engine) == Engine::MonteCarlo;
                 for (const auto* option : {pathGeneration, samples}) {
                     QL_REQUIRE(!isMonteCarlo || option->count() > 0,
                                option->get_name() << " is required with --engine mc");
@@ -122,16 +122,16 @@ namespace RKE::Profile {
 
         void run(const Arguments& arguments) {
             // Built before the loop, as in the benchmark, so the profile shows pricing only.
-            const auto engine = tables().engines.at(arguments.engine);
+            const auto engine = choices().engines.at(arguments.engine);
             const auto isMonteCarlo = engine == Engine::MonteCarlo;
             // The command line leaves both unset for the other engines, which read neither; the
             // setup takes them all the same.
             const auto pathGeneration = isMonteCarlo ?
-                                            tables().pathGenerations.at(arguments.pathGeneration) :
+                                            choices().pathGenerations.at(arguments.pathGeneration) :
                                             PathGeneration::CachedStep;
             const auto setup =
-                makeBonusClassicOptionSetup(tables().monitorings.at(arguments.monitoring),
-                                            pathGeneration, tables().markets.at(arguments.market),
+                makeBonusClassicOptionSetup(choices().monitorings.at(arguments.monitoring),
+                                            pathGeneration, choices().markets.at(arguments.market),
                                             arguments.samples, engine, ProbabilityCalculation::Off);
 
             Real npv = Null<Real>();
