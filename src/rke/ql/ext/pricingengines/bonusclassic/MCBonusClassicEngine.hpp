@@ -48,8 +48,9 @@ namespace RKE::QL::Ext {
         the price, by the path pricer the monitoring selects, and come from
         the same paths; see BonusClassicPathPricerBase.
 
-        Paths come from the generator of the MC traits. The default,
-        CachedStepSingleVariate, builds them with CachedStepPathGenerator,
+        Paths come from the generator of the MC traits, which have no
+        default: the traits that fit depend on the process.
+        CachedStepSingleVariate builds them with CachedStepPathGenerator,
         which takes the process's exact step from terms computed once per
         grid and refuses a process whose step is not exact: a smile, a
         forced discretization or an external local volatility, unless on
@@ -115,9 +116,9 @@ namespace RKE::QL::Ext {
         \test the continuously monitored hit probability is checked to lie
               above the discretely monitored one on the same paths.
     */
-    template <class RNG = QuantLib::PseudoRandom,
-              class S = QuantLib::Statistics,
-              template <class> class MC = CachedStepSingleVariate>
+    template <template <class> class MC,
+              class RNG = QuantLib::PseudoRandom,
+              class S = QuantLib::Statistics>
     class MCBonusClassicEngine : public BonusClassicOption::engine,
                                  public QuantLib::McSimulation<MC, RNG, S> {
       public:
@@ -131,27 +132,27 @@ namespace RKE::QL::Ext {
                                     max(floor(timeStepsPerYear * T), 1) steps
                                     for residual time \f$ T \f$, and
                                     Null<Size>() fails at calculation
-            \param requiredSamples  number of paths when no tolerance is given
-            \param maxSamples       upper bound on paths when a tolerance is given
-            \param requiredTolerance target error estimate, or Null<Real>() to
-                                    run requiredSamples paths
-            \param monitoring       Discrete monitors the barrier on the grid
-                                    points, Continuous through the
-                                    Brownian-bridge survival probability
             \param brownianBridge   whether paths are built with a Brownian
                                     bridge (affects path construction, not the
                                     barrier check)
+            \param requiredSamples  number of paths when no tolerance is given
+            \param requiredTolerance target error estimate, or Null<Real>() to
+                                    run requiredSamples paths
+            \param maxSamples       upper bound on paths when a tolerance is given
+            \param monitoring       Discrete monitors the barrier on the grid
+                                    points, Continuous through the
+                                    Brownian-bridge survival probability
             \param seed             seed of the sequence generator
             \pre \p process is not null; QL_REQUIRE checks this.
         */
         MCBonusClassicEngine(
             QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process,
             QuantLib::Size timeStepsPerYear,
-            QuantLib::Size requiredSamples,
-            QuantLib::Size maxSamples,
-            QuantLib::Real requiredTolerance,
-            BarrierMonitoring monitoring,
             bool brownianBridge,
+            QuantLib::Size requiredSamples,
+            QuantLib::Real requiredTolerance,
+            QuantLib::Size maxSamples,
+            BarrierMonitoring monitoring,
             QuantLib::BigNatural seed);
 
         void calculate() const override;
@@ -375,15 +376,15 @@ namespace RKE::QL::Ext {
     };
 
 
-    template <class RNG, class S, template <class> class MC>
-    MCBonusClassicEngine<RNG, S, MC>::MCBonusClassicEngine(
+    template <template <class> class MC, class RNG, class S>
+    MCBonusClassicEngine<MC, RNG, S>::MCBonusClassicEngine(
         QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process,
         QuantLib::Size timeStepsPerYear,
-        QuantLib::Size requiredSamples,
-        QuantLib::Size maxSamples,
-        QuantLib::Real requiredTolerance,
-        BarrierMonitoring monitoring,
         bool brownianBridge,
+        QuantLib::Size requiredSamples,
+        QuantLib::Real requiredTolerance,
+        QuantLib::Size maxSamples,
+        BarrierMonitoring monitoring,
         QuantLib::BigNatural seed)
     : QuantLib::McSimulation<MC, RNG, S>(false, false), process_(std::move(process)),
       timeStepsPerYear_(timeStepsPerYear), requiredSamples_(requiredSamples),
@@ -395,8 +396,8 @@ namespace RKE::QL::Ext {
         registerWith(process_);
     }
 
-    template <class RNG, class S, template <class> class MC>
-    void MCBonusClassicEngine<RNG, S, MC>::calculate() const {
+    template <template <class> class MC, class RNG, class S>
+    void MCBonusClassicEngine<MC, RNG, S>::calculate() const {
         const auto spot = process_->x0();
         QL_REQUIRE(spot > 0.0, "negative or null underlying given");
         // Neither pricer inspects path[0]: the biased one because t = 0 is no monitoring date,
@@ -427,9 +428,9 @@ namespace RKE::QL::Ext {
         results_.additionalResults["bonusProbability"] = pathPricer_->bonusProbability();
     }
 
-    template <class RNG, class S, template <class> class MC>
-    QuantLib::ext::shared_ptr<typename MCBonusClassicEngine<RNG, S, MC>::path_pricer_type>
-    MCBonusClassicEngine<RNG, S, MC>::pathPricer() const {
+    template <template <class> class MC, class RNG, class S>
+    QuantLib::ext::shared_ptr<typename MCBonusClassicEngine<MC, RNG, S>::path_pricer_type>
+    MCBonusClassicEngine<MC, RNG, S>::pathPricer() const {
         const auto payoff =
             QuantLib::ext::dynamic_pointer_cast<BonusClassicPayoff>(arguments_.payoff);
         QL_REQUIRE(payoff, "non-plain payoff given");
@@ -457,8 +458,8 @@ namespace RKE::QL::Ext {
     }
 
 
-    template <class RNG, class S, template <class> class MC>
-    QuantLib::TimeGrid MCBonusClassicEngine<RNG, S, MC>::timeGrid() const {
+    template <template <class> class MC, class RNG, class S>
+    QuantLib::TimeGrid MCBonusClassicEngine<MC, RNG, S>::timeGrid() const {
         // Empty until the instrument's setupArguments() has run, i.e. before the first NPV().
         QL_REQUIRE(arguments_.exercise, "no exercise given");
         if (timeStepsPerYear_ != QuantLib::Null<QuantLib::Size>()) {

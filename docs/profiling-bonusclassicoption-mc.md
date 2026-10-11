@@ -95,7 +95,7 @@ the same pricing.
   prototype measured 92.4% and 91.0% against its own engine build.
 - **Lives in:** `BlackScholesStepCache` and `CachedStepPathGenerator` in
   `src/rke/ql/ext/methods/montecarlo/`. `MCBonusClassicEngine` takes its paths from them under
-  its default traits, `CachedStepSingleVariate`, and `CachedStepBonusClassicPathPricer` takes
+  the traits `CachedStepSingleVariate`, and `CachedStepBonusClassicPathPricer` takes
   its step variance from the cache. `makeBonusClassicOptionSetup` picks the traits through
   `PathGeneration`: `CachedStep` by default, `Uncached` for `QuantLib::SingleVariate`, which is
   what `--path-generation uncached` and the `*Uncached` benchmarks run.
@@ -145,8 +145,8 @@ the same pricing.
     other two are invisible to it, which is why the cache also checks its step against
     `evolve`.
   - The path generator type is fixed by `McSimulation`'s `MC` template parameter, so the
-    engine exposes it: `CachedStepSingleVariate` by default, `QuantLib::SingleVariate` for a
-    process the cache cannot reproduce. The caller decides, not the generator.
+    engine takes it without a default: `CachedStepSingleVariate` where the cache reproduces the
+    step, `QuantLib::SingleVariate` where it cannot. The caller decides, not the generator.
   - The smile branch's discretization is a protected member with no accessor, so 4.5
     confirms it is `EulerDiscretization` only through the same check against `evolve`.
 

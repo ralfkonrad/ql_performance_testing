@@ -35,7 +35,7 @@ namespace RKE::TestSuite {
 
         // Both generators draw the same Sobol sequence through the same bridge, and every
         // point of every path, plain and antithetic, has to be within the relative tolerance.
-        template <class StepCache = BlackScholesStepCache>
+        template <class StepCache>
         void checkSamePaths(const ext::shared_ptr<GeneralizedBlackScholesProcess>& process,
                             Real tolerance) {
             const TimeGrid grid(maturity, timeSteps);
@@ -98,7 +98,7 @@ namespace RKE::TestSuite {
 
         // The cache finds the process's step inexact, and the generator refuses the process
         // instead of falling back to evolve().
-        template <class StepCache = BlackScholesStepCache>
+        template <class StepCache>
         void checkRefused(const ext::shared_ptr<GeneralizedBlackScholesProcess>& process) {
             const TimeGrid grid(maturity, timeSteps);
             const StepCache cache(process, grid);
@@ -132,7 +132,7 @@ namespace RKE::TestSuite {
         Settings::instance().evaluationDate() = evaluationDate();
 
         const auto process = constantVolProcess();
-        checkSamePaths(process, pathTolerance);
+        checkSamePaths<BlackScholesStepCache>(process, pathTolerance);
 
         const TimeGrid grid(maturity, timeSteps);
         const BlackScholesStepCache cache(process, grid);
@@ -149,7 +149,8 @@ namespace RKE::TestSuite {
         BOOST_TEST_MESSAGE("CachedStepPathGenerator with a variance curve and zero curves");
         Settings::instance().evaluationDate() = evaluationDate();
 
-        checkSamePaths(RKE::Common::varianceCurveProcess(evaluationDate()), pathTolerance);
+        checkSamePaths<BlackScholesStepCache>(RKE::Common::varianceCurveProcess(evaluationDate()),
+                                              pathTolerance);
     }
 
     BOOST_AUTO_TEST_CASE(testVolatilitySurface) { // NOLINT(misc-use-internal-linkage): the
@@ -157,7 +158,7 @@ namespace RKE::TestSuite {
         BOOST_TEST_MESSAGE("CachedStepPathGenerator refuses a smile");
         Settings::instance().evaluationDate() = evaluationDate();
 
-        checkRefused(RKE::Common::smileProcess(evaluationDate()));
+        checkRefused<BlackScholesStepCache>(RKE::Common::smileProcess(evaluationDate()));
     }
 
     BOOST_AUTO_TEST_CASE(testForcedDiscretization) { // NOLINT(misc-use-internal-linkage): the
@@ -166,7 +167,8 @@ namespace RKE::TestSuite {
         Settings::instance().evaluationDate() = evaluationDate();
 
         // The probe has to catch what the type check misses.
-        checkRefused(RKE::Common::varianceCurveProcess(evaluationDate(), true));
+        checkRefused<BlackScholesStepCache>(
+            RKE::Common::varianceCurveProcess(evaluationDate(), true));
     }
 
     BOOST_AUTO_TEST_CASE(testExternalLocalVolatility) { // NOLINT(misc-use-internal-linkage):
@@ -174,7 +176,7 @@ namespace RKE::TestSuite {
         BOOST_TEST_MESSAGE("CachedStepPathGenerator refuses an external local vol");
         Settings::instance().evaluationDate() = evaluationDate();
 
-        checkRefused(RKE::Common::externalLocalVolProcess(evaluationDate()));
+        checkRefused<BlackScholesStepCache>(RKE::Common::externalLocalVolProcess(evaluationDate()));
     }
 
     BOOST_AUTO_TEST_CASE(testSharedCache) { // NOLINT(misc-use-internal-linkage): the struct is
@@ -186,9 +188,9 @@ namespace RKE::TestSuite {
         const auto process = constantVolProcess();
         const TimeGrid grid(maturity, timeSteps);
         const auto cache = ext::make_shared<const BlackScholesStepCache>(process, grid);
-        const CachedStepPathGenerator<rsg_type> own(
+        const CachedStepPathGenerator<rsg_type, BlackScholesStepCache> own(
             process, grid, LowDiscrepancy::make_sequence_generator(timeSteps, seed), true);
-        const CachedStepPathGenerator<rsg_type> shared(
+        const CachedStepPathGenerator<rsg_type, BlackScholesStepCache> shared(
             process, grid, LowDiscrepancy::make_sequence_generator(timeSteps, seed), true, cache);
         for (Size j = 0; j < paths; ++j) {
             const auto& expected = own.next();
@@ -200,12 +202,12 @@ namespace RKE::TestSuite {
 
         const TimeGrid otherGrid(maturity, timeSteps + 1);
         BOOST_CHECK_THROW(
-            (CachedStepPathGenerator<rsg_type>(
+            (CachedStepPathGenerator<rsg_type, BlackScholesStepCache>(
                 process, otherGrid, LowDiscrepancy::make_sequence_generator(timeSteps + 1, seed),
                 true, cache)),
             Error);
         BOOST_CHECK_THROW(
-            (CachedStepPathGenerator<rsg_type>(
+            (CachedStepPathGenerator<rsg_type, BlackScholesStepCache>(
                 process, grid, LowDiscrepancy::make_sequence_generator(timeSteps, seed), true,
                 nullptr)),
             Error);

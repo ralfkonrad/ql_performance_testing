@@ -12,7 +12,6 @@
 #include <ql/math/matrix.hpp>
 #include <ql/math/randomnumbers/rngtraits.hpp>
 #include <ql/math/randomnumbers/sobolrsg.hpp>
-#include <ql/math/statistics/statistics.hpp>
 #include <ql/methods/finitedifferences/solvers/fdmbackwardsolver.hpp>
 #include <ql/methods/lattices/binomialtree.hpp>
 #include <ql/methods/montecarlo/mctraits.hpp>
@@ -107,8 +106,8 @@ namespace RKE::Common {
                    BarrierMonitoring monitoring) {
             // maxSamples is McSimulation's own no-bound default; samples + 1 would wrap for the
             // largest count the --samples options admit.
-            return ext::make_shared<MCBonusClassicEngine<LowDiscrepancyJoeKuoD7, Statistics, MC>>(
-                process, timeStepsPerYear, samples, QL_MAX_INTEGER, Null<Real>(), monitoring, true,
+            return ext::make_shared<MCBonusClassicEngine<MC, LowDiscrepancyJoeKuoD7>>(
+                process, timeStepsPerYear, true, samples, Null<Real>(), QL_MAX_INTEGER, monitoring,
                 42);
         }
 
@@ -157,8 +156,8 @@ namespace RKE::Common {
                     process,
                     monitoring == BarrierMonitoring::Discrete ? monitoringStepsPerYear :
                                                                 Null<Size>(),
-                    fdTimeGrid, fdSpaceGrid, 0, FdmSchemeDesc::TrBDF2(), calculateProbabilities,
-                    market != Market::Flat);
+                    fdTimeGrid, fdSpaceGrid, 0, FdmSchemeDesc::TrBDF2(), market != Market::Flat,
+                    calculateProbabilities);
             }
             if (engine == Engine::Binomial) {
                 // Boyle-Lau on, maxTimeSteps at its default: without it the first knocked-out

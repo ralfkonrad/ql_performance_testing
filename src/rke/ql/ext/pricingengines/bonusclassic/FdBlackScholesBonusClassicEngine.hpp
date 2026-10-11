@@ -262,13 +262,13 @@ namespace RKE::QL::Ext {
             \param schemeDesc            the time-stepping scheme; TrBDF2 by
                                          default, not QuantLib's Douglas, see
                                          the warning above
-            \param calculateProbabilities whether calculate() also reports
-                                         barrierHitProbability and
-                                         bonusProbability, two more rollbacks;
-                                         off by default
             \param localVol              whether every rollback reads the
                                          process's local volatility at each
                                          node, as the class description says;
+                                         off by default
+            \param calculateProbabilities whether calculate() also reports
+                                         barrierHitProbability and
+                                         bonusProbability, two more rollbacks;
                                          off by default
             \pre \p process is not null; QL_REQUIRE checks this.
             \pre \p localVol is true, or the process's local volatility is a
@@ -277,15 +277,15 @@ namespace RKE::QL::Ext {
                  QuantLib::BlackVarianceCurve and no external local volatility
                  of another type beside it; QL_REQUIRE checks this.
         */
-        explicit FdBlackScholesBonusClassicEngine(
+        FdBlackScholesBonusClassicEngine(
             QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process,
-            QuantLib::Size monitoringStepsPerYear = QuantLib::Null<QuantLib::Size>(),
+            QuantLib::Size monitoringStepsPerYear,
             QuantLib::Size tGrid = 100,
             QuantLib::Size xGrid = 100,
             QuantLib::Size dampingSteps = 0,
             const QuantLib::FdmSchemeDesc& schemeDesc = QuantLib::FdmSchemeDesc::TrBDF2(),
-            bool calculateProbabilities = false,
-            bool localVol = false);
+            bool localVol = false,
+            bool calculateProbabilities = false);
 
         void calculate() const override;
 
