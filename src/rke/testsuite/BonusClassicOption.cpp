@@ -4,6 +4,7 @@
 #include "TestSuiteFixture.hpp"
 #include <rke/common/BonusClassicOptionSetup.hpp>
 #include <rke/common/FlatTermStructures.hpp>
+#include <rke/common/MarketData.hpp>
 #include <rke/common/StepCacheMarkets.hpp>
 #include <rke/ql/ext/instruments/BonusClassicOption.hpp>
 #include <rke/ql/ext/pricingengines/bonusclassic/AnalyticBonusClassicEngine.hpp>
@@ -157,7 +158,7 @@ namespace RKE::TestSuite {
         // process as of 22 Jun 2025, which the helper also makes the evaluation date.
         struct FlatCase {
             RKE::Common::OptionData optionData;
-            RKE::Common::MarketData marketData;
+            RKE::Common::FlatMarketData marketData;
             Date today;
             Date exerciseDate;
             ext::shared_ptr<GeneralizedBlackScholesProcess> process;
@@ -198,14 +199,14 @@ namespace RKE::TestSuite {
             return smile;
         }
 
-        // The smile as an external local volatility beside MarketData's flat Black volatility:
+        // The smile as an external local volatility beside FlatMarketData's flat Black volatility:
         // a path follows the smile, so a type test of the Black volatility alone would miss it.
         ext::shared_ptr<GeneralizedBlackScholesProcess>
         externalSmileProcess(const SmileCase& smile) {
             return ext::make_shared<GeneralizedBlackScholesProcess>(
                 smile.process->stateVariable(), smile.process->dividendYield(),
                 smile.process->riskFreeRate(),
-                RKE::Common::flatVol(smile.today, RKE::Common::MarketData().volatility,
+                RKE::Common::flatVol(smile.today, RKE::Common::FlatMarketData().volatility,
                                      Actual360()),
                 Handle<LocalVolTermStructure>(ext::make_shared<LocalVolSurface>(
                     smile.process->blackVolatility(), smile.process->riskFreeRate(),
@@ -687,12 +688,12 @@ namespace RKE::TestSuite {
         // The forced discretization takes the Euler step through LocalConstantVol, where the
         // paths agree to their rounding.
         checkLocalVolStepPrices(
-            today, RKE::Common::MarketData().makeGeneralizedBlackScholesProcess(today, true),
+            today, RKE::Common::FlatMarketData().makeGeneralizedBlackScholesProcess(today, true),
             1.0e-12);
         // The benchmarks' bilinear smile. Under it LocalVolSurface amplifies a last bit along a
         // path: without contraction the prices are the same double; where the compiler
         // contracts to FMAs they differ, by up to 2e-6 relative at production sample counts,
-        // as PathGeneration in the common header records.
+        // as PathGeneration in the setup header records.
         checkLocalVolStepPrices(
             today, RKE::Common::SmileMarketData().makeGeneralizedBlackScholesProcess(today, false),
             1.0e-6);

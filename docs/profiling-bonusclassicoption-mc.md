@@ -373,7 +373,7 @@ to back with nothing else running, alternating in the order shown, with
 ### 8.1 What Was Measured
 
 The markets `smile-bilinear` and `smile-bicubic`, from `SmileMarketData` in
-`src/rke/common/BonusClassicOptionSetup.cpp`; option, grid and paths as in section 1:
+`src/rke/common/MarketData.cpp`; option, grid and paths as in section 1:
 
 - **Curves:** `ZeroCurve` on today, 3M, 6M, 1Y and 2Y, linear in the zero rate,
   continuously compounded. Risk-free 0.8%, 0.9%, 1.0%, 1.1%, 1.2%; dividend yield 3.2%,

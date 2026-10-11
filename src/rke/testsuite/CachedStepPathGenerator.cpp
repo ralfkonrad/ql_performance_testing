@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "TestSuiteFixture.hpp"
-#include <rke/common/BonusClassicOptionSetup.hpp>
+#include <rke/common/MarketData.hpp>
 #include <rke/common/StepCacheMarkets.hpp>
 #include <rke/ql/ext/methods/montecarlo/BlackScholesStepCache.hpp>
 #include <rke/ql/ext/methods/montecarlo/CachedStepPathGenerator.hpp>
@@ -112,13 +112,14 @@ namespace RKE::TestSuite {
 
         // The flat reference market under EulerDiscretization, as the benchmarks price it.
         ext::shared_ptr<GeneralizedBlackScholesProcess> constantVolProcess() {
-            return RKE::Common::MarketData().makeGeneralizedBlackScholesProcess(evaluationDate());
+            return RKE::Common::FlatMarketData().makeGeneralizedBlackScholesProcess(
+                evaluationDate());
         }
 
         // The type check alone would take the exact step here.
         ext::shared_ptr<GeneralizedBlackScholesProcess> forcedDiscretizationProcess() {
-            return RKE::Common::MarketData().makeGeneralizedBlackScholesProcess(evaluationDate(),
-                                                                                true);
+            return RKE::Common::FlatMarketData().makeGeneralizedBlackScholesProcess(
+                evaluationDate(), true);
         }
     }
 
@@ -140,7 +141,7 @@ namespace RKE::TestSuite {
         for (Size i = 0; i < timeSteps; ++i) {
             BOOST_CHECK_EQUAL(
                 cache.variance(i),
-                process->variance(grid[i], RKE::Common::MarketData().spot, grid.dt(i)));
+                process->variance(grid[i], RKE::Common::FlatMarketData().spot, grid.dt(i)));
         }
     }
 
