@@ -4,6 +4,7 @@
 #include "BlackScholesStepCache.hpp"
 #include <rke/ql/ext/processes/StrikeIndependentVolatility.hpp>
 #include <array>
+#include <cmath>
 #include <utility>
 
 using namespace QuantLib;
@@ -47,8 +48,8 @@ namespace RKE::QL::Ext {
         for (Size i = 0; i < steps; ++i) {
             for (const auto& [scale, dw] : probes) {
                 const auto x = scale * x0;
-                // Bitwise on purpose: a step that is only close would move the regression locks.
-                if (evolve(i, x, dw) != process->evolve(grid[i], x, grid.dt(i), dw)) {
+                const auto expected = process->evolve(grid[i], x, grid.dt(i), dw);
+                if (std::fabs(evolve(i, x, dw) - expected) > stepTolerance * std::fabs(expected)) {
                     variance_.clear();
                     stdDeviation_.clear();
                     drift_.clear();

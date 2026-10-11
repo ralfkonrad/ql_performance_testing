@@ -187,8 +187,9 @@ contraction; section 4 keeps it so under contraction.
 - **Lock impact:** bit-identical by construction, and the extension's four values reproduce
   (profiling doc, 4.1). QuantLib pins it through `testPathGenerator` and, via
   `StochasticProcessArray`, `testMultiPathGenerator` and the three `testCached`, all on
-  `BlackConstantVol` (section 2). The `BlackVarianceCurve` branch has no bitwise pin there, only
-  the extension's `testVarianceCurveAndZeroCurves`, so the hook's test adds one.
+  `BlackConstantVol` (section 2). The `BlackVarianceCurve` branch has no bitwise pin there, and
+  the extension's `testVarianceCurveAndZeroCurves` holds it to
+  `BlackScholesStepCache::stepTolerance` only, so the hook's test adds one.
 - **Upstream:** high if the hook is accepted. This is the change that justifies the hook.
 
 ### 3.3 Time Slices and the Rate Pair of the Euler Step
