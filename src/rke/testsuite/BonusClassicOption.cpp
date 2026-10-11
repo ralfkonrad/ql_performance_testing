@@ -165,13 +165,12 @@ namespace RKE::TestSuite {
             ext::shared_ptr<BonusClassicOption> option;
         };
 
-        FlatCase makeFlatCase(bool forceDiscretization = false) {
+        FlatCase makeFlatCase() {
             auto flat = FlatCase();
             flat.today = RKE::Common::evaluationDate();
             Settings::instance().evaluationDate() = flat.today;
             flat.optionData.ttm = Period(5, Months);
-            flat.process =
-                flat.marketData.makeGeneralizedBlackScholesProcess(flat.today, forceDiscretization);
+            flat.process = flat.marketData.makeGeneralizedBlackScholesProcess(flat.today);
             flat.option = RKE::Common::makeBonusClassicOption(flat.optionData, flat.today);
             flat.exerciseDate = flat.option->exercise()->lastDate();
             return flat;
@@ -629,6 +628,12 @@ namespace RKE::TestSuite {
 
         const auto flat = makeFlatCase();
 
+        // The cached step is the process's up to rounding, so are the paths, and the price and
+        // both probabilities with them: measured up to 4.0e-16 relative, the continuous hit
+        // probability under gcc at -march=x86-64-v3 with -D_GLIBCXX_ASSERTIONS, and the same
+        // doubles on every other CI build.
+        constexpr Real tolerance = 1.0e-12;
+
         for (const auto monitoring : {BarrierMonitoring::Discrete, BarrierMonitoring::Continuous}) {
             flat.option->setPricingEngine(ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
                 flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), monitoring, true,
@@ -643,17 +648,23 @@ namespace RKE::TestSuite {
             const auto plain = flat.option->NPV();
             const auto plainProbabilities = engineProbabilities(*flat.option);
 
-            // Exact on purpose: the cached step is the double QuantLib::PathGenerator evolves,
-            // so the traits move no price.
-            BOOST_TEST_MESSAGE(monitoringName(monitoring) << ' ' << cached);
-            BOOST_CHECK_EQUAL(cached, plain);
+            BOOST_TEST_MESSAGE(monitoringName(monitoring)
+                               << ' ' << cached << ", relative difference "
+                               << std::fabs(cached - plain) / plain);
+            BOOST_CHECK_CLOSE_FRACTION(cached, plain, tolerance);
 
-            // The same paths and, in continuous mode, the same step variance the cache
-            // reproduces from the process, so the probabilities are the same doubles too.
-            BOOST_TEST_MESSAGE("hit " << cachedProbabilities.hit << ", bonus "
-                                      << cachedProbabilities.bonus);
-            BOOST_CHECK_EQUAL(cachedProbabilities.hit, plainProbabilities.hit);
-            BOOST_CHECK_EQUAL(cachedProbabilities.bonus, plainProbabilities.bonus);
+            // In continuous mode the cache's step variance is the process's variance() over the
+            // same step, which a strike-independent volatility does not vary with the level, so
+            // the probabilities differ through the paths only.
+            BOOST_TEST_MESSAGE(
+                "hit " << cachedProbabilities.hit << ", relative difference "
+                       << relativeDifference(cachedProbabilities.hit, plainProbabilities.hit)
+                       << "; bonus " << cachedProbabilities.bonus << ", relative difference "
+                       << relativeDifference(cachedProbabilities.bonus, plainProbabilities.bonus));
+            BOOST_CHECK_LE(relativeDifference(cachedProbabilities.hit, plainProbabilities.hit),
+                           tolerance);
+            BOOST_CHECK_LE(relativeDifference(cachedProbabilities.bonus, plainProbabilities.bonus),
+                           tolerance);
         }
     }
 
@@ -684,18 +695,19 @@ namespace RKE::TestSuite {
         BOOST_TEST_MESSAGE("BonusClassicOption refuses an inexact step under "
                            "CachedStepSingleVariate and prices it under SingleVariate");
 
-        const auto flat = makeFlatCase(true);
+        const auto flat = makeFlatCase();
+        const auto process = RKE::Common::varianceCurveProcess(flat.today, true);
 
         // The volatility's type alone passes for exact; only the probe against evolve()
         // catches the forced discretization, and the engine fails loud instead of falling back.
         flat.option->setPricingEngine(ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-            flat.process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(),
-            BarrierMonitoring::Continuous, true, 42));
+            process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(), BarrierMonitoring::Continuous,
+            true, 42));
         BOOST_CHECK_THROW(flat.option->NPV(), Error);
 
         flat.option->setPricingEngine(
             ext::make_shared<MCBonusClassicEngine<LowDiscrepancy, Statistics, SingleVariate>>(
-                flat.process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(),
+                process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(),
                 BarrierMonitoring::Continuous, true, 42));
         BOOST_CHECK_NO_THROW(flat.option->NPV());
     }

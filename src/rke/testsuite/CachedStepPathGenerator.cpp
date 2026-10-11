@@ -34,11 +34,10 @@ namespace RKE::TestSuite {
         using rsg_type = LowDiscrepancy::rsg_type;
 
         // Both generators draw the same Sobol sequence through the same bridge, and every
-        // point of every path, plain and antithetic, has to be the same double, or within the
-        // relative tolerance where one is given.
+        // point of every path, plain and antithetic, has to be within the relative tolerance.
         template <class StepCache = BlackScholesStepCache>
         void checkSamePaths(const ext::shared_ptr<GeneralizedBlackScholesProcess>& process,
-                            Real tolerance = 0.0) {
+                            Real tolerance) {
             const TimeGrid grid(maturity, timeSteps);
             const PathGenerator<rsg_type> reference(
                 process, grid, LowDiscrepancy::make_sequence_generator(timeSteps, seed), true);
@@ -55,7 +54,6 @@ namespace RKE::TestSuite {
                     for (Size i = 0; i < expected.value.length(); ++i) {
                         const auto difference = std::fabs(actual.value[i] - expected.value[i]);
                         maxRelative = std::max(maxRelative, difference / expected.value[i]);
-                        // Exact comparison by default: the regression locks depend on it.
                         if (difference > tolerance * expected.value[i]) {
                             ++mismatches;
                         }
@@ -134,7 +132,7 @@ namespace RKE::TestSuite {
         Settings::instance().evaluationDate() = evaluationDate();
 
         const auto process = constantVolProcess();
-        checkSamePaths(process);
+        checkSamePaths(process, pathTolerance);
 
         const TimeGrid grid(maturity, timeSteps);
         const BlackScholesStepCache cache(process, grid);
@@ -151,7 +149,7 @@ namespace RKE::TestSuite {
         BOOST_TEST_MESSAGE("CachedStepPathGenerator with a variance curve and zero curves");
         Settings::instance().evaluationDate() = evaluationDate();
 
-        checkSamePaths(RKE::Common::varianceCurveProcess(evaluationDate()));
+        checkSamePaths(RKE::Common::varianceCurveProcess(evaluationDate()), pathTolerance);
     }
 
     BOOST_AUTO_TEST_CASE(testVolatilitySurface) { // NOLINT(misc-use-internal-linkage): the
@@ -168,7 +166,7 @@ namespace RKE::TestSuite {
         Settings::instance().evaluationDate() = evaluationDate();
 
         // The probe has to catch what the type check misses.
-        checkRefused(forcedDiscretizationProcess());
+        checkRefused(RKE::Common::varianceCurveProcess(evaluationDate(), true));
     }
 
     BOOST_AUTO_TEST_CASE(testExternalLocalVolatility) { // NOLINT(misc-use-internal-linkage):

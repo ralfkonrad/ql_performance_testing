@@ -5,6 +5,7 @@
 #include "BonusClassicOptionSetup.hpp"
 #include "FlatTermStructures.hpp"
 #include <ql/math/matrix.hpp>
+#include <ql/processes/eulerdiscretization.hpp>
 #include <ql/quotes/simplequote.hpp>
 #include <ql/termstructures/volatility/equityfx/blackvariancecurve.hpp>
 #include <ql/termstructures/volatility/equityfx/blackvariancesurface.hpp>
@@ -42,7 +43,8 @@ namespace RKE::Common {
         return zeroCurve(today, {0.030, 0.028, 0.025, 0.024});
     }
 
-    ext::shared_ptr<GeneralizedBlackScholesProcess> varianceCurveProcess(Date today) {
+    ext::shared_ptr<GeneralizedBlackScholesProcess> varianceCurveProcess(Date today,
+                                                                         bool forceDiscretization) {
         const std::vector<Date> volDates = {
             today + Period(3, Months),
             today + Period(1, Years),
@@ -50,8 +52,9 @@ namespace RKE::Common {
         };
         const auto vol = Handle<BlackVolTermStructure>(ext::make_shared<BlackVarianceCurve>(
             today, volDates, std::vector<Volatility>{0.25, 0.21, 0.19}, Actual360()));
-        return ext::make_shared<BlackScholesMertonProcess>(spotQuote(), zeroDividend(today),
-                                                           zeroRiskFree(today), vol);
+        return ext::make_shared<BlackScholesMertonProcess>(
+            spotQuote(), zeroDividend(today), zeroRiskFree(today), vol,
+            ext::make_shared<EulerDiscretization>(), forceDiscretization);
     }
 
     ext::shared_ptr<GeneralizedBlackScholesProcess> smileProcess(Date today) {
@@ -83,7 +86,7 @@ namespace RKE::Common {
         const auto localVol = Handle<LocalVolTermStructure>(
             ext::make_shared<LocalConstantVol>(today, data.volatility, dc));
         return ext::make_shared<GeneralizedBlackScholesProcess>(
-            spotQuote(), flatRate(today, data.dividendYield, dc),
-            flatRate(today, data.riskfreeRate, dc), flatVol(today, data.volatility, dc), localVol);
+            spotQuote(), zeroDividend(today), zeroRiskFree(today),
+            flatVol(today, data.volatility, dc), localVol);
     }
 }

@@ -62,7 +62,8 @@ namespace RKE::Common {
     // The flat reference market: the tests validate it, the benchmarks and profiles measure it.
     // Flat forward curves and a constant Black volatility, Actual360 and NullCalendar
     // throughout, under EulerDiscretization. forceDiscretization = true makes evolve() take
-    // Euler steps over the flat volatility, which BlackScholesStepCache cannot reproduce.
+    // Euler steps over the flat volatility, which coincide with the exact step in exact
+    // arithmetic.
     struct MarketData {
         QuantLib::Real spot = 100.00;
         QuantLib::Real riskfreeRate = 0.01;

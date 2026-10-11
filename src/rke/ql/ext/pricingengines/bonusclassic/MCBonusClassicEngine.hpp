@@ -52,17 +52,18 @@ namespace RKE::QL::Ext {
         CachedStepSingleVariate, builds them with CachedStepPathGenerator,
         which takes the process's exact step from terms computed once per
         grid and refuses a process whose step is not exact: a smile, a
-        forced discretization or an external local volatility. Such a
-        process takes LocalVolStepSingleVariate, whose generator takes the
-        Euler step through LocalVolStepCache, evaluating the local
-        volatility once per step instead of twice, and refuses an exact
-        step in turn. QuantLib::SingleVariate, i.e. QuantLib::PathGenerator,
-        takes every process and is the reference the other two are checked
-        against: the exact step gives the same doubles, the Euler step the
-        same up to LocalVolStepCache::stepTolerance per step, so the choice
-        moves no price beyond rounding. The continuous path pricer follows
-        the traits: under CachedStepSingleVariate it takes the step variance
-        from the same cache, otherwise from the process.
+        forced discretization or an external local volatility, unless on
+        flat curves its Euler step passes for exact; see
+        BlackScholesStepCache::stepTolerance. Such a process takes
+        LocalVolStepSingleVariate, whose generator takes the Euler step
+        through LocalVolStepCache, evaluating the local volatility once per
+        step instead of twice, and refuses an exact step in turn.
+        QuantLib::SingleVariate, i.e. QuantLib::PathGenerator, takes every
+        process and is the reference the other two are checked against:
+        either cache's step is the process's up to the cache's stepTolerance,
+        so the choice moves no price beyond rounding. The continuous path
+        pricer follows the traits: under CachedStepSingleVariate it takes the
+        step variance from the same cache, otherwise from the process.
 
         \tparam MC Monte Carlo traits naming the path generator:
                    CachedStepSingleVariate for a process whose step is

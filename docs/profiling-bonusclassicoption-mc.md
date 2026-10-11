@@ -99,11 +99,13 @@ the same pricing.
   its step variance from the cache. `makeBonusClassicOptionSetup` picks the traits through
   `PathGeneration`: `CachedStep` by default, `Uncached` for `QuantLib::SingleVariate`, which is
   what `--path-generation uncached` and the `*Uncached` benchmarks run.
-- **Branch guard:** the cache classifies the volatility by type, then checks its step bitwise
-  against `evolve` at two points on every step. That catches the two cases the type misses: a
-  forced discretization, and a process built with an external local volatility. Where the
-  check fails, `CachedStepPathGenerator` refuses the process at construction instead of
-  falling back. Such a process, a smile included, takes `QuantLib::SingleVariate` through the
+- **Branch guard:** the cache classifies the volatility by type, then compares its step with
+  `evolve` at two points on every step, to the relative `BlackScholesStepCache::stepTolerance`
+  of 1e-13. That catches the two cases the type misses: a forced discretization, and a process
+  built with an external local volatility. On flat curves under a constant volatility their
+  Euler step coincides with the exact one in exact arithmetic and passes where Δt < 0.024.
+  Where the check fails, `CachedStepPathGenerator` refuses the process at construction instead
+  of falling back. Such a process, a smile included, takes `QuantLib::SingleVariate` through the
   engine's `MC` template parameter, and every step goes through `evolve` as before. The smile
   branch has its own cache, 4.5.
 - **Cost of the explicit choice:** none in work, one instruction per step in register
@@ -123,9 +125,10 @@ the same pricing.
   pricer's step variance from the cache. These percentages belong to this workload's
   branch; 4.5 measures the smile branch's counterpart.
 
-- **Lock impact:** bit-identical. The cached doubles are the ones `evolve` computes, and
-  `CachedStepPathGeneratorTests` require every path point to equal
-  `QuantLib::PathGenerator`'s exactly. The implementation reproduces:
+- **Lock impact:** none. The cached step is `evolve`'s up to rounding: the same double on every
+  CI build except gcc with `-D_GLIBCXX_ASSERTIONS`, where path points differ by up to 5.4e-16
+  relative. `CachedStepPathGeneratorTests` hold every path point to 1e-12 of
+  `QuantLib::PathGenerator`'s. The implementation reproduces:
   - the production setup: discrete `100.22671167047309` and continuous
     `99.883605619178169`;
   - both locks in `src/rke/testsuite/BonusClassicOption.cpp`: discrete
@@ -145,7 +148,7 @@ the same pricing.
     engine exposes it: `CachedStepSingleVariate` by default, `QuantLib::SingleVariate` for a
     process the cache cannot reproduce. The caller decides, not the generator.
   - The smile branch's discretization is a protected member with no accessor, so 4.5
-    confirms it is `EulerDiscretization` only through the same bitwise check.
+    confirms it is `EulerDiscretization` only through the same check against `evolve`.
 
 ### 4.2 Compute the Forward Rate Without `InterestRate` in the Process
 
@@ -243,12 +246,13 @@ Measured on the smile markets of section 8, not on this workload, whose step is 
   through the process's own `localVolatility()` link. No QuantLib code is copied, so it
   holds for any local volatility: `LocalVolSurface` under a smile, `LocalConstantVol` or
   `LocalVolCurve` under a forced discretization, or an external one.
-- **Branch guard:** the step is compared with `evolve` at two points on every step, as in
-  4.1, but to a relative `LocalVolStepCache::stepTolerance` of 1e-13 instead of bitwise.
+- **Branch guard:** the step is compared with `evolve` at two points on every step, to the
+  relative `LocalVolStepCache::stepTolerance` of 1e-13, as in 4.1.
   Both sides evaluate the same local volatility at the same point, so only the step's own
   rounding can differ. The exact step on a variance curve fails the check, and so would any
   discretization other than `EulerDiscretization`. A constant volatility on flat curves
-  passes it, because there the exact and the Euler step coincide in exact arithmetic.
+  passes it where Δt < 0.024, because there the exact and the Euler step coincide in exact
+  arithmetic.
 - **Lock impact:** the locks take the exact step and do not move. On the smile markets the
   cache is bit-identical where the compiler does not contract to FMAs, which is the x86-64
   baseline and MSVC: on the static `profile` build here the NPVs are the same cached and

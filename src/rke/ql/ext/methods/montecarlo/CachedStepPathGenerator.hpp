@@ -23,11 +23,9 @@ namespace RKE::QL::Ext {
         StepCache, built once, reproduces: BlackScholesStepCache for the exact
         lognormal step, LocalVolStepCache for the Euler step through the local
         volatility. The constructor refuses any other process; use
-        QuantLib::PathGenerator for it, i.e. QuantLib::SingleVariate. Under
-        BlackScholesStepCache the paths are the doubles QuantLib::PathGenerator
-        produces from the same sequence. Under LocalVolStepCache each step is
-        within LocalVolStepCache::stepTolerance of the process's from the same
-        point, and the same double where nothing is contracted.
+        QuantLib::PathGenerator for it, i.e. QuantLib::SingleVariate. Each step
+        is within the StepCache's stepTolerance of the process's from the same
+        point.
     */
     template <class GSG, class StepCache = BlackScholesStepCache>
     class CachedStepPathGenerator {
