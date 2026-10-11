@@ -46,6 +46,8 @@ for when you want all of them:
 cmake --workflow release
 ```
 
+The `debug` workflow stops after the build; `ctest --preset debug` runs its tests.
+
 Add `-DCMAKE_CXX_STANDARD=20` (or `23`) to the configure step to reproduce the
 other CI legs. A workflow preset takes no such flag, so the standards other than
 the default need the three steps separately.
