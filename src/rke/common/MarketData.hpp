@@ -71,6 +71,16 @@ namespace RKE::Common {
         [[nodiscard]] QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess>
         makeGeneralizedBlackScholesProcess(QuantLib::Date today, bool isBicubic) const;
     };
+
+    // SmileMarketData around flat's levels instead of FlatMarketData's defaults: flat's spot,
+    // every rate node shifted in parallel by flat's rate less the default, so the curves keep
+    // their slope, and atmVolatility and skew both scaled by flat.volatility / atmVolatility.
+    // The smile is the default one times that ratio, positive on every strike node at any
+    // positive volatility: 0.45 times flat.volatility on the 400 node. Tenors and strikes stay: the
+    // 400 node, beyond which the surface is flat in strike, lies ln 4 above the spot, 6.9 standard
+    // deviations of the one-year log-return at the default volatility and 2.8 at 0.50. At
+    // FlatMarketData's defaults the result is SmileMarketData() exactly.
+    [[nodiscard]] SmileMarketData smileMarketDataAround(const FlatMarketData& flat);
 }
 
 #endif // MARKETDATA_HPP
