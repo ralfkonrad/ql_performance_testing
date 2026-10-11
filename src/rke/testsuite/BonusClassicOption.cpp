@@ -6,16 +6,19 @@
 #include <rke/common/FlatTermStructures.hpp>
 #include <rke/common/StepCacheMarkets.hpp>
 #include <rke/ql/ext/instruments/BonusClassicOption.hpp>
+#include <rke/ql/ext/pricingengines/bonusclassic/AnalyticBonusClassicEngine.hpp>
 #include <rke/ql/ext/pricingengines/bonusclassic/BinomialBonusClassicEngine.hpp>
 #include <rke/ql/ext/pricingengines/bonusclassic/FdBlackScholesBonusClassicEngine.hpp>
 #include <rke/ql/ext/pricingengines/bonusclassic/MCBonusClassicEngine.hpp>
 #include <ql/exercise.hpp>
 #include <ql/instruments/barrieroption.hpp>
 #include <ql/instruments/payoffs.hpp>
+#include <ql/instruments/vanillaoption.hpp>
 #include <ql/methods/lattices/binomialtree.hpp>
 #include <ql/methods/montecarlo/mctraits.hpp>
 #include <ql/pricingengines/barrier/analyticbarrierengine.hpp>
 #include <ql/pricingengines/barrier/analyticbinarybarrierengine.hpp>
+#include <ql/pricingengines/vanilla/analyticeuropeanengine.hpp>
 #include <ql/processes/blackscholesprocess.hpp>
 #include <ql/termstructures/volatility/equityfx/localvolsurface.hpp>
 #include <ql/time/daycounters/actual360.hpp>
@@ -63,6 +66,10 @@ namespace RKE::TestSuite {
             return std::fabs(value - reference) / scale;
         }
 
+        std::string_view monitoringName(BarrierMonitoring monitoring) {
+            return monitoring == BarrierMonitoring::Discrete ? "discrete" : "continuous";
+        }
+
         // Prices under LocalVolStepSingleVariate and SingleVariate, both monitoring modes, and
         // requires the prices and both probabilities within the relative tolerance.
         void checkLocalVolStepPrices(Date today,
@@ -72,11 +79,12 @@ namespace RKE::TestSuite {
             option_data.ttm = Period(5, Months);
             const auto bonusClassicOption = RKE::Common::makeBonusClassicOption(option_data, today);
 
-            for (const bool isBiased : {true, false}) {
+            for (const auto monitoring :
+                 {BarrierMonitoring::Discrete, BarrierMonitoring::Continuous}) {
                 bonusClassicOption->setPricingEngine(
                     ext::make_shared<MCBonusClassicEngine<LowDiscrepancy, Statistics,
                                                           LocalVolStepSingleVariate>>(
-                        process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(), isBiased, true,
+                        process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(), monitoring, true,
                         42));
                 const auto cached = bonusClassicOption->NPV();
                 const auto cachedProbabilities = engineProbabilities(*bonusClassicOption);
@@ -84,13 +92,13 @@ namespace RKE::TestSuite {
                 bonusClassicOption->setPricingEngine(
                     ext::make_shared<
                         MCBonusClassicEngine<LowDiscrepancy, Statistics, SingleVariate>>(
-                        process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(), isBiased, true,
+                        process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(), monitoring, true,
                         42));
                 const auto plain = bonusClassicOption->NPV();
                 const auto plainProbabilities = engineProbabilities(*bonusClassicOption);
 
-                BOOST_TEST_MESSAGE((isBiased ? "discrete " : "continuous ")
-                                   << cached << ", relative difference "
+                BOOST_TEST_MESSAGE(monitoringName(monitoring)
+                                   << ' ' << cached << ", relative difference "
                                    << std::fabs(cached - plain) / plain);
                 BOOST_CHECK_CLOSE_FRACTION(cached, plain, tolerance);
 
@@ -120,59 +128,30 @@ namespace RKE::TestSuite {
             return barrier * std::exp(-beta * volatility * std::sqrt(dt));
         }
 
-        // The certificate pays S_T once the barrier has been touched and max(S_T, bonusLevel)
-        // otherwise, i.e. S_T + 1{never touched} * max(bonusLevel - S_T, 0): the asset itself
-        // plus a down-and-out put struck at the bonus level. Receiving the asset at maturity is
-        // worth spot * exp(-q * T); AnalyticBarrierEngine prices the put under continuous
-        // monitoring of the barrier given here.
+        // The reference price every engine is checked against: AnalyticBonusClassicEngine, the
+        // asset leg plus a down-and-out put struck at the bonus level, the barrier given here
+        // monitored continuously; a discretely monitored engine passes the
+        // Broadie-Glasserman-Kou barrier. testBonusClassicOptionAnalyticReplication checks the
+        // engine against that decomposition priced with QuantLib's engines directly.
         Real replicationPrice(const ext::shared_ptr<GeneralizedBlackScholesProcess>& process,
                               const RKE::Common::OptionData& data,
                               Date exerciseDate,
                               Real barrier) {
-            const auto assetLeg = process->x0() * process->dividendYield()->discount(exerciseDate);
-
-            auto downOutPut =
-                BarrierOption(Barrier::DownOut, barrier, 0.0,
-                              ext::make_shared<PlainVanillaPayoff>(Option::Put, data.bonusLevel),
-                              ext::make_shared<EuropeanExercise>(exerciseDate));
-            downOutPut.setPricingEngine(ext::make_shared<AnalyticBarrierEngine>(process));
-
-            return assetLeg + downOutPut.NPV();
+            auto option = BonusClassicOption(barrier, data.bonusLevel, exerciseDate);
+            option.setPricingEngine(ext::make_shared<AnalyticBonusClassicEngine>(process));
+            return option.NPV();
         }
 
-        // AnalyticBinaryBarrierEngine (Haug, "The complete guide to option pricing formulas",
-        // 2nd ed., p. 176 ff.) prices a cash-or-nothing payoff paid at expiry under continuous
-        // monitoring of the barrier given here. Its calculate() takes an AmericanExercise with
-        // payoffAtExpiry = true whose first date is at or before the volatility's reference
-        // date, so the exercise starts today. Paying 1 at expiry, the down-and-in call and put
-        // struck at the bonus level together pay 1 iff the barrier was touched, and the
-        // down-and-out put, the engine's "strike >= barrier" branch, pays 1 iff it never was
-        // and S_T < B. The curve is deterministic, so E[D(T) 1_A] = D(T) P(A) and each price
-        // over D(T) is the probability of its event.
+        // The reference probabilities, from the same engine on the same barrier.
         Probabilities
         referenceProbabilities(const ext::shared_ptr<GeneralizedBlackScholesProcess>& process,
                                const RKE::Common::OptionData& data,
-                               Date today,
                                Date exerciseDate,
                                Real barrier) {
-            const auto exercise = ext::make_shared<AmericanExercise>(today, exerciseDate, true);
-            const auto cashOrNothingPrice = [&](Barrier::Type barrierType,
-                                                Option::Type optionType) {
-                auto option = BarrierOption(
-                    barrierType, barrier, 0.0,
-                    ext::make_shared<CashOrNothingPayoff>(optionType, data.bonusLevel, 1.0),
-                    exercise);
-                option.setPricingEngine(ext::make_shared<AnalyticBinaryBarrierEngine>(process));
-                return option.NPV();
-            };
-            const auto discount = process->riskFreeRate()->discount(exerciseDate);
-
-            return {
-                (cashOrNothingPrice(Barrier::DownIn, Option::Call) +
-                 cashOrNothingPrice(Barrier::DownIn, Option::Put)) /
-                    discount,
-                cashOrNothingPrice(Barrier::DownOut, Option::Put) / discount,
-            };
+            auto option = BonusClassicOption(barrier, data.bonusLevel, exerciseDate);
+            option.setPricingEngine(ext::make_shared<AnalyticBonusClassicEngine>(process, true));
+            static_cast<void>(option.NPV());
+            return engineProbabilities(option);
         }
 
         // The flat market every case prices: the option with its maturity cut to 5M and the
@@ -221,6 +200,20 @@ namespace RKE::TestSuite {
             return smile;
         }
 
+        // The smile as an external local volatility beside MarketData's flat Black volatility:
+        // a path follows the smile, so a type test of the Black volatility alone would miss it.
+        ext::shared_ptr<GeneralizedBlackScholesProcess>
+        externalSmileProcess(const SmileCase& smile) {
+            return ext::make_shared<GeneralizedBlackScholesProcess>(
+                smile.process->stateVariable(), smile.process->dividendYield(),
+                smile.process->riskFreeRate(),
+                RKE::Common::flatVol(smile.today, RKE::Common::MarketData().volatility,
+                                     Actual360()),
+                Handle<LocalVolTermStructure>(ext::make_shared<LocalVolSurface>(
+                    smile.process->blackVolatility(), smile.process->riskFreeRate(),
+                    smile.process->dividendYield(), smile.process->stateVariable())));
+        }
+
         std::string_view surfaceName(bool isBicubic) {
             return isBicubic ? "bicubic" : "bilinear";
         }
@@ -230,24 +223,25 @@ namespace RKE::TestSuite {
         // the scheme are the defaults, spelled out to reach the flags behind them.
         ext::shared_ptr<FdBlackScholesBonusClassicEngine>
         makeFdEngine(const ext::shared_ptr<GeneralizedBlackScholesProcess>& process,
-                     bool isBiased,
+                     BarrierMonitoring monitoring,
                      bool localVol,
                      Size tGrid = fdTimeGrid,
                      Size xGrid = fdSpaceGrid) {
             return ext::make_shared<FdBlackScholesBonusClassicEngine>(
-                process, isBiased ? mcTimeStepsPerYear : Null<Size>(), tGrid, xGrid, 0,
-                FdmSchemeDesc::TrBDF2(), true, localVol);
+                process,
+                monitoring == BarrierMonitoring::Discrete ? mcTimeStepsPerYear : Null<Size>(),
+                tGrid, xGrid, 0, FdmSchemeDesc::TrBDF2(), true, localVol);
         }
 
         // The Monte-Carlo engine under the Euler step through the local volatility, the
         // reference the FD engine's smile prices are checked against.
         ext::shared_ptr<MCBonusClassicEngine<LowDiscrepancy, Statistics, LocalVolStepSingleVariate>>
         makeLocalVolMcEngine(const ext::shared_ptr<GeneralizedBlackScholesProcess>& process,
-                             bool isBiased,
+                             BarrierMonitoring monitoring,
                              Size samples) {
             return ext::make_shared<
                 MCBonusClassicEngine<LowDiscrepancy, Statistics, LocalVolStepSingleVariate>>(
-                process, mcTimeStepsPerYear, samples, samples + 1, Null<Real>(), isBiased, true,
+                process, mcTimeStepsPerYear, samples, samples + 1, Null<Real>(), monitoring, true,
                 42);
         }
 
@@ -262,20 +256,22 @@ namespace RKE::TestSuite {
         // Prices the smile under the FD engine and under the Euler Monte-Carlo engine at 50,000
         // paths, in one monitoring mode, requires the price and both probabilities within the
         // bounds, and returns the FD price.
-        Real checkFdSmileVersusMc(const SmileCase& smile, bool isBiased, FdVersusMcBounds bounds) {
-            const auto fdEngine = makeFdEngine(smile.process, isBiased, true);
+        Real checkFdSmileVersusMc(const SmileCase& smile,
+                                  BarrierMonitoring monitoring,
+                                  FdVersusMcBounds bounds) {
+            const auto fdEngine = makeFdEngine(smile.process, monitoring, true);
             smile.option->setPricingEngine(fdEngine);
             const auto fd = smile.option->NPV();
             const auto fdProbabilities = engineProbabilities(*smile.option);
 
             // The Euler step through the same LocalVolSurface; about ten seconds for both
             // modes, the surface rebuilding a spline on every lookup.
-            const auto mcEngine = makeLocalVolMcEngine(smile.process, isBiased, 50'000);
+            const auto mcEngine = makeLocalVolMcEngine(smile.process, monitoring, 50'000);
             smile.option->setPricingEngine(mcEngine);
             const auto mc = smile.option->NPV();
             const auto mcProbabilities = engineProbabilities(*smile.option);
 
-            if (isBiased) {
+            if (monitoring == BarrierMonitoring::Discrete) {
                 // Both engines monitor the same product: the same 42 points after t = 0.
                 const auto fdGrid = fdEngine->timeGrid();
                 const auto mcGrid = mcEngine->timeGrid();
@@ -286,7 +282,7 @@ namespace RKE::TestSuite {
                 }
             }
 
-            BOOST_TEST_MESSAGE((isBiased ? "discrete" : "continuous")
+            BOOST_TEST_MESSAGE(monitoringName(monitoring)
                                << ": FD " << fd << ", MC " << mc << ", relative difference "
                                << std::fabs(fd - mc) / mc);
             BOOST_TEST_MESSAGE("  hit FD " << fdProbabilities.hit << ", MC " << mcProbabilities.hit
@@ -340,16 +336,19 @@ namespace RKE::TestSuite {
 
         const auto flat = makeFlatCase();
 
-        BOOST_CHECK_THROW(MCBonusClassicEngine<LowDiscrepancy>(nullptr, mcTimeStepsPerYear, 1'000,
-                                                               1'001, Null<Real>(), true, true, 42),
+        BOOST_CHECK_THROW(MCBonusClassicEngine<LowDiscrepancy>(
+                              nullptr, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(),
+                              BarrierMonitoring::Discrete, true, 42),
                           Error);
         BOOST_CHECK_THROW(FdBlackScholesBonusClassicEngine(nullptr, mcTimeStepsPerYear), Error);
         BOOST_CHECK_THROW(BinomialBonusClassicEngine<CoxRossRubinstein>(nullptr, treeTimeSteps),
                           Error);
+        BOOST_CHECK_THROW(AnalyticBonusClassicEngine(nullptr), Error);
 
         // The arguments, the exercise among them, are empty until an instrument sets them up.
         const MCBonusClassicEngine<LowDiscrepancy> mcEngine(flat.process, mcTimeStepsPerYear, 1'000,
-                                                            1'001, Null<Real>(), true, true, 42);
+                                                            1'001, Null<Real>(),
+                                                            BarrierMonitoring::Discrete, true, 42);
         BOOST_CHECK_THROW(static_cast<void>(mcEngine.timeGrid()), Error);
         const FdBlackScholesBonusClassicEngine fdEngine(flat.process, mcTimeStepsPerYear);
         BOOST_CHECK_THROW(static_cast<void>(fdEngine.timeGrid()), Error);
@@ -369,10 +368,12 @@ namespace RKE::TestSuite {
         // otherwise take log(0) and fail deep inside the solver.
         const std::vector<ext::shared_ptr<PricingEngine>> engines = {
             ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-                flat.process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(), true, true, 42),
+                flat.process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(),
+                BarrierMonitoring::Discrete, true, 42),
             ext::make_shared<FdBlackScholesBonusClassicEngine>(flat.process),
             ext::make_shared<BinomialBonusClassicEngine<CoxRossRubinstein>>(flat.process,
                                                                             treeTimeSteps),
+            ext::make_shared<AnalyticBonusClassicEngine>(flat.process),
         };
         for (const auto& engine : engines) {
             for (const auto& [barrier, bonusLevel] : {
@@ -396,7 +397,8 @@ namespace RKE::TestSuite {
         // LowDiscrepancy, McSimulation::calculate takes the fixed-sample branch and maxSamples
         // never applies.
         const auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-            flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), true, true, 42);
+            flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(),
+            BarrierMonitoring::Discrete, true, 42);
 
         flat.option->setPricingEngine(mcEngine);
         const auto npv = flat.option->NPV();
@@ -414,7 +416,8 @@ namespace RKE::TestSuite {
         const auto flat = makeFlatCase();
 
         const auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-            flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), true, true, 42);
+            flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(),
+            BarrierMonitoring::Discrete, true, 42);
         flat.option->setPricingEngine(mcEngine);
         const auto npv = flat.option->NPV();
 
@@ -444,7 +447,8 @@ namespace RKE::TestSuite {
         const auto flat = makeFlatCase();
 
         const auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-            flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), false, true, 42);
+            flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(),
+            BarrierMonitoring::Continuous, true, 42);
 
         flat.option->setPricingEngine(mcEngine);
         const auto npv = flat.option->NPV();
@@ -463,7 +467,8 @@ namespace RKE::TestSuite {
         const auto flat = makeFlatCase();
 
         const auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-            flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), false, true, 42);
+            flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(),
+            BarrierMonitoring::Continuous, true, 42);
         flat.option->setPricingEngine(mcEngine);
         const auto npv = flat.option->NPV();
 
@@ -489,7 +494,8 @@ namespace RKE::TestSuite {
 
         // The configuration of testBonusClassicOptionValuation's lock.
         const auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-            flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), true, true, 42);
+            flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(),
+            BarrierMonitoring::Discrete, true, 42);
         flat.option->setPricingEngine(mcEngine);
         static_cast<void>(flat.option->NPV());
         const auto probabilities = engineProbabilities(*flat.option);
@@ -511,7 +517,7 @@ namespace RKE::TestSuite {
         // the step the paths were monitored on.
         const auto dt = mcEngine->timeGrid().dt(0);
         const auto reference = referenceProbabilities(
-            flat.process, flat.optionData, flat.today, flat.exerciseDate,
+            flat.process, flat.optionData, flat.exerciseDate,
             bgkShiftedBarrier(flat.optionData.barrier, flat.marketData.volatility, dt));
 
         // Spot 100 against barrier 70 over 5M leaves a small hit probability, so the residuals
@@ -540,7 +546,8 @@ namespace RKE::TestSuite {
 
         // The configuration of testBonusClassicOptionContinuousValuation's lock.
         const auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-            flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), false, true, 42);
+            flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(),
+            BarrierMonitoring::Continuous, true, 42);
         flat.option->setPricingEngine(mcEngine);
         static_cast<void>(flat.option->NPV());
         const auto probabilities = engineProbabilities(*flat.option);
@@ -560,7 +567,7 @@ namespace RKE::TestSuite {
 
         // The engine monitors continuously, as AnalyticBinaryBarrierEngine assumes, so the
         // reference takes the barrier itself and no Broadie-Glasserman-Kou shift applies.
-        const auto reference = referenceProbabilities(flat.process, flat.optionData, flat.today,
+        const auto reference = referenceProbabilities(flat.process, flat.optionData,
                                                       flat.exerciseDate, flat.optionData.barrier);
 
         // Spot 100 against barrier 70 over 5M leaves a small hit probability, so the residuals
@@ -587,12 +594,14 @@ namespace RKE::TestSuite {
         const auto flat = makeFlatCase();
 
         flat.option->setPricingEngine(ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-            flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), true, true, 42));
+            flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(),
+            BarrierMonitoring::Discrete, true, 42));
         const auto discrete = flat.option->NPV();
         const auto discreteProbabilities = engineProbabilities(*flat.option);
 
         flat.option->setPricingEngine(ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-            flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), false, true, 42));
+            flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(),
+            BarrierMonitoring::Continuous, true, 42));
         const auto continuous = flat.option->NPV();
         const auto continuousProbabilities = engineProbabilities(*flat.option);
 
@@ -620,23 +629,23 @@ namespace RKE::TestSuite {
 
         const auto flat = makeFlatCase();
 
-        for (const bool isBiased : {true, false}) {
+        for (const auto monitoring : {BarrierMonitoring::Discrete, BarrierMonitoring::Continuous}) {
             flat.option->setPricingEngine(ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-                flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), isBiased, true,
+                flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), monitoring, true,
                 42));
             const auto cached = flat.option->NPV();
             const auto cachedProbabilities = engineProbabilities(*flat.option);
 
             flat.option->setPricingEngine(
                 ext::make_shared<MCBonusClassicEngine<LowDiscrepancy, Statistics, SingleVariate>>(
-                    flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), isBiased, true,
-                    42));
+                    flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), monitoring,
+                    true, 42));
             const auto plain = flat.option->NPV();
             const auto plainProbabilities = engineProbabilities(*flat.option);
 
             // Exact on purpose: the cached step is the double QuantLib::PathGenerator evolves,
             // so the traits move no price.
-            BOOST_TEST_MESSAGE((isBiased ? "discrete " : "continuous ") << cached);
+            BOOST_TEST_MESSAGE(monitoringName(monitoring) << ' ' << cached);
             BOOST_CHECK_EQUAL(cached, plain);
 
             // The same paths and, in continuous mode, the same step variance the cache
@@ -680,12 +689,14 @@ namespace RKE::TestSuite {
         // The volatility's type alone passes for exact; only the probe against evolve()
         // catches the forced discretization, and the engine fails loud instead of falling back.
         flat.option->setPricingEngine(ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-            flat.process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(), false, true, 42));
+            flat.process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(),
+            BarrierMonitoring::Continuous, true, 42));
         BOOST_CHECK_THROW(flat.option->NPV(), Error);
 
         flat.option->setPricingEngine(
             ext::make_shared<MCBonusClassicEngine<LowDiscrepancy, Statistics, SingleVariate>>(
-                flat.process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(), false, true, 42));
+                flat.process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(),
+                BarrierMonitoring::Continuous, true, 42));
         BOOST_CHECK_NO_THROW(flat.option->NPV());
     }
 
@@ -796,7 +807,8 @@ namespace RKE::TestSuite {
 
         // The configuration of testBonusClassicOptionValuation's lock.
         const auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-            flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), true, true, 42);
+            flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(),
+            BarrierMonitoring::Discrete, true, 42);
         flat.option->setPricingEngine(mcEngine);
         const auto mc = flat.option->NPV();
 
@@ -879,7 +891,7 @@ namespace RKE::TestSuite {
         // the grid's step.
         const auto dt = fdEngine->timeGrid().dt(0);
         const auto reference = referenceProbabilities(
-            flat.process, flat.optionData, flat.today, flat.exerciseDate,
+            flat.process, flat.optionData, flat.exerciseDate,
             bgkShiftedBarrier(flat.optionData.barrier, flat.marketData.volatility, dt));
 
         // Spot 100 against barrier 70 over 5M leaves a small hit probability, so the residuals
@@ -930,7 +942,7 @@ namespace RKE::TestSuite {
 
         // The engine monitors continuously, as AnalyticBinaryBarrierEngine assumes, so the
         // reference takes the barrier itself and no Broadie-Glasserman-Kou shift applies.
-        const auto reference = referenceProbabilities(flat.process, flat.optionData, flat.today,
+        const auto reference = referenceProbabilities(flat.process, flat.optionData,
                                                       flat.exerciseDate, flat.optionData.barrier);
 
         // Spot 100 against barrier 70 over 5M leaves a small hit probability, so the residuals
@@ -966,7 +978,8 @@ namespace RKE::TestSuite {
 
         // The configuration of testBonusClassicOptionProbabilities' lock.
         const auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-            flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), true, true, 42);
+            flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(),
+            BarrierMonitoring::Discrete, true, 42);
         flat.option->setPricingEngine(mcEngine);
         static_cast<void>(flat.option->NPV());
         const auto mc = engineProbabilities(*flat.option);
@@ -1054,17 +1067,10 @@ namespace RKE::TestSuite {
                                              fdSpaceGrid, 0, FdmSchemeDesc::TrBDF2(), false, true));
 
         // The type test reads the process's local volatility, so the smile is refused as an
-        // external local volatility beside a flat Black volatility too, the case the Black
-        // volatility's type alone would miss.
-        const auto externalSmile = ext::make_shared<GeneralizedBlackScholesProcess>(
-            smile.process->stateVariable(), smile.process->dividendYield(),
-            smile.process->riskFreeRate(),
-            RKE::Common::flatVol(flat.today, flat.marketData.volatility, Actual360()),
-            Handle<LocalVolTermStructure>(ext::make_shared<LocalVolSurface>(
-                smile.process->blackVolatility(), smile.process->riskFreeRate(),
-                smile.process->dividendYield(), smile.process->stateVariable())));
-        BOOST_CHECK_THROW(FdBlackScholesBonusClassicEngine(externalSmile, mcTimeStepsPerYear),
-                          Error);
+        // external local volatility beside a flat Black volatility too.
+        BOOST_CHECK_THROW(
+            FdBlackScholesBonusClassicEngine(externalSmileProcess(smile), mcTimeStepsPerYear),
+            Error);
 
         // A constant local volatility passes, derived from the flat Black volatility or given
         // beside it, and so does the curve the process derives from a variance curve.
@@ -1074,9 +1080,10 @@ namespace RKE::TestSuite {
         BOOST_CHECK_NO_THROW(FdBlackScholesBonusClassicEngine(
             RKE::Common::varianceCurveProcess(flat.today), mcTimeStepsPerYear));
 
-        const auto engine = makeFdEngine(smile.process, true, true);
+        const auto engine = makeFdEngine(smile.process, BarrierMonitoring::Discrete, true);
         BOOST_CHECK(engine->usesLocalVolatility());
-        BOOST_CHECK(!makeFdEngine(flat.process, true, false)->usesLocalVolatility());
+        BOOST_CHECK(
+            !makeFdEngine(flat.process, BarrierMonitoring::Discrete, false)->usesLocalVolatility());
     }
 
     BOOST_AUTO_TEST_CASE(
@@ -1087,8 +1094,8 @@ namespace RKE::TestSuite {
 
         const auto flat = makeFlatCase();
 
-        for (const bool isBiased : {true, false}) {
-            flat.option->setPricingEngine(makeFdEngine(flat.process, isBiased, false));
+        for (const auto monitoring : {BarrierMonitoring::Discrete, BarrierMonitoring::Continuous}) {
+            flat.option->setPricingEngine(makeFdEngine(flat.process, monitoring, false));
             const auto plain = flat.option->NPV();
             const auto plainProbabilities = engineProbabilities(*flat.option);
 
@@ -1098,13 +1105,13 @@ namespace RKE::TestSuite {
             // constant. The difference is the rounding of that quotient: measured 2.3e-14
             // relative discrete and 4.9e-14 continuous for the price, 1.3e-14 and 3.7e-14 for
             // hit, 2.3e-14 and 4.9e-14 for bonus. The bound leaves twenty times the largest.
-            flat.option->setPricingEngine(makeFdEngine(flat.process, isBiased, true));
+            flat.option->setPricingEngine(makeFdEngine(flat.process, monitoring, true));
             const auto local = flat.option->NPV();
             const auto localProbabilities = engineProbabilities(*flat.option);
 
             BOOST_TEST_MESSAGE(
-                (isBiased ? "discrete " : "continuous ")
-                << plain << ", local vol " << local << ", relative difference "
+                monitoringName(monitoring)
+                << ' ' << plain << ", local vol " << local << ", relative difference "
                 << std::fabs(local - plain) / plain << "; hit "
                 << relativeDifference(localProbabilities.hit, plainProbabilities.hit) << ", bonus "
                 << relativeDifference(localProbabilities.bonus, plainProbabilities.bonus));
@@ -1123,7 +1130,7 @@ namespace RKE::TestSuite {
 
         struct Lock {
             bool isBicubic;
-            bool isBiased;
+            BarrierMonitoring monitoring;
             Real npv;
             Probabilities probabilities;
         };
@@ -1142,19 +1149,39 @@ namespace RKE::TestSuite {
         // matrix. The bound leaves three times the largest move, rounded up to one digit.
         constexpr Real platformTolerance = 2e-7;
         const std::vector<Lock> locks = {
-            {false, true, 118.8968756495899, {0.018663548537463093, 0.9249709380056883}},
-            {false, false, 118.74078054420303, {0.020580682785420662, 0.93461616443619178}},
-            {true, true, 119.01149265518772, {0.015993408894794697, 0.92822438247016947}},
-            {true, false, 118.83036726419061, {0.019959179508870793, 0.92425995043463294}},
+            {
+                false,
+                BarrierMonitoring::Discrete,
+                118.8968756495899,
+                {0.018663548537463093, 0.9249709380056883},
+            },
+            {
+                false,
+                BarrierMonitoring::Continuous,
+                118.74078054420303,
+                {0.020580682785420662, 0.93461616443619178},
+            },
+            {
+                true,
+                BarrierMonitoring::Discrete,
+                119.01149265518772,
+                {0.015993408894794697, 0.92822438247016947},
+            },
+            {
+                true,
+                BarrierMonitoring::Continuous,
+                118.83036726419061,
+                {0.019959179508870793, 0.92425995043463294},
+            },
         };
         for (const auto& lock : locks) {
             const auto smile = makeSmileCase(lock.isBicubic);
-            smile.option->setPricingEngine(makeFdEngine(smile.process, lock.isBiased, true));
+            smile.option->setPricingEngine(makeFdEngine(smile.process, lock.monitoring, true));
             const auto npv = smile.option->NPV();
             const auto probabilities = engineProbabilities(*smile.option);
 
             BOOST_TEST_MESSAGE(surfaceName(lock.isBicubic)
-                               << (lock.isBiased ? " discrete " : " continuous ")
+                               << ' ' << monitoringName(lock.monitoring) << ' '
                                << std::setprecision(17) << npv << ", hit " << probabilities.hit
                                << ", bonus " << probabilities.bonus);
             BOOST_CHECK_CLOSE_FRACTION(lock.npv, npv, platformTolerance);
@@ -1182,8 +1209,10 @@ namespace RKE::TestSuite {
         // sits 2.7e-5 discrete and 1.4e-5 continuous above its 50,000-path value, and still
         // 8.1e-5 and 1.5e-4 above the refined FD price. Each bound leaves about three times its
         // residual, rounded up to one digit.
-        const auto discrete = checkFdSmileVersusMc(smile, true, {2e-4, 3e-4, 3e-4});
-        const auto continuous = checkFdSmileVersusMc(smile, false, {5e-4, 9e-4, 3e-4});
+        const auto discrete =
+            checkFdSmileVersusMc(smile, BarrierMonitoring::Discrete, {2e-4, 3e-4, 3e-4});
+        const auto continuous =
+            checkFdSmileVersusMc(smile, BarrierMonitoring::Continuous, {5e-4, 9e-4, 3e-4});
 
         // Continuous monitoring knocks out everything the grid knocks out and more, and a
         // knock-out only removes the bonus put, so the continuous price is lower.
@@ -1344,7 +1373,7 @@ namespace RKE::TestSuite {
         // The tree monitors on every step, and Boyle-Lau puts a layer of nodes at 69.9929, just
         // below the barrier, so the reference takes the barrier itself and no
         // Broadie-Glasserman-Kou shift applies.
-        const auto reference = referenceProbabilities(flat.process, flat.optionData, flat.today,
+        const auto reference = referenceProbabilities(flat.process, flat.optionData,
                                                       flat.exerciseDate, flat.optionData.barrier);
 
         // Spot 100 against barrier 70 over 5M leaves a small hit probability, so the residuals
@@ -1394,6 +1423,207 @@ namespace RKE::TestSuite {
         flat.option->setPricingEngine(engine);
         static_cast<void>(flat.option->NPV());
         BOOST_CHECK_NO_THROW(static_cast<void>(engineProbabilities(*flat.option)));
+    }
+
+    BOOST_AUTO_TEST_CASE(
+        testBonusClassicOptionAnalyticValuation) { // NOLINT(misc-use-internal-linkage):
+                                                   // the struct is the macro's
+        BOOST_TEST_MESSAGE("BonusClassicOption analytic valuation test");
+
+        const auto flat = makeFlatCase();
+
+        // The default engine sets neither key: Instrument::result() throws on a key
+        // additionalResults does not hold.
+        const auto plainEngine = ext::make_shared<AnalyticBonusClassicEngine>(flat.process);
+        BOOST_CHECK(!plainEngine->calculatesProbabilities());
+        flat.option->setPricingEngine(plainEngine);
+        const auto plainNpv = flat.option->NPV();
+        BOOST_CHECK_THROW(static_cast<void>(flat.option->result<Real>("barrierHitProbability")),
+                          Error);
+        BOOST_CHECK_THROW(static_cast<void>(flat.option->result<Real>("bonusProbability")), Error);
+
+        const auto engine = ext::make_shared<AnalyticBonusClassicEngine>(flat.process, true);
+        BOOST_CHECK(engine->calculatesProbabilities());
+        flat.option->setPricingEngine(engine);
+        const auto npv = flat.option->NPV();
+        const auto probabilities = engineProbabilities(*flat.option);
+        // The probabilities price options of their own and leave the value alone.
+        BOOST_CHECK_EQUAL(plainNpv, npv);
+
+        BOOST_TEST_MESSAGE(std::setprecision(17) << npv << ", hit " << probabilities.hit
+                                                 << ", bonus " << probabilities.bonus);
+        // Regression lock: the engine's own output, not an externally validated price; see
+        // testBonusClassicOptionAnalyticReplication and testBonusClassicOptionAnalyticLimits
+        // for the independent checks. The closed forms move across platforms by rounding only,
+        // and 1e-8 is the bound the other flat locks hold across the CI matrix.
+        BOOST_CHECK_CLOSE_FRACTION(119.5004784020671, npv, 1e-8);
+        BOOST_CHECK_CLOSE_FRACTION(0.0088335621463562219, probabilities.hit, 1e-8);
+        BOOST_CHECK_CLOSE_FRACTION(0.92800031479663925, probabilities.bonus, 1e-8);
+    }
+
+    BOOST_AUTO_TEST_CASE(
+        testBonusClassicOptionAnalyticReplication) { // NOLINT(misc-use-internal-linkage):
+                                                     // the struct is the macro's
+        BOOST_TEST_MESSAGE("BonusClassicOption analytic replication test");
+
+        const auto flat = makeFlatCase();
+
+        flat.option->setPricingEngine(
+            ext::make_shared<AnalyticBonusClassicEngine>(flat.process, true));
+        const auto npv = flat.option->NPV();
+        const auto probabilities = engineProbabilities(*flat.option);
+
+        // The certificate pays S_T once the barrier has been touched and max(S_T, bonusLevel)
+        // otherwise, i.e. S_T + 1{never touched} * max(bonusLevel - S_T, 0): the asset itself
+        // plus a down-and-out put struck at the bonus level. Receiving the asset at maturity is
+        // worth spot * exp(-q * T); AnalyticBarrierEngine prices the put under continuous
+        // monitoring.
+        const auto assetLeg =
+            flat.process->x0() * flat.process->dividendYield()->discount(flat.exerciseDate);
+        auto downOutPut = BarrierOption(
+            Barrier::DownOut, flat.optionData.barrier, 0.0,
+            ext::make_shared<PlainVanillaPayoff>(Option::Put, flat.optionData.bonusLevel),
+            ext::make_shared<EuropeanExercise>(flat.exerciseDate));
+        downOutPut.setPricingEngine(ext::make_shared<AnalyticBarrierEngine>(flat.process));
+
+        // Exact on purpose: the engine prices these options in this order. Every other engine
+        // is checked against this one, so here is where those checks reach QuantLib's closed
+        // form.
+        BOOST_CHECK_EQUAL(assetLeg + downOutPut.NPV(), npv);
+
+        // AnalyticBinaryBarrierEngine (Haug, "The complete guide to option pricing formulas",
+        // 2nd ed., p. 176 ff.) prices a cash-or-nothing payoff paid at expiry under continuous
+        // monitoring. Its calculate() takes an AmericanExercise with payoffAtExpiry = true
+        // whose first date is at or before the volatility's reference date, so the exercise
+        // starts today. Paying 1 at expiry, the down-and-in call and put struck at the bonus
+        // level together pay 1 iff the barrier was touched, and the down-and-out put, the
+        // engine's "strike >= barrier" branch, pays 1 iff it never was and S_T < B. The curve
+        // is deterministic, so E[D(T) 1_A] = D(T) P(A) and each price over D(T) is the
+        // probability of its event.
+        const auto exercise =
+            ext::make_shared<AmericanExercise>(flat.today, flat.exerciseDate, true);
+        const auto cashOrNothingPrice = [&](Barrier::Type barrierType, Option::Type optionType) {
+            auto option = BarrierOption(
+                barrierType, flat.optionData.barrier, 0.0,
+                ext::make_shared<CashOrNothingPayoff>(optionType, flat.optionData.bonusLevel, 1.0),
+                exercise);
+            option.setPricingEngine(ext::make_shared<AnalyticBinaryBarrierEngine>(flat.process));
+            return option.NPV();
+        };
+        const auto discount = flat.process->riskFreeRate()->discount(flat.exerciseDate);
+        const auto downInHit = (cashOrNothingPrice(Barrier::DownIn, Option::Call) +
+                                cashOrNothingPrice(Barrier::DownIn, Option::Put)) /
+                               discount;
+        const auto downOutBonus = cashOrNothingPrice(Barrier::DownOut, Option::Put) / discount;
+
+        // The engine's bonus probability is the same down-and-out put, the same double. Its
+        // hit probability is one minus the down-and-out pair; each in-out pair pays one unit
+        // iff S_T ends on its side of the bonus level, so the two agree by parity, up to the
+        // rounding of AnalyticBinaryBarrierEngine's two branches: measured 6.6e-17 absolute.
+        // The bound is a hundred roundings of a probability near one, room for another
+        // platform's erf.
+        BOOST_CHECK_EQUAL(downOutBonus, probabilities.bonus);
+        BOOST_TEST_MESSAGE("hit " << probabilities.hit << ", in-out parity residual "
+                                  << std::fabs(probabilities.hit - downInHit));
+        BOOST_CHECK_SMALL(probabilities.hit - downInHit, 1e-14);
+    }
+
+    BOOST_AUTO_TEST_CASE(
+        testBonusClassicOptionAnalyticLimits) { // NOLINT(misc-use-internal-linkage):
+                                                // the struct is the macro's
+        BOOST_TEST_MESSAGE("BonusClassicOption analytic engine with the barrier far below the "
+                           "spot and with the bonus level below the barrier");
+
+        const auto flat = makeFlatCase();
+        const auto engine = ext::make_shared<AnalyticBonusClassicEngine>(flat.process, true);
+        const auto assetLeg =
+            flat.process->x0() * flat.process->dividendYield()->discount(flat.exerciseDate);
+
+        {
+            // At barrier 1 the log-spot has to fall by ln(100) = 4.6 against
+            // sigma sqrt(T) = 0.13 over the 5M, a probability far below the rounding of the
+            // value, so the put no longer knocks out and the certificate is the asset plus a
+            // vanilla put struck at the bonus level, the bonus paid iff S_T < B.
+            // AnalyticEuropeanEngine prices both from the Black-Scholes formula, which shares
+            // no code with the barrier engines.
+            auto optionData = flat.optionData;
+            optionData.barrier = 1.0;
+            const auto option = RKE::Common::makeBonusClassicOption(optionData, flat.today);
+            option->setPricingEngine(engine);
+            const auto npv = option->NPV();
+            const auto probabilities = engineProbabilities(*option);
+
+            const auto exercise = ext::make_shared<EuropeanExercise>(flat.exerciseDate);
+            const auto europeanEngine = ext::make_shared<AnalyticEuropeanEngine>(flat.process);
+            auto put = VanillaOption(
+                ext::make_shared<PlainVanillaPayoff>(Option::Put, optionData.bonusLevel), exercise);
+            put.setPricingEngine(europeanEngine);
+            auto digitalPut = VanillaOption(
+                ext::make_shared<CashOrNothingPayoff>(Option::Put, optionData.bonusLevel, 1.0),
+                exercise);
+            digitalPut.setPricingEngine(europeanEngine);
+            const auto expected = assetLeg + put.NPV();
+            const auto expectedBonus =
+                digitalPut.NPV() / flat.process->riskFreeRate()->discount(flat.exerciseDate);
+
+            // Measured 1.2e-16 relative for the value, 0.0 absolute for hit and 1.1e-16 for
+            // bonus: rounding. Each bound is a hundred roundings, as above.
+            BOOST_TEST_MESSAGE("barrier 1: " << npv << ", relative residual "
+                                             << std::fabs(npv - expected) / expected << "; hit "
+                                             << probabilities.hit << ", bonus residual "
+                                             << std::fabs(probabilities.bonus - expectedBonus));
+            BOOST_CHECK_CLOSE_FRACTION(expected, npv, 1e-14);
+            BOOST_CHECK_SMALL(probabilities.hit, 1e-14);
+            BOOST_CHECK_SMALL(probabilities.bonus - expectedBonus, 1e-14);
+        }
+
+        {
+            // With the bonus level below the barrier, S_T < B means the barrier was touched, so
+            // the put never pays: AnalyticBarrierEngine takes the branch for a strike below the
+            // barrier, which returns the rebate term alone, zero here, and the value is the
+            // asset leg exactly.
+            auto optionData = flat.optionData;
+            optionData.bonusLevel = 60.0;
+            const auto option = RKE::Common::makeBonusClassicOption(optionData, flat.today);
+            option->setPricingEngine(engine);
+            const auto npv = option->NPV();
+            const auto probabilities = engineProbabilities(*option);
+
+            BOOST_TEST_MESSAGE("bonus level 60: " << npv << ", asset leg " << assetLeg << "; bonus "
+                                                  << probabilities.bonus);
+            BOOST_CHECK_EQUAL(assetLeg, npv);
+            // Measured 0.0: the binary engine's down-and-out put below the barrier.
+            BOOST_CHECK_SMALL(probabilities.bonus, 1e-14);
+        }
+    }
+
+    BOOST_AUTO_TEST_CASE(
+        testBonusClassicOptionAnalyticGuards) { // NOLINT(misc-use-internal-linkage):
+                                                // the struct is the macro's
+        BOOST_TEST_MESSAGE("BonusClassicOption analytic engine refuses a volatility that is not "
+                           "constant and a spot on the barrier");
+
+        const auto flat = makeFlatCase();
+        const auto smile = makeSmileCase(false);
+
+        // QuantLib's engines would read each at (T, B) and price it as a flat market.
+        BOOST_CHECK_THROW(static_cast<void>(AnalyticBonusClassicEngine(smile.process)), Error);
+        BOOST_CHECK_THROW(static_cast<void>(AnalyticBonusClassicEngine(
+                              RKE::Common::varianceCurveProcess(flat.today))),
+                          Error);
+        BOOST_CHECK_THROW(
+            static_cast<void>(AnalyticBonusClassicEngine(externalSmileProcess(smile))), Error);
+        BOOST_CHECK_NO_THROW(static_cast<void>(AnalyticBonusClassicEngine(flat.process)));
+        BOOST_CHECK_NO_THROW(static_cast<void>(
+            AnalyticBonusClassicEngine(RKE::Common::externalLocalVolProcess(flat.today))));
+
+        // A spot on the barrier counts as touched, as in every engine of the certificate;
+        // QuantLib's strict test alone would price it.
+        auto optionData = flat.optionData;
+        optionData.barrier = flat.marketData.spot;
+        const auto option = RKE::Common::makeBonusClassicOption(optionData, flat.today);
+        option->setPricingEngine(ext::make_shared<AnalyticBonusClassicEngine>(flat.process));
+        BOOST_CHECK_THROW(static_cast<void>(option->NPV()), Error);
     }
 
     BOOST_AUTO_TEST_SUITE_END()

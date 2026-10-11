@@ -70,8 +70,9 @@ namespace RKE::QL::Ext {
         and how often is up to the pricing engine.
 
         \warning no default engine is set; see MCBonusClassicEngine,
-                 FdBlackScholesBonusClassicEngine and
-                 BinomialBonusClassicEngine.
+                 FdBlackScholesBonusClassicEngine,
+                 BinomialBonusClassicEngine and
+                 AnalyticBonusClassicEngine.
 
         \ingroup instruments
 

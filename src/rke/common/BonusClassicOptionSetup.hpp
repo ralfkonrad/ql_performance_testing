@@ -5,6 +5,7 @@
 #define BONUSCLASSICOPTIONSETUP_HPP
 
 #include <rke/ql/ext/instruments/BonusClassicOption.hpp>
+#include <rke/ql/ext/pricingengines/bonusclassic/BarrierMonitoring.hpp>
 #include <ql/instrument.hpp>
 #include <ql/pricingengine.hpp>
 #include <ql/processes/blackscholesprocess.hpp>
@@ -41,8 +42,10 @@ namespace RKE::Common {
     // header warns about, a strike node of the surface on the barrier. Binomial is
     // BinomialBonusClassicEngine<QuantLib::CoxRossRubinstein> on treeTimeSteps with Boyle-Lau,
     // monitoring on every step, so discretely only; it flattens the volatility, so it prices
-    // the flat market only.
-    enum class Engine : std::uint8_t { MonteCarlo, FiniteDifference, Binomial };
+    // the flat market only. Analytic is AnalyticBonusClassicEngine, the closed form of the
+    // continuously monitored certificate under a constant volatility, so it prices the flat
+    // market under continuous monitoring only.
+    enum class Engine : std::uint8_t { MonteCarlo, FiniteDifference, Binomial, Analytic };
 
     // The reference date every test, benchmark and profile prices as of.
     [[nodiscard]] inline QuantLib::Date evaluationDate() {
@@ -127,15 +130,16 @@ namespace RKE::Common {
     // The step count QuantLib's own barrier tests price Haug's table with, before Boyle-Lau.
     inline constexpr QuantLib::Size treeTimeSteps = 400;
 
-    // Sets the evaluation date to 22 Jun 2025 and prices with the engine on the market;
-    // isBiased selects discrete monitoring, otherwise continuous. pathGeneration and samples
-    // are read by MonteCarlo only; a smoke test passes fewer samples than productionSamples,
-    // on the same time grid. calculateProbabilities switches the barrier-hit and bonus
-    // probabilities on in FiniteDifference and Binomial, which MonteCarlo reports always; the
-    // benchmarks and profiles leave it off, so they keep measuring the price alone. QL_REQUIRE
-    // rejects Binomial off the flat market and under continuous monitoring.
+    // Sets the evaluation date to 22 Jun 2025 and prices with the engine on the market, the
+    // barrier monitored as monitoring says. pathGeneration and samples are read by MonteCarlo
+    // only; a smoke test passes fewer samples than productionSamples, on the same time grid.
+    // calculateProbabilities switches the barrier-hit and bonus probabilities on in
+    // FiniteDifference, Binomial and Analytic, which MonteCarlo reports always; the benchmarks
+    // and profiles leave it off, so they keep measuring the price alone. QL_REQUIRE rejects
+    // Binomial and Analytic off the flat market, Binomial under continuous monitoring and
+    // Analytic under discrete.
     [[nodiscard]] BonusClassicOptionSetup
-    makeBonusClassicOptionSetup(bool isBiased,
+    makeBonusClassicOptionSetup(RKE::QL::Ext::BarrierMonitoring monitoring,
                                 PathGeneration pathGeneration = PathGeneration::CachedStep,
                                 Market market = Market::Flat,
                                 QuantLib::Size samples = productionSamples,
@@ -144,9 +148,9 @@ namespace RKE::Common {
 
     // The steps of the engine's monitoring grid: the finite-difference engine's discrete grid,
     // or the lattice after Boyle-Lau. Null<Size>() where there is nothing to report, i.e. under
-    // continuous monitoring and for the Monte-Carlo engine, whose grid is monitoringStepsPerYear
-    // by construction. The engines build the grid from the instrument's arguments, so the setup
-    // has to have priced once.
+    // continuous monitoring, the analytic engine's only mode, and for the Monte-Carlo engine,
+    // whose grid is monitoringStepsPerYear by construction. The engines build the grid from the
+    // instrument's arguments, so the setup has to have priced once.
     [[nodiscard]] QuantLib::Size monitoringSteps(const BonusClassicOptionSetup& setup);
 
     // The measured work. recalculate() is the point: NPV() alone returns the cached value, so a

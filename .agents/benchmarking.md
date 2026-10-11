@@ -128,7 +128,7 @@ production-sized workload can take a minute. Shrink a size the code path does no
 depend on and keep the rest: `rke_benchmark_bonusclassicoption` takes `--samples`,
 and its `add_test` passes 256 paths instead of 2^16 on the same time grid. Only the
 Monte-Carlo registrations read it: the `Fd*` and `Binomial` ones price in
-milliseconds at production size. A binary with such a flag needs its own `main`:
+milliseconds at production size, `Analytic` in microseconds. A binary with such a flag needs its own `main`:
 `benchmark::Initialize` consumes the `--benchmark_*` flags, and CLI11 parses what
 is left.
 

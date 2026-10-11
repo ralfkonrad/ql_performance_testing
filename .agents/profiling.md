@@ -30,7 +30,7 @@ OUT=build/profile/prof/$(basename "$PROG") && mkdir -p "$OUT"
 ```
 
 `rke_profile_bonusclassicoption` takes `[discrete|continuous] [iterations]
-[--engine mc|fd|binomial] [--path-generation cached|uncached]
+[--engine mc|fd|binomial|analytic] [--path-generation cached|uncached]
 [--market flat|smile-bilinear|smile-bicubic] [--samples=<paths per pricing>]`, defaulting
 to `discrete`, `10`, `mc`, `cached`, `flat` and 2^16 paths.
 `cached` is the step cache of the market's branch, `CachedStepSingleVariate` on `flat`
@@ -55,10 +55,12 @@ otherwise, and under the local volatility on the smiles, where every time step a
 `smile-bilinear`, a few hundred on `smile-bicubic`. `binomial` is
 `BinomialBonusClassicEngine<CoxRossRubinstein>` at `treeTimeSteps` with Boyle-Lau on,
 which monitors on every step and flattens the volatility, so it refuses `continuous`
-and prices `flat` only. Both ignore `--path-generation` and `--samples`; the result line
-prints the grid they priced on in place of the path count, the lattice after Boyle-Lau
-in particular. A flat pricing takes milliseconds, so nothing needs shrinking for
-callgrind.
+and prices `flat` only. `analytic` is `AnalyticBonusClassicEngine`, the closed form,
+which needs a constant volatility and monitors continuously, so it refuses `discrete`
+and prices `flat` only. All three ignore `--path-generation` and `--samples`; the
+result line prints the grid `fd` and `binomial` priced on in place of the path count,
+the lattice after Boyle-Lau in particular. A flat pricing takes milliseconds,
+`analytic` microseconds, so nothing needs shrinking for callgrind.
 
 Every recipe ends in a text file, so an agent reads the result rather than a
 picture.
