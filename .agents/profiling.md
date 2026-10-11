@@ -29,10 +29,12 @@ PROG=./build/profile/src/rke/profile/<workload>/rke_profile_<workload>
 OUT=build/profile/prof/$(basename "$PROG") && mkdir -p "$OUT"
 ```
 
-`rke_profile_bonusclassicoption` takes `[discrete|continuous] [iterations]
-[--engine mc|fd|binomial|analytic] [--path-generation cached|uncached]
-[--market flat|smile-bilinear|smile-bicubic] [--samples=<paths per pricing>]`, defaulting
-to `discrete`, `10`, `mc`, `cached`, `flat` and 2^16 paths.
+`rke_profile_bonusclassicoption` takes `--monitoring discrete|continuous`,
+`--iterations <pricings>`, `--engine mc|fd|binomial|analytic` and
+`--market flat|smile-bilinear|smile-bicubic`, and under `mc` also
+`--path-generation cached|uncached` and `--samples=<paths per pricing>`. None has a
+default: the first four are always required, the last two under `mc`, and the other engines
+refuse them.
 `cached` is the step cache of the market's branch, `CachedStepSingleVariate` on `flat`
 and `LocalVolStepSingleVariate` on the smiles; `uncached` is `QuantLib::SingleVariate`,
 which asks the process for every step, the baseline the step cache is measured against. It
@@ -41,7 +43,12 @@ iteration reprices the same low-discrepancy paths, and the same under either pat
 generation, except on the smile markets where the compiler contracts to FMAs, as on arm64:
 there the two differ by up to 2e-6 relative. The setup is sized like a production run, 1Y with daily steps and 2^16
 paths, so this is not the test suite's 5M regression lock. The recipes below
-run it with the defaults; append arguments after `"$PROG"` for anything else.
+take the workload from `ARGS` and add the iteration count; this one is that production
+run:
+
+```bash
+ARGS=(--monitoring discrete --engine mc --market flat --path-generation cached --samples=65536)
+```
 
 The smile markets take the Euler branch through `LocalVolSurface`. An uncached
 `smile-bicubic` repricing runs about a minute natively, far too long for callgrind at
@@ -57,7 +64,7 @@ otherwise, and under the local volatility on the smiles, where every time step a
 which monitors on every step and flattens the volatility, so it refuses `continuous`
 and prices `flat` only. `analytic` is `AnalyticBonusClassicEngine`, the closed form,
 which needs a constant volatility and monitors continuously, so it refuses `discrete`
-and prices `flat` only. All three ignore `--path-generation` and `--samples`; the
+and prices `flat` only. All three refuse `--path-generation` and `--samples`; the
 result line prints the grid `fd` and `binomial` priced on in place of the path count,
 the lattice after Boyle-Lau in particular. A flat pricing takes milliseconds,
 `analytic` microseconds, so nothing needs shrinking for callgrind.
@@ -69,7 +76,8 @@ picture.
 
 ```bash
 # sampled CPU time: flat hotspots, call graph, folded stacks
-perf record -e cpu-clock:u -F 999 --call-graph fp -o "$OUT/perf.data" -- "$PROG"
+perf record -e cpu-clock:u -F 999 --call-graph fp -o "$OUT/perf.data" \
+    -- "$PROG" "${ARGS[@]}" --iterations 10
 perf report --no-inline -i "$OUT/perf.data" --stdio --no-children -g none \
     --sort symbol --percent-limit 1 > "$OUT/flat.txt"
 perf report --no-inline -i "$OUT/perf.data" --stdio --no-children \
@@ -89,23 +97,27 @@ call path.
 
 valgrind simulates the CPU and runs the whole executable that way, far slower
 than natively, so size the workload for it: callgrind counts instructions
-exactly, so one iteration (`"$PROG" discrete 1`) is enough.
+exactly, so one iteration (`--iterations 1`) is enough.
 
 ```bash
 # exact instruction counts per function, inclusive of callees
-valgrind --tool=callgrind --callgrind-out-file="$OUT/callgrind.out" "$PROG"
+valgrind --tool=callgrind --callgrind-out-file="$OUT/callgrind.out" \
+    "$PROG" "${ARGS[@]}" --iterations 1
 callgrind_annotate --inclusive=yes "$OUT/callgrind.out" > "$OUT/callgrind.txt"
 
 # simulated cache misses
-valgrind --tool=cachegrind --cache-sim=yes --cachegrind-out-file="$OUT/cachegrind.out" "$PROG"
+valgrind --tool=cachegrind --cache-sim=yes --cachegrind-out-file="$OUT/cachegrind.out" \
+    "$PROG" "${ARGS[@]}" --iterations 1
 cg_annotate "$OUT/cachegrind.out" > "$OUT/cachegrind.txt"
 
 # allocation sites (tbk: blocks, tb: bytes, fs: indices into ftbl), and heap over time
-valgrind --tool=dhat --dhat-out-file="$OUT/dhat.json" "$PROG"
+valgrind --tool=dhat --dhat-out-file="$OUT/dhat.json" \
+    "$PROG" "${ARGS[@]}" --iterations 1
 jq -r '.ftbl as $f | .pps | sort_by(-.tbk) | .[:10][]
        | "\(.tbk) blocks, \(.tb) bytes\n  " + ([.fs[:12][] | $f[.]] | join("\n  "))' \
     "$OUT/dhat.json" > "$OUT/dhat.txt"
-valgrind --tool=massif --massif-out-file="$OUT/massif.out" "$PROG"
+valgrind --tool=massif --massif-out-file="$OUT/massif.out" \
+    "$PROG" "${ARGS[@]}" --iterations 1
 ms_print "$OUT/massif.out" > "$OUT/massif.txt"
 ```
 

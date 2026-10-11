@@ -116,8 +116,10 @@ CTest knows `quantlib_test_suite`, `rke_testsuite`, one
 per profile executable, one single-iteration smoke run per mode, path generation and
 engine, such as `rke_profile_bonusclassicoption_discrete`,
 `rke_profile_bonusclassicoption_discrete_uncached` and
-`rke_profile_bonusclassicoption_fd_continuous`, and one smoke run per example
-executable, `rke_example_bonusclassicoption`.
+`rke_profile_bonusclassicoption_fd_continuous`, plus
+`rke_profile_bonusclassicoption_mc_without_samples` and
+`rke_profile_bonusclassicoption_fd_with_path_generation`, which pass on the refusal's
+message, and one smoke run per example executable, `rke_example_bonusclassicoption`.
 The first is QuantLib's full suite and dominates the runtime, so the hidden
 `default` test preset carries `filter.include.name` `^rke_` and both visible
 presets inherit it:

@@ -30,10 +30,10 @@ namespace RKE::Benchmark {
         void benchmarkBonusClassicOption(benchmark::State& state,
                                          BarrierMonitoring monitoring,
                                          PathGeneration pathGeneration,
-                                         Market market = Market::Flat,
-                                         Engine engine = Engine::MonteCarlo) {
-            const auto setup =
-                makeBonusClassicOptionSetup(monitoring, pathGeneration, market, samples, engine);
+                                         Market market,
+                                         Engine engine) {
+            const auto setup = makeBonusClassicOptionSetup(
+                monitoring, pathGeneration, market, samples, engine, ProbabilityCalculation::Off);
 
             for (const auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
                 auto npv = reprice(*setup.option);
@@ -43,7 +43,8 @@ namespace RKE::Benchmark {
 
         void BM_BonusClassicOptionMC(benchmark::State& state) {
             benchmarkBonusClassicOption(state, BarrierMonitoring::Discrete,
-                                        PathGeneration::CachedStep);
+                                        PathGeneration::CachedStep, Market::Flat,
+                                        Engine::MonteCarlo);
         }
 
         BENCHMARK(BM_BonusClassicOptionMC)
@@ -58,7 +59,8 @@ namespace RKE::Benchmark {
         // call, a logarithm and an exponential per step of every surviving path.
         void BM_BonusClassicOptionMCContinuous(benchmark::State& state) {
             benchmarkBonusClassicOption(state, BarrierMonitoring::Continuous,
-                                        PathGeneration::CachedStep);
+                                        PathGeneration::CachedStep, Market::Flat,
+                                        Engine::MonteCarlo);
         }
 
         BENCHMARK(BM_BonusClassicOptionMCContinuous)
@@ -72,7 +74,7 @@ namespace RKE::Benchmark {
         // measured against. Same paths, same NPVs.
         void BM_BonusClassicOptionMCUncached(benchmark::State& state) {
             benchmarkBonusClassicOption(state, BarrierMonitoring::Discrete,
-                                        PathGeneration::Uncached);
+                                        PathGeneration::Uncached, Market::Flat, Engine::MonteCarlo);
         }
 
         BENCHMARK(BM_BonusClassicOptionMCUncached)
@@ -82,7 +84,7 @@ namespace RKE::Benchmark {
 
         void BM_BonusClassicOptionMCContinuousUncached(benchmark::State& state) {
             benchmarkBonusClassicOption(state, BarrierMonitoring::Continuous,
-                                        PathGeneration::Uncached);
+                                        PathGeneration::Uncached, Market::Flat, Engine::MonteCarlo);
         }
 
         BENCHMARK(BM_BonusClassicOptionMCContinuousUncached)
@@ -95,7 +97,8 @@ namespace RKE::Benchmark {
         // a local volatility, so fewer iterations are pinned.
         void BM_BonusClassicOptionMCSmileBilinear(benchmark::State& state) {
             benchmarkBonusClassicOption(state, BarrierMonitoring::Discrete,
-                                        PathGeneration::CachedStep, Market::SmileBilinear);
+                                        PathGeneration::CachedStep, Market::SmileBilinear,
+                                        Engine::MonteCarlo);
         }
 
         BENCHMARK(BM_BonusClassicOptionMCSmileBilinear)
@@ -105,7 +108,8 @@ namespace RKE::Benchmark {
 
         void BM_BonusClassicOptionMCSmileBilinearContinuous(benchmark::State& state) {
             benchmarkBonusClassicOption(state, BarrierMonitoring::Continuous,
-                                        PathGeneration::CachedStep, Market::SmileBilinear);
+                                        PathGeneration::CachedStep, Market::SmileBilinear,
+                                        Engine::MonteCarlo);
         }
 
         BENCHMARK(BM_BonusClassicOptionMCSmileBilinearContinuous)
@@ -115,7 +119,8 @@ namespace RKE::Benchmark {
 
         void BM_BonusClassicOptionMCSmileBilinearUncached(benchmark::State& state) {
             benchmarkBonusClassicOption(state, BarrierMonitoring::Discrete,
-                                        PathGeneration::Uncached, Market::SmileBilinear);
+                                        PathGeneration::Uncached, Market::SmileBilinear,
+                                        Engine::MonteCarlo);
         }
 
         BENCHMARK(BM_BonusClassicOptionMCSmileBilinearUncached)
@@ -125,7 +130,8 @@ namespace RKE::Benchmark {
 
         void BM_BonusClassicOptionMCSmileBilinearContinuousUncached(benchmark::State& state) {
             benchmarkBonusClassicOption(state, BarrierMonitoring::Continuous,
-                                        PathGeneration::Uncached, Market::SmileBilinear);
+                                        PathGeneration::Uncached, Market::SmileBilinear,
+                                        Engine::MonteCarlo);
         }
 
         BENCHMARK(BM_BonusClassicOptionMCSmileBilinearContinuousUncached)
@@ -137,7 +143,8 @@ namespace RKE::Benchmark {
         // repricing runs up to a minute, so a single iteration.
         void BM_BonusClassicOptionMCSmileBicubic(benchmark::State& state) {
             benchmarkBonusClassicOption(state, BarrierMonitoring::Discrete,
-                                        PathGeneration::CachedStep, Market::SmileBicubic);
+                                        PathGeneration::CachedStep, Market::SmileBicubic,
+                                        Engine::MonteCarlo);
         }
 
         BENCHMARK(BM_BonusClassicOptionMCSmileBicubic)
@@ -147,7 +154,8 @@ namespace RKE::Benchmark {
 
         void BM_BonusClassicOptionMCSmileBicubicContinuous(benchmark::State& state) {
             benchmarkBonusClassicOption(state, BarrierMonitoring::Continuous,
-                                        PathGeneration::CachedStep, Market::SmileBicubic);
+                                        PathGeneration::CachedStep, Market::SmileBicubic,
+                                        Engine::MonteCarlo);
         }
 
         BENCHMARK(BM_BonusClassicOptionMCSmileBicubicContinuous)
@@ -157,7 +165,8 @@ namespace RKE::Benchmark {
 
         void BM_BonusClassicOptionMCSmileBicubicUncached(benchmark::State& state) {
             benchmarkBonusClassicOption(state, BarrierMonitoring::Discrete,
-                                        PathGeneration::Uncached, Market::SmileBicubic);
+                                        PathGeneration::Uncached, Market::SmileBicubic,
+                                        Engine::MonteCarlo);
         }
 
         BENCHMARK(BM_BonusClassicOptionMCSmileBicubicUncached)
@@ -167,7 +176,8 @@ namespace RKE::Benchmark {
 
         void BM_BonusClassicOptionMCSmileBicubicContinuousUncached(benchmark::State& state) {
             benchmarkBonusClassicOption(state, BarrierMonitoring::Continuous,
-                                        PathGeneration::Uncached, Market::SmileBicubic);
+                                        PathGeneration::Uncached, Market::SmileBicubic,
+                                        Engine::MonteCarlo);
         }
 
         BENCHMARK(BM_BonusClassicOptionMCSmileBicubicContinuousUncached)

@@ -64,13 +64,15 @@ namespace RKE::Common {
         }
     }
 
-    BonusClassicOptionSetup makeBonusClassicOptionSetup(BarrierMonitoring monitoring,
-                                                        PathGeneration pathGeneration,
-                                                        Market market,
-                                                        Size samples,
-                                                        Engine engine,
-                                                        bool calculateProbabilities) {
+    BonusClassicOptionSetup
+    makeBonusClassicOptionSetup(BarrierMonitoring monitoring,
+                                PathGeneration pathGeneration,
+                                Market market,
+                                Size samples,
+                                Engine engine,
+                                ProbabilityCalculation probabilityCalculation) {
         requireSupported(monitoring, market, engine);
+        const auto calculateProbabilities = probabilityCalculation == ProbabilityCalculation::On;
 
         const auto option_data = OptionData();
         const auto market_data = FlatMarketData();
