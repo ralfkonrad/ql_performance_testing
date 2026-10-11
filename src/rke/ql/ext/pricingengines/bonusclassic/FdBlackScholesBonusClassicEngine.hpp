@@ -109,13 +109,13 @@ namespace RKE::QL::Ext {
           uniform above it.
         - any other value: on the points after \f$ t = 0 \f$ of timeGrid(),
           maturity included, the grid MCBonusClassicEngine monitors with
-          isBiased = true and the same timeStepsPerYear. The grid spans
-          QuantLib::FdmBlackScholesMesher's range around the bonus level,
-          concentrated at the barrier and the bonus level, with one node
-          exactly on \f$ \ln H \f$. FdmBonusClassicKnockOutCondition knocks
-          the certificate out on each monitoring time before maturity, and
-          the cell-averaged payoff at maturity. Between monitoring times the
-          whole grid evolves under the PDE.
+          BarrierMonitoring::Discrete and the same timeStepsPerYear. The
+          grid spans QuantLib::FdmBlackScholesMesher's range around the
+          bonus level, concentrated at the barrier and the bonus level, with
+          one node exactly on \f$ \ln H \f$. FdmBonusClassicKnockOutCondition
+          knocks the certificate out on each monitoring time before maturity,
+          and the cell-averaged payoff at maturity. Between monitoring times
+          the whole grid evolves under the PDE.
 
         Time is the process's QuantLib::GeneralizedBlackScholesProcess::time(),
         i.e. the day counter of its risk-free curve. The PDE discounts on the
@@ -214,7 +214,7 @@ namespace RKE::QL::Ext {
         \test the discretely monitored value is checked against the same
               replication at the barrier corrected after Broadie, Glasserman
               and Kou (1997), and against MCBonusClassicEngine with
-              isBiased = true on the same monitoring grid.
+              BarrierMonitoring::Discrete on the same monitoring grid.
         \test both values are regression-locked for a fixed grid.
         \test the continuously monitored value is checked to lie below the
               discretely monitored one.
@@ -225,8 +225,8 @@ namespace RKE::QL::Ext {
               monitored ones at the barrier itself and the discretely
               monitored ones at the Broadie-Glasserman-Kou shifted barrier.
         \test the discretely monitored probabilities are checked against
-              MCBonusClassicEngine with isBiased = true on the same 42-step
-              monitoring grid.
+              MCBonusClassicEngine with BarrierMonitoring::Discrete on the
+              same 42-step monitoring grid.
         \test the default engine reports neither key, and the price is the
               same double with and without the probabilities.
         \test with localVol = true on the flat market the price and both
@@ -255,7 +255,7 @@ namespace RKE::QL::Ext {
                                          max(floor(monitoringStepsPerYear * T), 1)
                                          equal steps up to maturity, as
                                          MCBonusClassicEngine with
-                                         isBiased = true
+                                         BarrierMonitoring::Discrete
             \param tGrid                 time steps of the rollback
             \param xGrid                 nodes of the log-spot grid
             \param dampingSteps          implicit Euler steps after maturity

@@ -29,6 +29,7 @@
 
 using namespace RKE::Common;
 using namespace QuantLib;
+using RKE::QL::Ext::BarrierMonitoring;
 
 namespace RKE::Profile {
     namespace {
@@ -45,9 +46,9 @@ namespace RKE::Profile {
         // up, so a name accepted here cannot mean something else there. Function-local, since a
         // namespace-scope map's initialization could throw before main().
         struct Tables {
-            std::map<std::string, bool> monitorings = {
-                {"discrete", true},
-                {"continuous", false},
+            std::map<std::string, BarrierMonitoring> monitorings = {
+                {"discrete", BarrierMonitoring::Discrete},
+                {"continuous", BarrierMonitoring::Continuous},
             };
             std::map<std::string, Engine> engines = {
                 {"mc", Engine::MonteCarlo},

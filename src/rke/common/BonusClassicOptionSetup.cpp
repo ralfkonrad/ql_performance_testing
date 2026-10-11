@@ -103,16 +103,16 @@ namespace RKE::Common {
         makeEngine(const ext::shared_ptr<GeneralizedBlackScholesProcess>& process,
                    Size timeStepsPerYear,
                    Size samples,
-                   bool isBiased) {
+                   BarrierMonitoring monitoring) {
             // maxSamples is McSimulation's own no-bound default; samples + 1 would wrap for the
             // largest count the --samples options admit.
             return ext::make_shared<MCBonusClassicEngine<LowDiscrepancyJoeKuoD7, Statistics, MC>>(
-                process, timeStepsPerYear, samples, QL_MAX_INTEGER, Null<Real>(), isBiased, true,
+                process, timeStepsPerYear, samples, QL_MAX_INTEGER, Null<Real>(), monitoring, true,
                 42);
         }
     }
 
-    BonusClassicOptionSetup makeBonusClassicOptionSetup(bool isBiased,
+    BonusClassicOptionSetup makeBonusClassicOptionSetup(BarrierMonitoring monitoring,
                                                         PathGeneration pathGeneration,
                                                         Market market,
                                                         Size samples,
@@ -121,7 +121,7 @@ namespace RKE::Common {
         QL_REQUIRE(engine != Engine::Binomial || market == Market::Flat,
                    "the binomial engine flattens the volatility, so it prices the flat market "
                    "only");
-        QL_REQUIRE(engine != Engine::Binomial || isBiased,
+        QL_REQUIRE(engine != Engine::Binomial || monitoring == BarrierMonitoring::Discrete,
                    "the binomial engine monitors on every step, never continuously");
 
         const auto option_data = OptionData();
@@ -142,8 +142,10 @@ namespace RKE::Common {
                 // them. The smiles take the local volatility, the surface the Monte-Carlo
                 // engine steps through; the engine refuses them without it.
                 return ext::make_shared<FdBlackScholesBonusClassicEngine>(
-                    process, isBiased ? monitoringStepsPerYear : Null<Size>(), fdTimeGrid,
-                    fdSpaceGrid, 0, FdmSchemeDesc::TrBDF2(), calculateProbabilities,
+                    process,
+                    monitoring == BarrierMonitoring::Discrete ? monitoringStepsPerYear :
+                                                                Null<Size>(),
+                    fdTimeGrid, fdSpaceGrid, 0, FdmSchemeDesc::TrBDF2(), calculateProbabilities,
                     market != Market::Flat);
             }
             if (engine == Engine::Binomial) {
@@ -159,13 +161,13 @@ namespace RKE::Common {
             // maxSamples never applies. The grid is a production run's whatever the path count.
             if (pathGeneration == PathGeneration::Uncached) {
                 return makeEngine<SingleVariate>(process, monitoringStepsPerYear, samples,
-                                                 isBiased);
+                                                 monitoring);
             }
             return market == Market::Flat ?
                        makeEngine<CachedStepSingleVariate>(process, monitoringStepsPerYear, samples,
-                                                           isBiased) :
+                                                           monitoring) :
                        makeEngine<LocalVolStepSingleVariate>(process, monitoringStepsPerYear,
-                                                             samples, isBiased);
+                                                             samples, monitoring);
         }();
 
         const auto bonusClassicOption = makeBonusClassicOption(option_data, today);

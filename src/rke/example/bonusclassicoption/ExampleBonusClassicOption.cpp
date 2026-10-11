@@ -38,6 +38,7 @@
 
 using namespace RKE::Common;
 using namespace QuantLib;
+using RKE::QL::Ext::BarrierMonitoring;
 
 namespace RKE::Example {
     namespace {
@@ -67,7 +68,7 @@ namespace RKE::Example {
         };
 
         struct Row {
-            bool isDiscrete;
+            BarrierMonitoring monitoring;
             Market market;
             Pricer pricer;
             Size paths;          // Null<Size>() off the Monte-Carlo engine.
@@ -164,8 +165,8 @@ namespace RKE::Example {
             };
         }
 
-        Valuation price(bool isDiscrete, Market market, Pricer pricer, Size samples) {
-            const auto setup = makeBonusClassicOptionSetup(isDiscrete, pricer.pathGeneration,
+        Valuation price(BarrierMonitoring monitoring, Market market, Pricer pricer, Size samples) {
+            const auto setup = makeBonusClassicOptionSetup(monitoring, pricer.pathGeneration,
                                                            market, samples, pricer.engine, true);
             return value(setup);
         }
@@ -184,8 +185,14 @@ namespace RKE::Example {
             QL_FAIL("unknown engine");
         }
 
-        std::string name(bool isDiscrete) {
-            return isDiscrete ? "discrete" : "continuous";
+        std::string name(BarrierMonitoring monitoring) {
+            switch (monitoring) {
+                case BarrierMonitoring::Discrete:
+                    return "discrete";
+                case BarrierMonitoring::Continuous:
+                    return "continuous";
+            }
+            QL_FAIL("unknown barrier monitoring");
         }
 
         std::string name(Market market) {
@@ -232,12 +239,12 @@ namespace RKE::Example {
             const Row* previous = nullptr;
             for (const auto& row : rows) {
                 const auto newMonitoring =
-                    previous == nullptr || previous->isDiscrete != row.isDiscrete;
+                    previous == nullptr || previous->monitoring != row.monitoring;
                 const auto newMarket = newMonitoring || previous->market != row.market;
                 previous = &row;
 
                 std::cout << std::left << std::setw(monitoringWidth)
-                          << (newMonitoring ? name(row.isDiscrete) : "") << std::setw(marketWidth)
+                          << (newMonitoring ? name(row.monitoring) : "") << std::setw(marketWidth)
                           << (newMarket ? name(row.market) : "") << std::setw(engineWidth)
                           << name(row.pricer) << std::right;
                 printCells(row);
@@ -315,20 +322,23 @@ namespace RKE::Example {
             Valuation discrete;
         };
 
-        Valuation
-        reference(const References& references, bool isDiscrete, Market market, Pricer pricer) {
+        Valuation reference(const References& references,
+                            BarrierMonitoring monitoring,
+                            Market market,
+                            Pricer pricer) {
             if (market != Market::Flat) {
                 return {Null<Real>(), {Null<Real>(), Null<Real>()}};
             }
-            if (isDiscrete && pricer.engine != Engine::Binomial) {
+            if (monitoring == BarrierMonitoring::Discrete && pricer.engine != Engine::Binomial) {
                 return references.discrete;
             }
             return references.continuous;
         }
 
         // The setup rejects the tree off the flat market and under continuous monitoring.
-        bool admits(bool isDiscrete, Market market, Pricer pricer) {
-            return pricer.engine != Engine::Binomial || (market == Market::Flat && isDiscrete);
+        bool admits(BarrierMonitoring monitoring, Market market, Pricer pricer) {
+            return pricer.engine != Engine::Binomial ||
+                   (market == Market::Flat && monitoring == BarrierMonitoring::Discrete);
         }
 
         // Every permutation the setup admits, in the table's order. The flat finite-difference
@@ -343,26 +353,28 @@ namespace RKE::Example {
                 {Engine::Binomial, PathGeneration::CachedStep},
             };
             auto rows = std::vector<Row>();
-            for (const bool isDiscrete : {true, false}) {
+            for (const auto monitoring :
+                 {BarrierMonitoring::Discrete, BarrierMonitoring::Continuous}) {
                 for (const auto market :
                      {Market::Flat, Market::SmileBilinear, Market::SmileBicubic}) {
                     for (const auto& pricer : pricers) {
-                        if (!admits(isDiscrete, market, pricer)) {
+                        if (!admits(monitoring, market, pricer)) {
                             continue;
                         }
                         const auto isMonteCarlo = pricer.engine == Engine::MonteCarlo;
                         const auto isFdDiscrete = pricer.engine == Engine::FiniteDifference &&
-                                                  isDiscrete && market == Market::Flat;
+                                                  monitoring == BarrierMonitoring::Discrete &&
+                                                  market == Market::Flat;
                         const auto samples =
                             market == Market::Flat ? productionSamples : smileSamples;
                         rows.push_back({
-                            isDiscrete,
+                            monitoring,
                             market,
                             pricer,
                             isMonteCarlo ? samples : Null<Size>(),
                             isFdDiscrete ? fdDiscreteValuation :
-                                           price(isDiscrete, market, pricer, samples),
-                            reference(references, isDiscrete, market, pricer),
+                                           price(monitoring, market, pricer, samples),
+                            reference(references, monitoring, market, pricer),
                         });
                     }
                 }
@@ -377,9 +389,9 @@ namespace RKE::Example {
             // The finite-difference engine under discrete monitoring goes first: its grid is
             // the one every discrete flat row monitors on, Monte Carlo's dates merged into the
             // rollback, so its step is the one the continuity correction takes.
-            const auto fdDiscrete =
-                makeBonusClassicOptionSetup(true, PathGeneration::CachedStep, Market::Flat,
-                                            productionSamples, Engine::FiniteDifference, true);
+            const auto fdDiscrete = makeBonusClassicOptionSetup(
+                BarrierMonitoring::Discrete, PathGeneration::CachedStep, Market::Flat,
+                productionSamples, Engine::FiniteDifference, true);
             const auto fdDiscreteValuation = value(fdDiscrete);
             const auto today = evaluationDate();
             const auto exerciseDate = fdDiscrete.option->exercise()->lastDate();

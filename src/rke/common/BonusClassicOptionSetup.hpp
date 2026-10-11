@@ -5,6 +5,7 @@
 #define BONUSCLASSICOPTIONSETUP_HPP
 
 #include <rke/ql/ext/instruments/BonusClassicOption.hpp>
+#include <rke/ql/ext/pricingengines/bonusclassic/BarrierMonitoring.hpp>
 #include <ql/instrument.hpp>
 #include <ql/pricingengine.hpp>
 #include <ql/processes/blackscholesprocess.hpp>
@@ -127,15 +128,15 @@ namespace RKE::Common {
     // The step count QuantLib's own barrier tests price Haug's table with, before Boyle-Lau.
     inline constexpr QuantLib::Size treeTimeSteps = 400;
 
-    // Sets the evaluation date to 22 Jun 2025 and prices with the engine on the market;
-    // isBiased selects discrete monitoring, otherwise continuous. pathGeneration and samples
-    // are read by MonteCarlo only; a smoke test passes fewer samples than productionSamples,
-    // on the same time grid. calculateProbabilities switches the barrier-hit and bonus
-    // probabilities on in FiniteDifference and Binomial, which MonteCarlo reports always; the
-    // benchmarks and profiles leave it off, so they keep measuring the price alone. QL_REQUIRE
-    // rejects Binomial off the flat market and under continuous monitoring.
+    // Sets the evaluation date to 22 Jun 2025 and prices with the engine on the market, the
+    // barrier monitored as monitoring says. pathGeneration and samples are read by MonteCarlo
+    // only; a smoke test passes fewer samples than productionSamples, on the same time grid.
+    // calculateProbabilities switches the barrier-hit and bonus probabilities on in
+    // FiniteDifference and Binomial, which MonteCarlo reports always; the benchmarks and profiles
+    // leave it off, so they keep measuring the price alone. QL_REQUIRE rejects Binomial off the
+    // flat market and under continuous monitoring.
     [[nodiscard]] BonusClassicOptionSetup
-    makeBonusClassicOptionSetup(bool isBiased,
+    makeBonusClassicOptionSetup(RKE::QL::Ext::BarrierMonitoring monitoring,
                                 PathGeneration pathGeneration = PathGeneration::CachedStep,
                                 Market market = Market::Flat,
                                 QuantLib::Size samples = productionSamples,

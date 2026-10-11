@@ -60,7 +60,8 @@ doubles. Then:
 - `QL_REQUIRE` in the constructor for every combination the engine does not
   implement, rather than silently pricing something else. Where a flag selects
   between implemented variants, `pathPricer()` picks the pricer from it, as the
-  existing engine does from `isBiased`, following `MCBarrierEngine`.
+  existing engine does from `BarrierMonitoring`, where `MCBarrierEngine` takes
+  `bool isBiased`.
 - `calculate()`: validate the state (`spot > 0.0`, barrier not already
   triggered), delegate to `McSimulation::calculate()` with the tolerance, sample
   count and sample cap, then set `results_.value` from the sample accumulator,
