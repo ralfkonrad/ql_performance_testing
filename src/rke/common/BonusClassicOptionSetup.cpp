@@ -12,7 +12,6 @@
 #include <ql/math/matrix.hpp>
 #include <ql/math/randomnumbers/rngtraits.hpp>
 #include <ql/math/randomnumbers/sobolrsg.hpp>
-#include <ql/math/statistics/statistics.hpp>
 #include <ql/methods/finitedifferences/solvers/fdmbackwardsolver.hpp>
 #include <ql/methods/lattices/binomialtree.hpp>
 #include <ql/methods/montecarlo/mctraits.hpp>
@@ -107,7 +106,7 @@ namespace RKE::Common {
                    BarrierMonitoring monitoring) {
             // maxSamples is McSimulation's own no-bound default; samples + 1 would wrap for the
             // largest count the --samples options admit.
-            return ext::make_shared<MCBonusClassicEngine<LowDiscrepancyJoeKuoD7, Statistics, MC>>(
+            return ext::make_shared<MCBonusClassicEngine<MC, LowDiscrepancyJoeKuoD7>>(
                 process, timeStepsPerYear, samples, QL_MAX_INTEGER, Null<Real>(), monitoring, true,
                 42);
         }

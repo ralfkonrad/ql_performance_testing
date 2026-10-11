@@ -82,16 +82,15 @@ namespace RKE::TestSuite {
             for (const auto monitoring :
                  {BarrierMonitoring::Discrete, BarrierMonitoring::Continuous}) {
                 bonusClassicOption->setPricingEngine(
-                    ext::make_shared<MCBonusClassicEngine<LowDiscrepancy, Statistics,
-                                                          LocalVolStepSingleVariate>>(
+                    ext::make_shared<
+                        MCBonusClassicEngine<LocalVolStepSingleVariate, LowDiscrepancy>>(
                         process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(), monitoring, true,
                         42));
                 const auto cached = bonusClassicOption->NPV();
                 const auto cachedProbabilities = engineProbabilities(*bonusClassicOption);
 
                 bonusClassicOption->setPricingEngine(
-                    ext::make_shared<
-                        MCBonusClassicEngine<LowDiscrepancy, Statistics, SingleVariate>>(
+                    ext::make_shared<MCBonusClassicEngine<SingleVariate, LowDiscrepancy>>(
                         process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(), monitoring, true,
                         42));
                 const auto plain = bonusClassicOption->NPV();
@@ -234,12 +233,12 @@ namespace RKE::TestSuite {
 
         // The Monte-Carlo engine under the Euler step through the local volatility, the
         // reference the FD engine's smile prices are checked against.
-        ext::shared_ptr<MCBonusClassicEngine<LowDiscrepancy, Statistics, LocalVolStepSingleVariate>>
+        ext::shared_ptr<MCBonusClassicEngine<LocalVolStepSingleVariate, LowDiscrepancy>>
         makeLocalVolMcEngine(const ext::shared_ptr<GeneralizedBlackScholesProcess>& process,
                              BarrierMonitoring monitoring,
                              Size samples) {
             return ext::make_shared<
-                MCBonusClassicEngine<LowDiscrepancy, Statistics, LocalVolStepSingleVariate>>(
+                MCBonusClassicEngine<LocalVolStepSingleVariate, LowDiscrepancy>>(
                 process, mcTimeStepsPerYear, samples, samples + 1, Null<Real>(), monitoring, true,
                 42);
         }
@@ -335,9 +334,9 @@ namespace RKE::TestSuite {
 
         const auto flat = makeFlatCase();
 
-        BOOST_CHECK_THROW(MCBonusClassicEngine<LowDiscrepancy>(
+        BOOST_CHECK_THROW((MCBonusClassicEngine<CachedStepSingleVariate, LowDiscrepancy>(
                               nullptr, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(),
-                              BarrierMonitoring::Discrete, true, 42),
+                              BarrierMonitoring::Discrete, true, 42)),
                           Error);
         BOOST_CHECK_THROW(FdBlackScholesBonusClassicEngine(nullptr, mcTimeStepsPerYear), Error);
         BOOST_CHECK_THROW(BinomialBonusClassicEngine<CoxRossRubinstein>(nullptr, treeTimeSteps),
@@ -345,9 +344,9 @@ namespace RKE::TestSuite {
         BOOST_CHECK_THROW(AnalyticBonusClassicEngine(nullptr), Error);
 
         // The arguments, the exercise among them, are empty until an instrument sets them up.
-        const MCBonusClassicEngine<LowDiscrepancy> mcEngine(flat.process, mcTimeStepsPerYear, 1'000,
-                                                            1'001, Null<Real>(),
-                                                            BarrierMonitoring::Discrete, true, 42);
+        const MCBonusClassicEngine<CachedStepSingleVariate, LowDiscrepancy> mcEngine(
+            flat.process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(),
+            BarrierMonitoring::Discrete, true, 42);
         BOOST_CHECK_THROW(static_cast<void>(mcEngine.timeGrid()), Error);
         const FdBlackScholesBonusClassicEngine fdEngine(flat.process, mcTimeStepsPerYear);
         BOOST_CHECK_THROW(static_cast<void>(fdEngine.timeGrid()), Error);
@@ -366,7 +365,7 @@ namespace RKE::TestSuite {
         // One engine per method; the FD engine in continuous mode is the one whose grid would
         // otherwise take log(0) and fail deep inside the solver.
         const std::vector<ext::shared_ptr<PricingEngine>> engines = {
-            ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
+            ext::make_shared<MCBonusClassicEngine<CachedStepSingleVariate, LowDiscrepancy>>(
                 flat.process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(),
                 BarrierMonitoring::Discrete, true, 42),
             ext::make_shared<FdBlackScholesBonusClassicEngine>(flat.process),
@@ -395,9 +394,10 @@ namespace RKE::TestSuite {
         // The Null<Real>() tolerance is mandatory, not a default: with no error estimate under
         // LowDiscrepancy, McSimulation::calculate takes the fixed-sample branch and maxSamples
         // never applies.
-        const auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-            flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(),
-            BarrierMonitoring::Discrete, true, 42);
+        const auto mcEngine =
+            ext::make_shared<MCBonusClassicEngine<CachedStepSingleVariate, LowDiscrepancy>>(
+                flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(),
+                BarrierMonitoring::Discrete, true, 42);
 
         flat.option->setPricingEngine(mcEngine);
         const auto npv = flat.option->NPV();
@@ -414,9 +414,10 @@ namespace RKE::TestSuite {
 
         const auto flat = makeFlatCase();
 
-        const auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-            flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(),
-            BarrierMonitoring::Discrete, true, 42);
+        const auto mcEngine =
+            ext::make_shared<MCBonusClassicEngine<CachedStepSingleVariate, LowDiscrepancy>>(
+                flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(),
+                BarrierMonitoring::Discrete, true, 42);
         flat.option->setPricingEngine(mcEngine);
         const auto npv = flat.option->NPV();
 
@@ -445,9 +446,10 @@ namespace RKE::TestSuite {
 
         const auto flat = makeFlatCase();
 
-        const auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-            flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(),
-            BarrierMonitoring::Continuous, true, 42);
+        const auto mcEngine =
+            ext::make_shared<MCBonusClassicEngine<CachedStepSingleVariate, LowDiscrepancy>>(
+                flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(),
+                BarrierMonitoring::Continuous, true, 42);
 
         flat.option->setPricingEngine(mcEngine);
         const auto npv = flat.option->NPV();
@@ -465,9 +467,10 @@ namespace RKE::TestSuite {
 
         const auto flat = makeFlatCase();
 
-        const auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-            flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(),
-            BarrierMonitoring::Continuous, true, 42);
+        const auto mcEngine =
+            ext::make_shared<MCBonusClassicEngine<CachedStepSingleVariate, LowDiscrepancy>>(
+                flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(),
+                BarrierMonitoring::Continuous, true, 42);
         flat.option->setPricingEngine(mcEngine);
         const auto npv = flat.option->NPV();
 
@@ -492,9 +495,10 @@ namespace RKE::TestSuite {
         const auto flat = makeFlatCase();
 
         // The configuration of testBonusClassicOptionValuation's lock.
-        const auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-            flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(),
-            BarrierMonitoring::Discrete, true, 42);
+        const auto mcEngine =
+            ext::make_shared<MCBonusClassicEngine<CachedStepSingleVariate, LowDiscrepancy>>(
+                flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(),
+                BarrierMonitoring::Discrete, true, 42);
         flat.option->setPricingEngine(mcEngine);
         static_cast<void>(flat.option->NPV());
         const auto probabilities = engineProbabilities(*flat.option);
@@ -544,9 +548,10 @@ namespace RKE::TestSuite {
         const auto flat = makeFlatCase();
 
         // The configuration of testBonusClassicOptionContinuousValuation's lock.
-        const auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-            flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(),
-            BarrierMonitoring::Continuous, true, 42);
+        const auto mcEngine =
+            ext::make_shared<MCBonusClassicEngine<CachedStepSingleVariate, LowDiscrepancy>>(
+                flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(),
+                BarrierMonitoring::Continuous, true, 42);
         flat.option->setPricingEngine(mcEngine);
         static_cast<void>(flat.option->NPV());
         const auto probabilities = engineProbabilities(*flat.option);
@@ -592,15 +597,17 @@ namespace RKE::TestSuite {
 
         const auto flat = makeFlatCase();
 
-        flat.option->setPricingEngine(ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-            flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(),
-            BarrierMonitoring::Discrete, true, 42));
+        flat.option->setPricingEngine(
+            ext::make_shared<MCBonusClassicEngine<CachedStepSingleVariate, LowDiscrepancy>>(
+                flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(),
+                BarrierMonitoring::Discrete, true, 42));
         const auto discrete = flat.option->NPV();
         const auto discreteProbabilities = engineProbabilities(*flat.option);
 
-        flat.option->setPricingEngine(ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-            flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(),
-            BarrierMonitoring::Continuous, true, 42));
+        flat.option->setPricingEngine(
+            ext::make_shared<MCBonusClassicEngine<CachedStepSingleVariate, LowDiscrepancy>>(
+                flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(),
+                BarrierMonitoring::Continuous, true, 42));
         const auto continuous = flat.option->NPV();
         const auto continuousProbabilities = engineProbabilities(*flat.option);
 
@@ -635,14 +642,15 @@ namespace RKE::TestSuite {
         constexpr Real tolerance = 1.0e-12;
 
         for (const auto monitoring : {BarrierMonitoring::Discrete, BarrierMonitoring::Continuous}) {
-            flat.option->setPricingEngine(ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-                flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), monitoring, true,
-                42));
+            flat.option->setPricingEngine(
+                ext::make_shared<MCBonusClassicEngine<CachedStepSingleVariate, LowDiscrepancy>>(
+                    flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), monitoring,
+                    true, 42));
             const auto cached = flat.option->NPV();
             const auto cachedProbabilities = engineProbabilities(*flat.option);
 
             flat.option->setPricingEngine(
-                ext::make_shared<MCBonusClassicEngine<LowDiscrepancy, Statistics, SingleVariate>>(
+                ext::make_shared<MCBonusClassicEngine<SingleVariate, LowDiscrepancy>>(
                     flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(), monitoring,
                     true, 42));
             const auto plain = flat.option->NPV();
@@ -700,13 +708,14 @@ namespace RKE::TestSuite {
 
         // The volatility's type alone passes for exact; only the probe against evolve()
         // catches the forced discretization, and the engine fails loud instead of falling back.
-        flat.option->setPricingEngine(ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-            process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(), BarrierMonitoring::Continuous,
-            true, 42));
+        flat.option->setPricingEngine(
+            ext::make_shared<MCBonusClassicEngine<CachedStepSingleVariate, LowDiscrepancy>>(
+                process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(),
+                BarrierMonitoring::Continuous, true, 42));
         BOOST_CHECK_THROW(flat.option->NPV(), Error);
 
         flat.option->setPricingEngine(
-            ext::make_shared<MCBonusClassicEngine<LowDiscrepancy, Statistics, SingleVariate>>(
+            ext::make_shared<MCBonusClassicEngine<SingleVariate, LowDiscrepancy>>(
                 process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(),
                 BarrierMonitoring::Continuous, true, 42));
         BOOST_CHECK_NO_THROW(flat.option->NPV());
@@ -818,9 +827,10 @@ namespace RKE::TestSuite {
         const auto fd = flat.option->NPV();
 
         // The configuration of testBonusClassicOptionValuation's lock.
-        const auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-            flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(),
-            BarrierMonitoring::Discrete, true, 42);
+        const auto mcEngine =
+            ext::make_shared<MCBonusClassicEngine<CachedStepSingleVariate, LowDiscrepancy>>(
+                flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(),
+                BarrierMonitoring::Discrete, true, 42);
         flat.option->setPricingEngine(mcEngine);
         const auto mc = flat.option->NPV();
 
@@ -989,9 +999,10 @@ namespace RKE::TestSuite {
         const auto fd = engineProbabilities(*flat.option);
 
         // The configuration of testBonusClassicOptionProbabilities' lock.
-        const auto mcEngine = ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-            flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(),
-            BarrierMonitoring::Discrete, true, 42);
+        const auto mcEngine =
+            ext::make_shared<MCBonusClassicEngine<CachedStepSingleVariate, LowDiscrepancy>>(
+                flat.process, mcTimeStepsPerYear, 50'000, 50'001, Null<Real>(),
+                BarrierMonitoring::Discrete, true, 42);
         flat.option->setPricingEngine(mcEngine);
         static_cast<void>(flat.option->NPV());
         const auto mc = engineProbabilities(*flat.option);
