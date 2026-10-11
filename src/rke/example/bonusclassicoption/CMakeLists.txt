@@ -28,3 +28,15 @@ add_test(
 set_tests_properties(rke_example_bonusclassicoption_bonus_level_at_barrier PROPERTIES
         PASS_REGULAR_EXPRESSION "--bonus-level 120 is not above --barrier 120"
 )
+
+# A row whose engine throws is listed with its message, beside the rows that price: at a
+# volatility of 5% the flat finite-difference grid under discrete monitoring starts at 74, above
+# the barrier. The test passes on the listing, not on the failing exit code.
+add_test(
+        NAME rke_example_bonusclassicoption_refused_row
+        COMMAND rke_example_bonusclassicoption --volatility 0.05
+)
+
+set_tests_properties(rke_example_bonusclassicoption_refused_row PROPERTIES
+        PASS_REGULAR_EXPRESSION "discrete, flat, finite differences: barrier 70 outside the grid's range"
+)
