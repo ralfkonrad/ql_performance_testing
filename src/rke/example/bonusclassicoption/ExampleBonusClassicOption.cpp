@@ -116,8 +116,9 @@ namespace RKE::Example {
         }
 
         Valuation price(BarrierMonitoring monitoring, Market market, Pricer pricer, Size samples) {
-            const auto setup = makeBonusClassicOptionSetup(monitoring, pricer.pathGeneration,
-                                                           market, samples, pricer.engine, true);
+            const auto setup =
+                makeBonusClassicOptionSetup(monitoring, pricer.pathGeneration, market, samples,
+                                            pricer.engine, ProbabilityCalculation::On);
             return value(setup);
         }
 
@@ -350,7 +351,7 @@ namespace RKE::Example {
             // rollback, so its step is the one the continuity correction takes.
             const auto fdDiscrete = makeBonusClassicOptionSetup(
                 BarrierMonitoring::Discrete, PathGeneration::CachedStep, Market::Flat,
-                productionSamples, Engine::FiniteDifference, true);
+                productionSamples, Engine::FiniteDifference, ProbabilityCalculation::On);
             const auto fdDiscreteValuation = value(fdDiscrete);
             const auto exerciseDate = fdDiscrete.option->exercise()->lastDate();
             const auto dt = fdDiscrete.process->time(exerciseDate) /

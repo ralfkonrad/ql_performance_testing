@@ -102,10 +102,11 @@ namespace RKE::Profile {
         void run(const Arguments& arguments) {
             // Built before the loop, as in the benchmark, so the profile shows pricing only.
             const auto engine = tables().engines.at(arguments.engine);
-            const auto setup = makeBonusClassicOptionSetup(
-                tables().monitorings.at(arguments.monitoring),
-                tables().pathGenerations.at(arguments.pathGeneration),
-                tables().markets.at(arguments.market), arguments.samples, engine);
+            const auto setup =
+                makeBonusClassicOptionSetup(tables().monitorings.at(arguments.monitoring),
+                                            tables().pathGenerations.at(arguments.pathGeneration),
+                                            tables().markets.at(arguments.market),
+                                            arguments.samples, engine, ProbabilityCalculation::Off);
 
             Real npv = Null<Real>();
             for (Size i = 0; i < arguments.iterations; ++i) {

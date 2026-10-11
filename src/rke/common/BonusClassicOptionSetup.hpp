@@ -46,6 +46,10 @@ namespace RKE::Common {
     // market under continuous monitoring only.
     enum class Engine : std::uint8_t { MonteCarlo, FiniteDifference, Binomial, Analytic };
 
+    // Whether FiniteDifference, Binomial and Analytic report the barrier-hit and bonus
+    // probabilities beside the price; MonteCarlo reports them always.
+    enum class ProbabilityCalculation : std::uint8_t { Off, On };
+
     struct OptionData {
         QuantLib::Real barrier = 70.0;
         QuantLib::Real bonusLevel = 120.00;
@@ -77,18 +81,16 @@ namespace RKE::Common {
     // Sets the evaluation date to 22 Jun 2025 and prices with the engine on the market, the
     // barrier monitored as monitoring says. pathGeneration and samples are read by MonteCarlo
     // only; a smoke test passes fewer samples than productionSamples, on the same time grid.
-    // calculateProbabilities switches the barrier-hit and bonus probabilities on in
-    // FiniteDifference, Binomial and Analytic, which MonteCarlo reports always; the benchmarks
-    // and profiles leave it off, so they keep measuring the price alone. QL_REQUIRE rejects
-    // Binomial and Analytic off the flat market, Binomial under continuous monitoring and
-    // Analytic under discrete.
+    // The benchmarks and profiles pass ProbabilityCalculation::Off, so they keep measuring the
+    // price alone. QL_REQUIRE rejects Binomial and Analytic off the flat market, Binomial under
+    // continuous monitoring and Analytic under discrete.
     [[nodiscard]] BonusClassicOptionSetup
     makeBonusClassicOptionSetup(RKE::QL::Ext::BarrierMonitoring monitoring,
-                                PathGeneration pathGeneration = PathGeneration::CachedStep,
-                                Market market = Market::Flat,
-                                QuantLib::Size samples = productionSamples,
-                                Engine engine = Engine::MonteCarlo,
-                                bool calculateProbabilities = false);
+                                PathGeneration pathGeneration,
+                                Market market,
+                                QuantLib::Size samples,
+                                Engine engine,
+                                ProbabilityCalculation probabilityCalculation);
 
     // The steps of the engine's monitoring grid: the finite-difference engine's discrete grid,
     // or the lattice after Boyle-Lau. Null<Size>() where there is nothing to report, i.e. under
