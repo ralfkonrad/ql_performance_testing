@@ -156,8 +156,8 @@ namespace RKE::Common {
                     process,
                     monitoring == BarrierMonitoring::Discrete ? monitoringStepsPerYear :
                                                                 Null<Size>(),
-                    fdTimeGrid, fdSpaceGrid, 0, FdmSchemeDesc::TrBDF2(), calculateProbabilities,
-                    market != Market::Flat);
+                    fdTimeGrid, fdSpaceGrid, 0, FdmSchemeDesc::TrBDF2(), market != Market::Flat,
+                    calculateProbabilities);
             }
             if (engine == Engine::Binomial) {
                 // Boyle-Lau on, maxTimeSteps at its default: without it the first knocked-out

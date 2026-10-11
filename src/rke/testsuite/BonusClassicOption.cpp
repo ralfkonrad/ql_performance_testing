@@ -228,7 +228,7 @@ namespace RKE::TestSuite {
             return ext::make_shared<FdBlackScholesBonusClassicEngine>(
                 process,
                 monitoring == BarrierMonitoring::Discrete ? mcTimeStepsPerYear : Null<Size>(),
-                tGrid, xGrid, 0, FdmSchemeDesc::TrBDF2(), true, localVol);
+                tGrid, xGrid, 0, FdmSchemeDesc::TrBDF2(), localVol, true);
         }
 
         // The Monte-Carlo engine under the Euler step through the local volatility, the
@@ -891,7 +891,7 @@ namespace RKE::TestSuite {
         // damping steps and the scheme are the defaults, spelled out to reach the flag.
         const auto fdEngine = ext::make_shared<FdBlackScholesBonusClassicEngine>(
             flat.process, mcTimeStepsPerYear, fdTimeGrid, fdSpaceGrid, 0, FdmSchemeDesc::TrBDF2(),
-            true);
+            false, true);
         flat.option->setPricingEngine(fdEngine);
         static_cast<void>(flat.option->NPV());
         const auto probabilities = engineProbabilities(*flat.option);
@@ -946,7 +946,8 @@ namespace RKE::TestSuite {
         // probabilities on; the damping steps and the scheme are the defaults, spelled out to
         // reach the flag.
         flat.option->setPricingEngine(ext::make_shared<FdBlackScholesBonusClassicEngine>(
-            flat.process, Null<Size>(), fdTimeGrid, fdSpaceGrid, 0, FdmSchemeDesc::TrBDF2(), true));
+            flat.process, Null<Size>(), fdTimeGrid, fdSpaceGrid, 0, FdmSchemeDesc::TrBDF2(), false,
+            true));
         static_cast<void>(flat.option->NPV());
         const auto probabilities = engineProbabilities(*flat.option);
 
@@ -993,7 +994,7 @@ namespace RKE::TestSuite {
 
         const auto fdEngine = ext::make_shared<FdBlackScholesBonusClassicEngine>(
             flat.process, mcTimeStepsPerYear, fdTimeGrid, fdSpaceGrid, 0, FdmSchemeDesc::TrBDF2(),
-            true);
+            false, true);
         flat.option->setPricingEngine(fdEngine);
         static_cast<void>(flat.option->NPV());
         const auto fd = engineProbabilities(*flat.option);
@@ -1056,7 +1057,7 @@ namespace RKE::TestSuite {
 
         const auto engine = ext::make_shared<FdBlackScholesBonusClassicEngine>(
             flat.process, mcTimeStepsPerYear, fdTimeGrid, fdSpaceGrid, 0, FdmSchemeDesc::TrBDF2(),
-            true);
+            false, true);
         BOOST_CHECK(engine->calculatesProbabilities());
         flat.option->setPricingEngine(engine);
         const auto withProbabilities = flat.option->NPV();
@@ -1087,7 +1088,7 @@ namespace RKE::TestSuite {
                           Error);
         BOOST_CHECK_NO_THROW(
             FdBlackScholesBonusClassicEngine(smile.process, mcTimeStepsPerYear, fdTimeGrid,
-                                             fdSpaceGrid, 0, FdmSchemeDesc::TrBDF2(), false, true));
+                                             fdSpaceGrid, 0, FdmSchemeDesc::TrBDF2(), true, false));
 
         // The type test reads the process's local volatility, so the smile is refused as an
         // external local volatility beside a flat Black volatility too.

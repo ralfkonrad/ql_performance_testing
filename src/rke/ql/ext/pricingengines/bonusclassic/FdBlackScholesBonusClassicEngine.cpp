@@ -182,8 +182,8 @@ namespace RKE::QL::Ext {
         Size xGrid,
         Size dampingSteps,
         const FdmSchemeDesc& schemeDesc,
-        bool calculateProbabilities,
-        bool localVol)
+        bool localVol,
+        bool calculateProbabilities)
     : process_(std::move(process)), monitoringStepsPerYear_(monitoringStepsPerYear), tGrid_(tGrid),
       xGrid_(xGrid), dampingSteps_(dampingSteps), schemeDesc_(schemeDesc),
       calculateProbabilities_(calculateProbabilities), localVol_(localVol) {
