@@ -84,7 +84,7 @@ namespace RKE::QL::Ext {
             \pre the process's Black volatility is a QuantLib::BlackConstantVol
                  and its local volatility a QuantLib::LocalConstantVol, i.e.
                  no external local volatility of another type beside it;
-                 QL_REQUIRE checks this.
+                 QL_REQUIRE checks this with hasConstantVolatility().
         */
         explicit AnalyticBonusClassicEngine(
             QuantLib::ext::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> process,

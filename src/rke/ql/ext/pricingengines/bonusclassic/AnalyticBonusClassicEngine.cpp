@@ -2,30 +2,17 @@
 // SPDX-License-Identifier: MIT
 
 #include <rke/ql/ext/pricingengines/bonusclassic/AnalyticBonusClassicEngine.hpp>
+#include <rke/ql/ext/processes/StrikeIndependentVolatility.hpp>
 #include <ql/exercise.hpp>
 #include <ql/instruments/barrieroption.hpp>
 #include <ql/instruments/payoffs.hpp>
 #include <ql/pricingengines/barrier/analyticbarrierengine.hpp>
 #include <ql/pricingengines/barrier/analyticbinarybarrierengine.hpp>
-#include <ql/termstructures/volatility/equityfx/blackconstantvol.hpp>
-#include <ql/termstructures/volatility/equityfx/localconstantvol.hpp>
 #include <utility>
 
 using namespace QuantLib;
 
 namespace RKE::QL::Ext {
-    namespace {
-        // The QuantLib engines read the Black volatility; a path of the process follows the
-        // local one, which differs from it once an external local volatility is given. Both
-        // have to be constant for the closed forms to price that process.
-        bool hasConstantVolatility(const GeneralizedBlackScholesProcess& process) {
-            return ext::dynamic_pointer_cast<BlackConstantVol>(
-                       process.blackVolatility().currentLink()) != nullptr &&
-                   ext::dynamic_pointer_cast<LocalConstantVol>(
-                       process.localVolatility().currentLink()) != nullptr;
-        }
-    }
-
     AnalyticBonusClassicEngine::AnalyticBonusClassicEngine(
         ext::shared_ptr<GeneralizedBlackScholesProcess> process, bool calculateProbabilities)
     : process_(std::move(process)), calculateProbabilities_(calculateProbabilities) {
