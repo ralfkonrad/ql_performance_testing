@@ -63,9 +63,9 @@ itself. QuantLib, google-benchmark and CLI11 are git submodules under `external/
   way has to be exempted from `rke::warnings` and clang-tidy by hand, since a
   warning on an upstream line nothing here may edit fails the build. The flat
   curve and volatility helpers live in `src/rke/common/FlatTermStructures.hpp`;
-  the instrument, the markets and the reference date the tests, benchmarks and
-  profiles share in `src/rke/common/BonusClassicOptionSetup.hpp` and
-  `src/rke/common/StepCacheMarkets.hpp`.
+  the markets and the reference date the tests, benchmarks and profiles share in
+  `src/rke/common/MarketData.hpp` and `src/rke/common/StepCacheMarkets.hpp`, the
+  instrument in `src/rke/common/BonusClassicOptionSetup.hpp`.
 
 ## 2. Task Guides
 

@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 #include "StepCacheMarkets.hpp"
-#include "BonusClassicOptionSetup.hpp"
 #include "FlatTermStructures.hpp"
+#include "MarketData.hpp"
 #include <ql/math/matrix.hpp>
 #include <ql/processes/eulerdiscretization.hpp>
 #include <ql/quotes/simplequote.hpp>
@@ -20,7 +20,7 @@ using namespace QuantLib;
 namespace RKE::Common {
     namespace {
         Handle<Quote> spotQuote() {
-            return Handle<Quote>(ext::make_shared<SimpleQuote>(MarketData().spot));
+            return Handle<Quote>(ext::make_shared<SimpleQuote>(FlatMarketData().spot));
         }
     }
 
@@ -81,7 +81,7 @@ namespace RKE::Common {
     }
 
     ext::shared_ptr<GeneralizedBlackScholesProcess> externalLocalVolProcess(Date today) {
-        const auto data = MarketData();
+        const auto data = FlatMarketData();
         const auto dc = Actual360();
         const auto localVol = Handle<LocalVolTermStructure>(
             ext::make_shared<LocalConstantVol>(today, data.volatility, dc));

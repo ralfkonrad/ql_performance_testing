@@ -6,6 +6,7 @@
 set(RKE_COMMON_SOURCES
         BonusClassicOptionSetup.cpp
         FlatTermStructures.cpp
+        MarketData.cpp
         StepCacheMarkets.cpp
 )
 
@@ -14,6 +15,7 @@ set(RKE_COMMON_SOURCES
 set(RKE_COMMON_HEADER
         BonusClassicOptionSetup.hpp
         FlatTermStructures.hpp
+        MarketData.hpp
         StepCacheMarkets.hpp
 )
 

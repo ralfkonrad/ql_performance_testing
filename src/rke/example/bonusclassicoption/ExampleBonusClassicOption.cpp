@@ -22,6 +22,7 @@
 // QuantLib::LocalVolSurface's stencil collapses the local volatility on the grid node there.
 
 #include <rke/common/BonusClassicOptionSetup.hpp>
+#include <rke/common/MarketData.hpp>
 #include <rke/ql/ext/instruments/BonusClassicOption.hpp>
 #include <rke/ql/ext/pricingengines/bonusclassic/AnalyticBonusClassicEngine.hpp>
 #include <ql/processes/blackscholesprocess.hpp>
@@ -158,7 +159,8 @@ namespace RKE::Example {
             QL_FAIL("unknown market");
         }
 
-        void printHeader(const OptionData& option, const MarketData& market, Date exerciseDate) {
+        void
+        printHeader(const OptionData& option, const FlatMarketData& market, Date exerciseDate) {
             std::cout << "BonusClassicOption as of " << evaluationDate() << ", maturity "
                       << exerciseDate << " (" << option.ttm << ")\n"
                       << "  barrier " << option.barrier << ", bonus level " << option.bonusLevel
@@ -341,7 +343,7 @@ namespace RKE::Example {
 
         void run() {
             const auto option = OptionData();
-            const auto market = MarketData();
+            const auto market = FlatMarketData();
 
             // The finite-difference engine under discrete monitoring goes first: its grid is
             // the one every discrete flat row monitors on, Monte Carlo's dates merged into the
