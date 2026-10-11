@@ -3,6 +3,7 @@
 
 #include "BonusClassicOptionSetup.hpp"
 #include "FlatTermStructures.hpp"
+#include <rke/ql/ext/pricingengines/bonusclassic/AnalyticBonusClassicEngine.hpp>
 #include <rke/ql/ext/pricingengines/bonusclassic/BinomialBonusClassicEngine.hpp>
 #include <rke/ql/ext/pricingengines/bonusclassic/FdBlackScholesBonusClassicEngine.hpp>
 #include <rke/ql/ext/pricingengines/bonusclassic/MCBonusClassicEngine.hpp>
@@ -110,6 +111,21 @@ namespace RKE::Common {
                 process, timeStepsPerYear, samples, QL_MAX_INTEGER, Null<Real>(), monitoring, true,
                 42);
         }
+
+        // The combinations an engine cannot price, refused before a process is built.
+        void requireSupported(BarrierMonitoring monitoring, Market market, Engine engine) {
+            QL_REQUIRE(engine != Engine::Binomial || market == Market::Flat,
+                       "the binomial engine flattens the volatility, so it prices the flat "
+                       "market only");
+            QL_REQUIRE(engine != Engine::Binomial || monitoring == BarrierMonitoring::Discrete,
+                       "the binomial engine monitors on every step, never continuously");
+            // The engine refuses the smiles itself; this says why.
+            QL_REQUIRE(engine != Engine::Analytic || market == Market::Flat,
+                       "the analytic engine needs a constant volatility, so it prices the flat "
+                       "market only");
+            QL_REQUIRE(engine != Engine::Analytic || monitoring == BarrierMonitoring::Continuous,
+                       "the analytic engine monitors continuously, never discretely");
+        }
     }
 
     BonusClassicOptionSetup makeBonusClassicOptionSetup(BarrierMonitoring monitoring,
@@ -118,11 +134,7 @@ namespace RKE::Common {
                                                         Size samples,
                                                         Engine engine,
                                                         bool calculateProbabilities) {
-        QL_REQUIRE(engine != Engine::Binomial || market == Market::Flat,
-                   "the binomial engine flattens the volatility, so it prices the flat market "
-                   "only");
-        QL_REQUIRE(engine != Engine::Binomial || monitoring == BarrierMonitoring::Discrete,
-                   "the binomial engine monitors on every step, never continuously");
+        requireSupported(monitoring, market, engine);
 
         const auto option_data = OptionData();
         const auto market_data = MarketData();
@@ -155,6 +167,10 @@ namespace RKE::Common {
                 // therefore larger than treeTimeSteps; monitoringSteps() reports it.
                 return ext::make_shared<BinomialBonusClassicEngine<CoxRossRubinstein>>(
                     process, treeTimeSteps, 0, calculateProbabilities);
+            }
+            if (engine == Engine::Analytic) {
+                return ext::make_shared<AnalyticBonusClassicEngine>(process,
+                                                                    calculateProbabilities);
             }
             // The Null<Real>() tolerance is mandatory, not a default: with no error estimate
             // under LowDiscrepancy, McSimulation::calculate takes the fixed-sample branch and

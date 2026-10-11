@@ -256,7 +256,7 @@ namespace RKE::Benchmark {
 
         // The binomial engine, treeTimeSteps Cox-Ross-Rubinstein steps raised by Boyle-Lau,
         // which monitors on every step, so there is no continuous variant; the cheapest of the
-        // three.
+        // three numerical engines.
         void BM_BonusClassicOptionBinomial(benchmark::State& state) {
             benchmarkBonusClassicOption(state, BarrierMonitoring::Discrete,
                                         PathGeneration::CachedStep, Market::Flat, Engine::Binomial);
@@ -266,6 +266,19 @@ namespace RKE::Benchmark {
             ->Name("BonusClassicOptionBinomial")
             ->Unit(benchmark::kMillisecond)
             ->Iterations(1000);
+
+        // The closed form, the floor the numerical engines are measured against: continuous
+        // monitoring on the flat market, the only product it prices.
+        void BM_BonusClassicOptionAnalytic(benchmark::State& state) {
+            benchmarkBonusClassicOption(state, BarrierMonitoring::Continuous,
+                                        PathGeneration::CachedStep, Market::Flat, Engine::Analytic);
+        }
+
+        BENCHMARK(BM_BonusClassicOptionAnalytic)
+            ->Name("BonusClassicOptionAnalytic")
+            ->Unit(benchmark::kMicrosecond)
+            // A few microseconds a pricing, so a large count still runs in under a second.
+            ->Iterations(100000);
     }
 }
 

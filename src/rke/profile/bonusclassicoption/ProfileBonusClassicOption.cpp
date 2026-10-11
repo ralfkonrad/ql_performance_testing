@@ -5,7 +5,7 @@
 // and valgrind.
 //
 //     rke_profile_bonusclassicoption [discrete|continuous] [iterations]
-//                                    [--engine mc|fd|binomial]
+//                                    [--engine mc|fd|binomial|analytic]
 //                                    [--path-generation cached|uncached]
 //                                    [--market flat|smile-bilinear|smile-bicubic]
 //                                    [--samples=<paths per pricing>]
@@ -14,8 +14,9 @@
 // -F 999; one iteration is enough under callgrind, which counts instructions exactly, and
 // fewer paths keep a smile market countable there, since Ir per step does not depend on them.
 // fd prices every market on rke_common's grids, the smiles under the local volatility;
-// binomial prices the flat market only and monitors discretely only. --path-generation and
-// --samples do not apply to either.
+// binomial prices the flat market only and monitors discretely only; analytic prices the flat
+// market only and monitors continuously only. --path-generation and --samples apply to mc
+// alone.
 
 #include <rke/cli/SamplesOption.hpp>
 #include <rke/common/BonusClassicOptionSetup.hpp>
@@ -54,6 +55,7 @@ namespace RKE::Profile {
                 {"mc", Engine::MonteCarlo},
                 {"fd", Engine::FiniteDifference},
                 {"binomial", Engine::Binomial},
+                {"analytic", Engine::Analytic},
             };
             std::map<std::string, PathGeneration> pathGenerations = {
                 {"cached", PathGeneration::CachedStep},
@@ -80,9 +82,10 @@ namespace RKE::Profile {
                 ->check(CLI::Range(Size{1}, std::numeric_limits<Size>::max()))
                 ->capture_default_str();
             app.add_option("--engine", arguments.engine,
-                           "Monte Carlo, finite differences or the binomial tree; the last two "
-                           "without --path-generation and --samples, and the tree on the flat "
-                           "market under discrete monitoring only")
+                           "Monte Carlo, finite differences, the binomial tree or the closed "
+                           "form; the last three without --path-generation and --samples, the "
+                           "tree on the flat market under discrete monitoring only, the closed "
+                           "form on the flat market under continuous monitoring only")
                 ->check(CLI::IsMember(&tables().engines))
                 ->capture_default_str();
             app.add_option("--path-generation", arguments.pathGeneration,

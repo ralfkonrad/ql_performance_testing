@@ -181,6 +181,8 @@ namespace RKE::Example {
                     return "finite differences";
                 case Engine::Binomial:
                     return "binomial CRR, Boyle-Lau";
+                case Engine::Analytic:
+                    return "analytic";
             }
             QL_FAIL("unknown engine");
         }
@@ -335,10 +337,16 @@ namespace RKE::Example {
             return references.continuous;
         }
 
-        // The setup rejects the tree off the flat market and under continuous monitoring.
+        // The setup rejects the tree and the closed form off the flat market, the tree under
+        // continuous monitoring and the closed form under discrete.
         bool admits(BarrierMonitoring monitoring, Market market, Pricer pricer) {
-            return pricer.engine != Engine::Binomial ||
-                   (market == Market::Flat && monitoring == BarrierMonitoring::Discrete);
+            if (pricer.engine == Engine::Binomial) {
+                return market == Market::Flat && monitoring == BarrierMonitoring::Discrete;
+            }
+            if (pricer.engine == Engine::Analytic) {
+                return market == Market::Flat && monitoring == BarrierMonitoring::Continuous;
+            }
+            return true;
         }
 
         // Every permutation the setup admits, in the table's order. The flat finite-difference
@@ -351,6 +359,7 @@ namespace RKE::Example {
                 {Engine::MonteCarlo, PathGeneration::Uncached},
                 {Engine::FiniteDifference, PathGeneration::CachedStep},
                 {Engine::Binomial, PathGeneration::CachedStep},
+                {Engine::Analytic, PathGeneration::CachedStep},
             };
             auto rows = std::vector<Row>();
             for (const auto monitoring :
