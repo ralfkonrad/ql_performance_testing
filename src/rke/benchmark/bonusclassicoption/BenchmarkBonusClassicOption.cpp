@@ -3,6 +3,7 @@
 
 #include <rke/cli/SamplesOption.hpp>
 #include <rke/common/BonusClassicOptionSetup.hpp>
+#include <rke/common/MarketData.hpp>
 #include <CLI/CLI.hpp>
 #include <benchmark/benchmark.h>
 #include <exception>
@@ -33,7 +34,8 @@ namespace RKE::Benchmark {
                                          Market market,
                                          Engine engine) {
             const auto setup = makeBonusClassicOptionSetup(
-                monitoring, pathGeneration, market, samples, engine, ProbabilityCalculation::Off);
+                OptionData(), FlatMarketData(), SmileMarketData(), monitoring, pathGeneration,
+                market, samples, engine, ProbabilityCalculation::Off);
 
             for (const auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
                 auto npv = reprice(*setup.option);

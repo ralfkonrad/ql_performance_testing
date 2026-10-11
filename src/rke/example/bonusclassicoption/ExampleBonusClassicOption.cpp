@@ -115,10 +115,16 @@ namespace RKE::Example {
             };
         }
 
-        Valuation price(BarrierMonitoring monitoring, Market market, Pricer pricer, Size samples) {
-            const auto setup =
-                makeBonusClassicOptionSetup(monitoring, pricer.pathGeneration, market, samples,
-                                            pricer.engine, ProbabilityCalculation::On);
+        Valuation price(const OptionData& option,
+                        const FlatMarketData& flatMarket,
+                        const SmileMarketData& smileMarket,
+                        BarrierMonitoring monitoring,
+                        Market market,
+                        Pricer pricer,
+                        Size samples) {
+            const auto setup = makeBonusClassicOptionSetup(
+                option, flatMarket, smileMarket, monitoring, pricer.pathGeneration, market, samples,
+                pricer.engine, ProbabilityCalculation::On);
             return value(setup);
         }
 
@@ -161,14 +167,14 @@ namespace RKE::Example {
         }
 
         void
-        printHeader(const OptionData& option, const FlatMarketData& market, Date exerciseDate) {
+        printHeader(const OptionData& option, const FlatMarketData& flatMarket, Date exerciseDate) {
             std::cout << "BonusClassicOption as of " << evaluationDate() << ", maturity "
                       << exerciseDate << " (" << option.ttm << ")\n"
                       << "  barrier " << option.barrier << ", bonus level " << option.bonusLevel
-                      << ", spot " << market.spot << '\n'
-                      << "  flat market: r " << market.riskfreeRate * 100 << "%, q "
-                      << market.dividendYield * 100 << "%, continuously compounded, vol "
-                      << market.volatility * 100 << "%, Actual360, NullCalendar\n"
+                      << ", spot " << flatMarket.spot << '\n'
+                      << "  flat market: r " << flatMarket.riskfreeRate * 100 << "%, q "
+                      << flatMarket.dividendYield * 100 << "%, continuously compounded, vol "
+                      << flatMarket.volatility * 100 << "%, Actual360, NullCalendar\n"
                       << "  smile markets: zero curves and a Black variance surface around the "
                          "same levels, RKE::Common::SmileMarketData\n\n";
         }
@@ -303,7 +309,10 @@ namespace RKE::Example {
         // Every permutation the setup admits, in the table's order. The flat finite-difference
         // row under discrete monitoring is priced already: its grid gave the step the discrete
         // reference corrects for.
-        std::vector<Row> priceRows(const References& references,
+        std::vector<Row> priceRows(const OptionData& option,
+                                   const FlatMarketData& flatMarket,
+                                   const SmileMarketData& smileMarket,
+                                   const References& references,
                                    const Valuation& fdDiscreteValuation) {
             const auto pricers = std::vector<Pricer>{
                 {Engine::MonteCarlo, PathGeneration::CachedStep},
@@ -333,7 +342,8 @@ namespace RKE::Example {
                             pricer,
                             isMonteCarlo ? samples : Null<Size>(),
                             isFdDiscrete ? fdDiscreteValuation :
-                                           price(monitoring, market, pricer, samples),
+                                           price(option, flatMarket, smileMarket, monitoring,
+                                                 market, pricer, samples),
                             reference(references, monitoring, market, pricer),
                         });
                     }
@@ -344,22 +354,25 @@ namespace RKE::Example {
 
         void run() {
             const auto option = OptionData();
-            const auto market = FlatMarketData();
+            const auto flatMarket = FlatMarketData();
+            const auto smileMarket = SmileMarketData();
 
             // The finite-difference engine under discrete monitoring goes first: its grid is
             // the one every discrete flat row monitors on, Monte Carlo's dates merged into the
             // rollback, so its step is the one the continuity correction takes.
             const auto fdDiscrete = makeBonusClassicOptionSetup(
-                BarrierMonitoring::Discrete, PathGeneration::CachedStep, Market::Flat,
-                productionSamples, Engine::FiniteDifference, ProbabilityCalculation::On);
+                option, flatMarket, smileMarket, BarrierMonitoring::Discrete,
+                PathGeneration::CachedStep, Market::Flat, productionSamples,
+                Engine::FiniteDifference, ProbabilityCalculation::On);
             const auto fdDiscreteValuation = value(fdDiscrete);
             const auto exerciseDate = fdDiscrete.option->exercise()->lastDate();
             const auto dt = fdDiscrete.process->time(exerciseDate) /
                             static_cast<Real>(monitoringSteps(fdDiscrete));
 
-            printHeader(option, market, exerciseDate);
+            printHeader(option, flatMarket, exerciseDate);
 
-            const auto shiftedBarrier = bgkShiftedBarrier(option.barrier, market.volatility, dt);
+            const auto shiftedBarrier =
+                bgkShiftedBarrier(option.barrier, flatMarket.volatility, dt);
             const auto references = References{
                 analyticValuation(fdDiscrete.process, option, exerciseDate, option.barrier),
                 analyticValuation(fdDiscrete.process, option, exerciseDate, shiftedBarrier),
@@ -375,7 +388,8 @@ namespace RKE::Example {
                       << references.discrete.npv << "\n\n"
                       << std::defaultfloat;
 
-            const auto rows = priceRows(references, fdDiscreteValuation);
+            const auto rows =
+                priceRows(option, flatMarket, smileMarket, references, fdDiscreteValuation);
             printPrices(rows);
 
             std::cout << "\nProbabilities under the process's measure: hit, the barrier touched "

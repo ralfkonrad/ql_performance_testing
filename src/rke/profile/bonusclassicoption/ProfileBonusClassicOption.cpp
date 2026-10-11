@@ -21,6 +21,7 @@
 
 #include <rke/cli/SamplesOption.hpp>
 #include <rke/common/BonusClassicOptionSetup.hpp>
+#include <rke/common/MarketData.hpp>
 #include <ql/errors.hpp>
 #include <CLI/CLI.hpp>
 #include <exception>
@@ -130,7 +131,8 @@ namespace RKE::Profile {
                                             choices().pathGenerations.at(arguments.pathGeneration) :
                                             PathGeneration::CachedStep;
             const auto setup =
-                makeBonusClassicOptionSetup(choices().monitorings.at(arguments.monitoring),
+                makeBonusClassicOptionSetup(OptionData(), FlatMarketData(), SmileMarketData(),
+                                            choices().monitorings.at(arguments.monitoring),
                                             pathGeneration, choices().markets.at(arguments.market),
                                             arguments.samples, engine, ProbabilityCalculation::Off);
 
