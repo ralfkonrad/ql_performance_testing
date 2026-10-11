@@ -165,13 +165,12 @@ namespace RKE::TestSuite {
             ext::shared_ptr<BonusClassicOption> option;
         };
 
-        FlatCase makeFlatCase(bool forceDiscretization = false) {
+        FlatCase makeFlatCase() {
             auto flat = FlatCase();
             flat.today = RKE::Common::evaluationDate();
             Settings::instance().evaluationDate() = flat.today;
             flat.optionData.ttm = Period(5, Months);
-            flat.process =
-                flat.marketData.makeGeneralizedBlackScholesProcess(flat.today, forceDiscretization);
+            flat.process = flat.marketData.makeGeneralizedBlackScholesProcess(flat.today);
             flat.option = RKE::Common::makeBonusClassicOption(flat.optionData, flat.today);
             flat.exerciseDate = flat.option->exercise()->lastDate();
             return flat;
@@ -684,18 +683,19 @@ namespace RKE::TestSuite {
         BOOST_TEST_MESSAGE("BonusClassicOption refuses an inexact step under "
                            "CachedStepSingleVariate and prices it under SingleVariate");
 
-        const auto flat = makeFlatCase(true);
+        const auto flat = makeFlatCase();
+        const auto process = RKE::Common::varianceCurveProcess(flat.today, true);
 
         // The volatility's type alone passes for exact; only the probe against evolve()
         // catches the forced discretization, and the engine fails loud instead of falling back.
         flat.option->setPricingEngine(ext::make_shared<MCBonusClassicEngine<LowDiscrepancy>>(
-            flat.process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(),
-            BarrierMonitoring::Continuous, true, 42));
+            process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(), BarrierMonitoring::Continuous,
+            true, 42));
         BOOST_CHECK_THROW(flat.option->NPV(), Error);
 
         flat.option->setPricingEngine(
             ext::make_shared<MCBonusClassicEngine<LowDiscrepancy, Statistics, SingleVariate>>(
-                flat.process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(),
+                process, mcTimeStepsPerYear, 1'000, 1'001, Null<Real>(),
                 BarrierMonitoring::Continuous, true, 42));
         BOOST_CHECK_NO_THROW(flat.option->NPV());
     }

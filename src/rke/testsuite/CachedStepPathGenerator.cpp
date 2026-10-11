@@ -168,7 +168,7 @@ namespace RKE::TestSuite {
         Settings::instance().evaluationDate() = evaluationDate();
 
         // The probe has to catch what the type check misses.
-        checkRefused(forcedDiscretizationProcess());
+        checkRefused(RKE::Common::varianceCurveProcess(evaluationDate(), true));
     }
 
     BOOST_AUTO_TEST_CASE(testExternalLocalVolatility) { // NOLINT(misc-use-internal-linkage):
