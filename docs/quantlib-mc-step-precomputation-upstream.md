@@ -82,7 +82,7 @@ Two constraints that bind a cache outside QuantLib fall away inside it:
   takes whatever `localVolatility()` links, and then probes `evolve()` at two points on every grid
   step on construction, because `isStrikeIndependent_`, `forceDiscretization_` and
   `hasExternalLocalVol_` are private to `GeneralizedBlackScholesProcess`. The process itself reads
-  them, and 3.2 adds one inspector for the condition they form (appendix B).
+  them, and 3.2 adds one inspector for the condition they form (appendix C).
 - **The step can be shared.** Under FMA contraction a step written as one expression cannot match
   `evolve()`, whose arithmetic is split across virtual calls, so the outside cache accepts its
   step within a relative 1e-13, 250 times the 4e-16 one step moves under contraction. Inside
@@ -272,11 +272,11 @@ means without FMA contraction; section 4 keeps it so under contraction.
   - The rate pair caches as one double `r − q`, exactly, since `drift` evaluates
     `(r − q) − 0.5·σ²` left to right.
   - The local-volatility slice is a virtual on `LocalVolTermStructure` that returns the terms for
-    a time, with a default that holds the time only, and a `localVol` overload that takes them.
-    The surface slice does the same one level down. A slice is a value the caller builds per grid
-    time and drops when the surface notifies; it holds the forward `underlying_->value() · dq /
-dr`, a snapshot of an observed `Quote`, and the term structure keeps no slice state. The
-    hook's table holds one slice per grid time.
+    a time, with a default that holds the time only, and a `localVol` overload that takes them
+    (appendix A). The surface slice does the same one level down. A slice is a value the caller
+    builds per grid time and drops when the surface notifies; it holds the forward
+    `underlying_->value() · dq / dr`, a snapshot of an observed `Quote`, and the term structure
+    keeps no slice state. The hook's table holds one slice per grid time.
 - **Branches:** the Euler branch. The slice is optional for every other local volatility, which
   keeps the default.
 - **Evidence:** a prototype that copies `localVolImpl` and feeds it precomputed discounts, the
@@ -443,7 +443,7 @@ today.
   it: a virtual on `StochasticProcess1D` cannot live there, and `ql/processes/` cannot depend on
   it. The public surface therefore stays at what the generators need, two virtuals and one table
   type, plus one inspector on `GeneralizedBlackScholesProcess` for the branch its step takes,
-  which its builder and a subclass read instead of the private flags (appendix B); anything more,
+  which its builder and a subclass read instead of the private flags (appendix C); anything more,
   once shipped, is kept five releases after its deprecation. `News.md` lists
   the change as a performance improvement, not among the deprecations.
 - **Lifetime:** the generator builds the table lazily, on the first `next()`, and rebuilds it when
@@ -497,7 +497,7 @@ today.
   `ExtendedBlackScholesMertonProcess` and `VegaStressedBlackScholesProcess` then need no override,
   and a subclass outside QuantLib sees no change. The same gate guards 3.1, whose fused step no
   longer calls `drift()`: decided once per process there, on the first `evolve()`, and kept in a
-  flag (appendix A); once per grid in the hook. `typeid` has no use in `ql/` yet, but RTTI is
+  flag (appendix B); once per grid in the hook. `typeid` has no use in `ql/` yet, but RTTI is
   already required, since
   `dynamic_pointer_cast` appears in 219 of its files. A probe that guesses the branch at two
   points per step, which a cache outside QuantLib needs, adds nothing to an exact type; the step
@@ -560,15 +560,265 @@ QuantLib static, no FMA, against the same build without the change. Wall clock i
    same conventions.
 7. **3.7:** DHAT on `MCEuropeanBasketEngine`, allocations per step before and after.
 
-## Appendix: Sketches of 3.1 and 3.2
+## Appendix: Sketches of 3.3, 3.1 and 3.2
 
-How the first two changes would look in QuantLib at `966a4cc10`. Every listing is a sketch,
-uncompiled, against the file it names, and the prose around it says what to notice. Both changes
-touch existing files only, so nothing is registered in CMake, Autotools or the Visual Studio
-solution. The sketches follow sections 3.1, 3.2 and 4; where one forces a decision those sections
-leave open, the prose says so.
+How the first three changes of section 5 would look in QuantLib at `966a4cc10`, in that order:
+the local-volatility time slice of 3.3, the fused Euler step of 3.1, the exact step table of 3.2,
+and then what a caller sees. Every listing is a sketch, uncompiled, against the file it names,
+and the prose around it says what to notice. All three touch existing files only, so nothing is
+registered in CMake, Autotools or the Visual Studio solution. The sketches follow sections 3.3,
+3.1, 3.2 and 4; where one forces a decision those sections leave open, the prose says so.
 
-### A. 3.1: One Local-Volatility Evaluation per Euler Step
+### A. 3.3: The Local-Volatility Time Slice
+
+Three files change under `ql/termstructures/volatility/equityfx/`: `localvoltermstructure.hpp`
+and `.cpp` for the interface, `localvolsurface.hpp` and `.cpp` for the one term structure that
+fills it, and `noexceptlocalvolsurface.hpp`, its one subclass. Today `LocalVolSurface::localVolImpl`
+reads, for every `(t, strike)`, two discounts at `t`, the forward, and in its time derivative two
+or four discounts at `t ± dt`, none of which depends on the strike (3.3).
+
+**The interface.** `localvoltermstructure.hpp`:
+
+```cpp
+    class LocalVolTermStructure : public VolatilityTermStructure {
+      public:
+        ...
+        //! \name Local Volatility
+        //@{
+        Volatility localVol(const Date& d, Real underlyingLevel,
+                            bool extrapolate = false) const;
+        Volatility localVol(Time t, Real underlyingLevel,
+                            bool extrapolate = false) const;
+        //! the terms of the local volatility at a time that do not depend on the level
+        /*! A caller that evaluates one time at many levels builds a slice
+            once and passes it to localVol(const Slice&, Real, bool). A slice
+            holds what its term structure read when it was built, so the
+            caller drops it when that term structure notifies; the term
+            structure keeps no slice state. The base class holds the time
+            only: a term structure that overrides neither sliceImpl() nor
+            sliceLocalVolImpl() evaluates a slice exactly as it evaluates
+            its time.
+        */
+        class Slice {
+          public:
+            Slice(const LocalVolTermStructure& termStructure, Time t)
+            : termStructure_(&termStructure), t_(t) {}
+            virtual ~Slice() = default;
+            Time time() const { return t_; }
+            const LocalVolTermStructure& termStructure() const { return *termStructure_; }
+          private:
+            const LocalVolTermStructure* termStructure_;
+            Time t_;
+        };
+        ext::shared_ptr<const Slice> slice(Time t, bool extrapolate = false) const;
+        Volatility localVol(const Slice& slice, Real underlyingLevel,
+                            bool extrapolate = false) const;
+        //@}
+        ...
+      protected:
+        ...
+        //! local vol calculation
+        virtual Volatility localVolImpl(Time t, Real strike) const = 0;
+        //! the slice for a time; the default holds the time only
+        virtual ext::shared_ptr<const Slice> sliceImpl(Time t) const;
+        //! local vol calculation from a slice; the default calls localVolImpl()
+        virtual Volatility sliceLocalVolImpl(const Slice& slice, Real strike) const;
+        //@}
+    };
+```
+
+Its defaults, `localvoltermstructure.cpp`, beside the two `localVol` overloads that exist today:
+
+```cpp
+    ext::shared_ptr<const LocalVolTermStructure::Slice>
+    LocalVolTermStructure::slice(Time t, bool extrapolate) const {
+        checkRange(t, extrapolate);
+        return sliceImpl(t);
+    }
+
+    Volatility LocalVolTermStructure::localVol(const Slice& slice,
+                                               Real underlyingLevel,
+                                               bool extrapolate) const {
+        QL_REQUIRE(&slice.termStructure() == this,
+                   "slice built by another local-volatility term structure");
+        checkStrike(underlyingLevel, extrapolate);
+        return sliceLocalVolImpl(slice, underlyingLevel);
+    }
+
+    ext::shared_ptr<const LocalVolTermStructure::Slice>
+    LocalVolTermStructure::sliceImpl(Time t) const {
+        return ext::make_shared<Slice>(*this, t);
+    }
+
+    Volatility LocalVolTermStructure::sliceLocalVolImpl(const Slice& slice,
+                                                        Real strike) const {
+        return localVolImpl(slice.time(), strike);
+    }
+```
+
+**The surface.** `localvolsurface.hpp`:
+
+```cpp
+    class LocalVolSurface : public LocalVolTermStructure {
+      public:
+        ...
+      protected:
+        Volatility localVolImpl(Time, Real) const override;
+        ext::shared_ptr<const Slice> sliceImpl(Time t) const override;
+        Volatility sliceLocalVolImpl(const Slice&, Real) const override;
+      private:
+        class TimeSlice;
+        Volatility localVolOnSlice(const TimeSlice&, Real strike) const;
+        Handle<BlackVolTermStructure> blackTS_;
+        Handle<YieldTermStructure> riskFreeTS_, dividendTS_;
+        Handle<Quote> underlying_;
+    };
+```
+
+`localvolsurface.cpp`. The slice holds the discounts and the forward as the doubles today's
+statements produce, and the two products today's formula divides by, never a ratio:
+
+```cpp
+    class LocalVolSurface::TimeSlice : public LocalVolTermStructure::Slice {
+      public:
+        TimeSlice(const LocalVolSurface& surface, Time t)
+        : Slice(surface, t) {
+            dr = surface.riskFreeTS_->discount(t, true);
+            DiscountFactor dq = surface.dividendTS_->discount(t, true);
+            forwardValue = surface.underlying_->value()*dq/dr;
+            oneSided = (t == 0.0);
+            dt = oneSided ? 0.0001 : std::min<Time>(0.0001, t/2.0);
+            tpt = t+dt;
+            DiscountFactor drpt = surface.riskFreeTS_->discount(tpt, true);
+            dqpt = surface.dividendTS_->discount(tpt, true);
+            drptDq = drpt*dq;
+            if (!oneSided) {
+                tmt = t-dt;
+                DiscountFactor drmt = surface.riskFreeTS_->discount(tmt, true);
+                dqmt = surface.dividendTS_->discount(tmt, true);
+                drmtDq = drmt*dq;
+            }
+        }
+        DiscountFactor dr, dqpt, drptDq;
+        DiscountFactor dqmt = Null<Real>(), drmtDq = Null<Real>();
+        Real forwardValue;
+        Time dt, tpt, tmt = Null<Real>();
+        bool oneSided;
+    };
+
+    ext::shared_ptr<const LocalVolTermStructure::Slice>
+    LocalVolSurface::sliceImpl(Time t) const {
+        return ext::make_shared<TimeSlice>(*this, t);
+    }
+
+    Volatility LocalVolSurface::localVolImpl(Time t, Real underlyingLevel) const {
+        // today's entry point: the same six discount() calls, through the same body
+        return localVolOnSlice(TimeSlice(*this, t), underlyingLevel);
+    }
+
+    Volatility LocalVolSurface::sliceLocalVolImpl(const Slice& slice,
+                                                  Real underlyingLevel) const {
+        // localVol(const Slice&, ...) has checked that this surface built the slice
+        return localVolOnSlice(static_cast<const TimeSlice&>(slice), underlyingLevel);
+    }
+
+    Volatility LocalVolSurface::localVolOnSlice(const TimeSlice& s,
+                                                Real underlyingLevel) const {
+        // strike derivatives: today's statements, the forward from the slice
+        Real strike = underlyingLevel;
+        Real y = std::log(strike/s.forwardValue);
+        Real dy = ((std::fabs(y) > 0.001) ? Real(y*0.0001) : 0.000001);
+        Real strikep = strike*std::exp(dy);
+        Real strikem = strike/std::exp(dy);
+        Real w  = blackTS_->blackVariance(s.time(), strike,  true);
+        Real wp = blackTS_->blackVariance(s.time(), strikep, true);
+        Real wm = blackTS_->blackVariance(s.time(), strikem, true);
+        Real dwdy = (wp-wm)/(2.0*dy);
+        Real d2wdy2 = (wp-2.0*w+wm)/(dy*dy);
+
+        // time derivative: today's two branches, the discounts from the slice.
+        // strike*s.dr*s.dqpt/s.drptDq parses as today's ((strike*dr)*dqpt)/(drpt*dq).
+        Real dwdt;
+        if (s.oneSided) {
+            Real strikept = strike*s.dr*s.dqpt/s.drptDq;
+            Real wpt = blackTS_->blackVariance(s.tpt, strikept, true);
+            QL_ENSURE(wpt>=w,
+                      "decreasing variance at strike " << strike
+                      << " between time " << s.time() << " and time " << s.tpt);
+            dwdt = (wpt-w)/s.dt;
+        } else {
+            Real strikept = strike*s.dr*s.dqpt/s.drptDq;
+            Real strikemt = strike*s.dr*s.dqmt/s.drmtDq;
+            Real wpt = blackTS_->blackVariance(s.tpt, strikept, true);
+            Real wmt = blackTS_->blackVariance(s.tmt, strikemt, true);
+            QL_ENSURE(wpt>=w, ...);
+            QL_ENSURE(w>=wmt, ...);
+            dwdt = (wpt-wmt)/(2.0*s.dt);
+        }
+
+        // the local variance from w, dwdy, d2wdy2 and dwdt: unchanged
+        ...
+    }
+```
+
+**The subclass.** `noexceptlocalvolsurface.hpp` wraps the slice path the way it wraps the time
+path today, or a slice would throw where the time returns the overwrite:
+
+```cpp
+      protected:
+        Volatility localVolImpl(Time t, Real s) const override { ... unchanged ... }
+        Volatility sliceLocalVolImpl(const Slice& slice, Real s) const override {
+            try {
+                return LocalVolSurface::sliceLocalVolImpl(slice, s);
+            } catch (Error&) {
+                return illegalLocalVolOverwrite_;
+            }
+        }
+```
+
+**The test.** `test-suite/europeanoption.cpp`, beside `testLocalVolatility`, which already builds
+a `BlackVarianceSurface` and a `GeneralizedBlackScholesProcess` whose `localVolatility()` links a
+`LocalVolSurface` on it: on a grid of times from zero and levels around the forward,
+`localVol(*slice(t, true), x, true)` equals `localVol(t, x, true)` to the bit, and a slice handed
+to a second surface throws. The two entry points share one body and one slice type, so the
+equality holds by construction; the test guards a later edit that lets them drift, and the zero
+time covers the one-sided branch.
+
+What to notice:
+
+- The five other local volatilities, `LocalConstantVol`, `LocalVolCurve`, `FixedLocalVolSurface`,
+  `GridModelLocalVolSurface` and `AndreasenHugeLocalVolAdapter`, change nothing: their slice is
+  the time, and `localVol(slice, x)` is `localVol(t, x)` through the default. The slice stays
+  optional for a local volatility outside QuantLib the same way.
+- The two virtuals have their own names rather than overloading `localVolImpl()`: an overload
+  would be hidden in every subclass that overrides `localVolImpl(Time, Real)`, which is all of
+  them, and GCC's `-Woverloaded-virtual` reports the hiding.
+- `localVolImpl(Time, Real)` builds a `TimeSlice` on the stack and goes through the same body, so
+  today's path makes the same six `discount()` calls and the same statements, bit-identical;
+  that is the "goes through the slice code" of 3.3. No expression the slice holds contains an
+  addition next to a product, so FMA contraction cannot touch it either; `tpt` is the literal
+  `t+dt`.
+- `slice()` checks the time once; `localVol(const Slice&, ...)` checks the strike per lookup and,
+  by one pointer compare, that this term structure built the slice, which is what makes the
+  `static_cast` in `LocalVolSurface` safe. Per lookup the slice path drops today's `checkRange(t)`
+  as well.
+- The slice is a snapshot: the value of an observed `Quote` and six discounts. The surface
+  registers with the quote and both curves, so a change notifies the process and the generator
+  drops its table (D). The slice refers to its term structure by pointer; the table that holds
+  the slice is held by the generator, which holds the process, which holds the handle.
+- Per lookup it removes the six `discount()` calls and the forward, 3,168 to 1,670 Ir on the
+  bilinear surface and 25,265 to 23,768 on the bicubic one after 3.1, measured by the prototype
+  of 3.3. Per grid time it costs one allocation and those six calls.
+- Nothing in QuantLib calls it yet. `GeneralizedBlackScholesProcess::diffusion()` keeps calling
+  `localVol(t, x, true)`, which is what B's fused step and C's forwarding table reach. QuantLib's
+  own engines take the slice when the Euler table of step 4 in section 5 holds one per grid time
+  next to the rate pair, behind C's gate, since it bypasses the virtual `diffusion()`. Until then
+  a cache outside QuantLib builds the slices itself, which is why the slice comes first.
+- The surface slice of 3.3, unmeasured and not sketched, lands one level down: a slice on
+  `BlackVolTermStructure` that `TimeSlice` would hold at `t`, `tpt` and `tmt`, and the five
+  `blackVariance()` calls per lookup would take.
+
+### B. 3.1: One Local-Volatility Evaluation per Euler Step
 
 `ql/processes/blackscholesprocess.cpp`. Today the Euler branch of `evolve()` is one line that
 hides two `diffusion()` calls, one inside `drift()` and one inside the discretization:
@@ -675,14 +925,14 @@ What to notice:
   for: a subclass outside the five that overrides `drift()` reaches the last `return`, today's
   step.
 - `continuousForwardRate` also serves `drift()`, `expectation()` and the exact branch, since each
-  takes `.rate()` and drops the `InterestRate`; the sketch of B keeps the original calls there
+  takes `.rate()` and drops the `InterestRate`; the sketch of C keeps the original calls there
   because they run once per grid.
 - Under FMA contraction, one statement per expression keeps today's bits on a compiler that
   contracts within a statement only; GCC contracts across statements by default (3.1), which is
   why the change ships with the step test at the relative 1e-13 of section 1 rather than a
   bitwise lock.
 
-### B. 3.2: The Exact Black-Scholes Step per Grid
+### C. 3.2: The Exact Black-Scholes Step per Grid
 
 Three places change: `StochasticProcess1D` gets the hook and its default,
 `GeneralizedBlackScholesProcess` overrides it behind the gate, and `PathGenerator` steps through
@@ -807,7 +1057,7 @@ step that `MultiPathGenerator` moves to, and the table that returns it; the `Arr
     };
 ```
 
-`ql/processes/blackscholesprocess.cpp`, next to the helpers of A:
+`ql/processes/blackscholesprocess.cpp`, next to the helpers of B:
 
 ```cpp
     namespace {
@@ -839,7 +1089,7 @@ step that `MultiPathGenerator` moves to, and the table that returns it; the `Arr
     ext::shared_ptr<const StochasticProcess1D::StepTable>
     GeneralizedBlackScholesProcess::stepTable(const TimeGrid& grid) const {
         // Every subclass outside the gate steps through its own evolve(); one whose step is
-        // this class's overrides this method and returns exactStepTable() itself (C).
+        // this class's overrides this method and returns exactStepTable() itself (D).
         if (!isPlainBlackScholes(*this))
             return StochasticProcess1D::stepTable(grid);
         return exactStepTable(grid);
@@ -853,7 +1103,7 @@ step that `MultiPathGenerator` moves to, and the table that returns it; the `Arr
     ext::shared_ptr<const StochasticProcess1D::StepTable>
     GeneralizedBlackScholesProcess::exactStepTable(const TimeGrid& grid) const {
         if (!usesExactStep())
-            return StochasticProcess1D::stepTable(grid);   // the Euler branch: A's fused step
+            return StochasticProcess1D::stepTable(grid);   // the Euler branch: B's fused step
         const Size steps = grid.size() - 1;
         std::vector<Real> stdDeviation, drift, sigma;
         stdDeviation.reserve(steps);
@@ -948,14 +1198,14 @@ What to notice:
 - The gate is checked once per grid, in `stepTable()`, the branch in `exactStepTable()` through
   `usesExactStep()`. A subclass that overrides `variance()` or `apply()` lands on the forwarding
   table and on its own `evolve()`; one that leaves the step intact overrides `stepTable()` and
-  returns `exactStepTable(grid)` (C).
+  returns `exactStepTable(grid)` (D).
 - `usesExactStep()` is the condition `evolve()`, `expectation()`, `stdDeviation()` and
   `variance()` each spell out today after their own `localVolatility()` call; the four can call it
   instead. It is the one name the Black-Scholes process adds to the public interface.
 - `MultiPathGenerator` changes the same way with `StochasticProcess::StepTable`, an `Array` it
   owns in place of the per-step result (3.7), and the same `Observer` base.
 
-### C. What a Caller Sees
+### D. What a Caller Sees
 
 An engine user changes nothing. `MakeMCEuropeanEngine<PseudoRandom>(process)` with 252 steps on a
 `BlackScholesMertonProcess` under a `BlackConstantVol` runs as follows: `McSimulation::calculate`
@@ -964,7 +1214,9 @@ the first `next()` calls `stepTable(timeGrid_)`; the gate passes, `localVolatili
 `LocalConstantVol` and sets the branch flag, and `exactStepTable()` builds 252 triples through the
 same `variance()` and `forwardRate()` calls `evolve()` made per step. Every further path is 252
 lookups and `exp` calls. Under a `BlackVarianceSurface` the same engine gets the forwarding table
-and A's fused step. A direct `PathGenerator` user, `test-suite/pathgenerator.cpp` or SWIG's
+and B's fused step, whose `diffusion()` call reaches the surface through `localVol(t, x, true)`,
+not through A's slice, until the Euler table of step 4 in section 5 holds one slice per grid
+time. A direct `PathGenerator` user, `test-suite/pathgenerator.cpp` or SWIG's
 `GaussianPathGenerator`, sees the same; a quote relinked between two `next()` calls notifies the
 generator, which drops the table and rebuilds it on the next path.
 
@@ -973,7 +1225,7 @@ subclass starts on today's step, whether or not its overrides touch it; opting i
 one override:
 
 ```cpp
-    // Overrides drift(), which the fused step of A and the table of B both bypass. The gate
+    // Overrides drift(), which the fused step of B and the table of C both bypass. The gate
     // sees a type outside the five: stepTable() returns the forwarding table, every step goes
     // through this class's evolve(), which is today's, and today's evolve() calls this drift().
     class ShiftedDriftProcess : public BlackScholesMertonProcess {
