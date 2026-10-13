@@ -22,6 +22,8 @@ Section 8 profiles a smile market, and section 9 lists the QuantLib changes it c
 The workload is `makeBonusClassicOptionSetup` in `src/rke/common/BonusClassicOptionSetup.cpp`:
 
 - **Option:** barrier 90, bonus level 120, maturity 22 Jun 2026, evaluation date 22 Jun 2025.
+  Every figure here was measured at barrier 90, before `e460acf` moved the shared setup to 70
+  on 2026-10-09; the executables no longer reproduce these NPVs as they stand.
 - **Market:** `BlackScholesMertonProcess`, spot 100. Rates and volatility are flat:
   `FlatForward` risk-free rate 1% and dividend yield 3%, continuously compounded;
   `BlackConstantVol` at 20%, `NullCalendar`. Day count `Actual360` throughout.
@@ -131,8 +133,9 @@ the same pricing.
   `QuantLib::PathGenerator`'s. The implementation reproduces:
   - the production setup: discrete `100.22671167047309` and continuous
     `99.883605619178169`;
-  - both locks in `src/rke/testsuite/BonusClassicOption.cpp`: discrete
-    `106.96041418042263` and continuous `105.88329042929441`.
+  - both locks in `src/rke/testsuite/BonusClassicOption.cpp` in force at the time: discrete
+    `106.96041418042263` and continuous `105.88329042929441`, since replaced by the barrier-70
+    lock `119.59926159811715`.
 
   In the smile branch, 4.5 caches `r − q` in QuantLib's evaluation order `(r − q) − ½σ²`,
   bit-identical without FMA contraction; 4.5 gives the differences with it.
@@ -472,6 +475,25 @@ here it adds almost nothing; it pays in every other engine that evolves the proc
    `--market smile-bilinear` and `--market smile-bicubic` against 4.5's figures.
 2. The continuous pricer's third `localVol` per step, 4.5's "What it leaves", in this
    repository: 26.3% of the cached bilinear continuous run.
+
+The whole sequence, 9.1 and 9.2 first and the step cache inside QuantLib after them, is
+[`quantlib-mc-step-precomputation-upstream.md`](quantlib-mc-step-precomputation-upstream.md), a
+standalone proposal against QuantLib at `966a4cc10` that names nothing of this repository. What it
+means here:
+
+- Each of its six steps is a branch of `ralfkonrad/QuantLib` per
+  [`changing-quantlib.md`](../.agents/changing-quantlib.md), measured with the `profile` preset
+  before the next starts: its 3.3 and 3.1 with `--market smile-bilinear` and
+  `--market smile-bicubic`, 3.1 and 3.2 with `--path-generation uncached`, which runs QuantLib's
+  own `evolve()`, against the figures of 4.1 and 4.5. Its 3.5 and 3.6 need a Heston and a
+  Hull-White profile executable under `src/rke/profile/`, with this document's conventions.
+- `LocalVolStepCache` gains from 9.2 unchanged and from 9.1 once its `localVol` call takes the
+  slice overload. After the proposal's 3.2, plain `QuantLib::SingleVariate` builds the same table
+  as `BlackScholesStepCache`, and `CachedStepPathGenerator` has nothing left to add on the flat
+  market; the two-point probe of both caches is what the proposal's exact-type gate replaces.
+- This repository's `macos-26` and `ubuntu-26.04-arm` CI jobs contract to FMAs by default but
+  filter CTest on `^rke_`; the proposal's bitwise step test needs a `ctest -R quantlib` step
+  there, or QuantLib's own arm64 macOS CI.
 
 ## 11. Raw Profiles
 
