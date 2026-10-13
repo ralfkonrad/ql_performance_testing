@@ -15,6 +15,7 @@ set(RKE_COMMON_SOURCES
 set(RKE_COMMON_HEADER
         BonusClassicOptionSetup.hpp
         FlatTermStructures.hpp
+        LowDiscrepancyJoeKuoD7.hpp
         MarketData.hpp
         StepCacheMarkets.hpp
 )

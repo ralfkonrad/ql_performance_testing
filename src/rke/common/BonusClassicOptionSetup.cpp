@@ -2,13 +2,12 @@
 // SPDX-License-Identifier: MIT
 
 #include "BonusClassicOptionSetup.hpp"
+#include "LowDiscrepancyJoeKuoD7.hpp"
 #include "MarketData.hpp"
 #include <rke/ql/ext/pricingengines/bonusclassic/AnalyticBonusClassicEngine.hpp>
 #include <rke/ql/ext/pricingengines/bonusclassic/BinomialBonusClassicEngine.hpp>
 #include <rke/ql/ext/pricingengines/bonusclassic/FdBlackScholesBonusClassicEngine.hpp>
 #include <rke/ql/ext/pricingengines/bonusclassic/MCBonusClassicEngine.hpp>
-#include <ql/math/randomnumbers/rngtraits.hpp>
-#include <ql/math/randomnumbers/sobolrsg.hpp>
 #include <ql/methods/finitedifferences/solvers/fdmbackwardsolver.hpp>
 #include <ql/methods/lattices/binomialtree.hpp>
 #include <ql/methods/montecarlo/mctraits.hpp>
@@ -24,17 +23,6 @@ namespace RKE::Common {
     }
 
     namespace {
-        // LowDiscrepancy with Joe-Kuo D7 direction integers, tabulated up to dimension 1898,
-        // instead of SobolRsg's default Jaeckel ones, tabulated up to 32 and drawn from the seed
-        // beyond. One dimension per time step, so a daily grid needs the former. Otherwise the
-        // factory is GenericLowDiscrepancy's, icInstance included.
-        struct LowDiscrepancyJoeKuoD7 : LowDiscrepancy {
-            static rsg_type make_sequence_generator(Size dimension, BigNatural seed) {
-                const auto g = SobolRsg(dimension, seed, SobolRsg::JoeKuoD7);
-                return icInstance ? rsg_type(g, *icInstance) : rsg_type(g);
-            }
-        };
-
         template <template <class> class MC>
         ext::shared_ptr<PricingEngine>
         makeEngine(const ext::shared_ptr<GeneralizedBlackScholesProcess>& process,
