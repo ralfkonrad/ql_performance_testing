@@ -13,6 +13,10 @@ option(RKE_PROFILING "Add debug info and frame pointers for profiling" OFF)
 # further down, as the two disagreeing is an MSVC link failure.
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
+# Embeds debug info in each object (/Z7) rather than a PDB shared per target (/Zi), which
+# ccache and sccache refuse to cache. Set before add_subdirectory(external) to reach QuantLib.
+set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<$<CONFIG:Debug,RelWithDebInfo>:Embedded>")
+
 list(PREPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 
 include(WarningLevels)
