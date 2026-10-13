@@ -117,10 +117,12 @@ CTest knows `quantlib_test_suite`, `rke_testsuite`, one
 `rke_benchmark_<workload>` per benchmark executable (a one-iteration dry run) and,
 per profile executable, one single-iteration smoke run per mode, path generation and
 engine, such as `rke_profile_bonusclassicoption_discrete`,
-`rke_profile_bonusclassicoption_discrete_uncached` and
-`rke_profile_bonusclassicoption_fd_continuous`, plus
-`rke_profile_bonusclassicoption_mc_without_samples` and
-`rke_profile_bonusclassicoption_fd_with_path_generation`, which pass on the refusal's
+`rke_profile_bonusclassicoption_discrete_uncached`,
+`rke_profile_bonusclassicoption_fd_continuous` and
+`rke_profile_barrieroption_continuous`, plus
+`rke_profile_bonusclassicoption_mc_without_samples`,
+`rke_profile_bonusclassicoption_fd_with_path_generation` and
+`rke_profile_barrieroption_without_samples`, which pass on the refusal's
 message, and one smoke run per example executable on its defaults,
 `rke_example_bonusclassicoption`, plus
 `rke_example_bonusclassicoption_bonus_level_at_barrier` and

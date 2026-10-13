@@ -3,6 +3,8 @@
 
 # One subdirectory per workload, each building rke_benchmark_<workload> from a single
 # file that defines, registers and runs its benchmarks.
+add_subdirectory(barrieroption)
+
 add_subdirectory(bonusclassicoption)
 
 add_subdirectory(calendar)

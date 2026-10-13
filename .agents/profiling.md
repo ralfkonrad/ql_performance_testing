@@ -69,6 +69,21 @@ result line prints the grid `fd` and `binomial` priced on in place of the path c
 the lattice after Boyle-Lau in particular. A flat pricing takes milliseconds,
 `analytic` microseconds, so nothing needs shrinking for callgrind.
 
+`rke_profile_barrieroption` prices `RKE::Common::makeBarrierOptionSetup`, the
+certificate's put leg under `QuantLib::MCBarrierEngine` on the same markets and grid,
+so nothing of `rke_ql_ext` is on its measured path. It takes
+`--monitoring discrete|continuous`, `--iterations <pricings>`,
+`--market flat|smile-bilinear|smile-bicubic` and `--samples=<paths per pricing>`, all
+required, none with a default, and prints the NPV as above. `discrete` prices through
+`BiasedBarrierPathPricer`, which never calls the process; `continuous` through
+`BarrierPathPricer`, which calls `diffusion()` on every step of every path, on the
+smiles a third `LocalVolSurface` lookup at the point the Euler step has just evaluated
+twice. Its production run in that mode:
+
+```bash
+ARGS=(--monitoring continuous --market flat --samples=65536)
+```
+
 Every recipe ends in a text file, so an agent reads the result rather than a
 picture.
 

@@ -4,6 +4,7 @@
 # The flat market helpers and the workloads shared by the tests, the benchmarks and the
 # profile executables, so all three price the same instrument, market and engine.
 set(RKE_COMMON_SOURCES
+        BarrierOptionSetup.cpp
         BonusClassicOptionSetup.cpp
         FlatTermStructures.cpp
         MarketData.cpp
@@ -13,8 +14,10 @@ set(RKE_COMMON_SOURCES
 # Headers are listed by hand, and an unlisted one still compiles, so an omission
 # is silent.
 set(RKE_COMMON_HEADER
+        BarrierOptionSetup.hpp
         BonusClassicOptionSetup.hpp
         FlatTermStructures.hpp
+        LowDiscrepancyJoeKuoD7.hpp
         MarketData.hpp
         StepCacheMarkets.hpp
 )
