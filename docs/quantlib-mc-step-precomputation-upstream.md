@@ -269,7 +269,8 @@ keeps it so under contraction.
 
 - **Status:** the rate pair measured together with 3.1, the local-volatility slice measured by
   prototype, the surface slice unmeasured.
-- **Lives in:** the rate pair in `GeneralizedBlackScholesProcess`'s hook, since it needs the grid.
+- **Lives in:** the rate pair in `GeneralizedBlackScholesProcess`'s hook, since it needs the grid
+  (appendix D).
   The slices in `LocalVolTermStructure` and `LocalVolSurface`, and in `BlackVarianceSurface`;
   they need no hook.
 - **Finding:** after 3.1 an Euler step still computes from `t` alone:
@@ -590,14 +591,15 @@ change. Wall clock is secondary.
    same conventions.
 7. **3.7:** DHAT on `MCEuropeanBasketEngine`, allocations per step before and after.
 
-## Appendix: Sketches of 3.3, 3.1 and 3.2
+## Appendix: Sketches of 3.3, 3.1, 3.2 and the Euler Table
 
-How the first three changes of section 5 would look in QuantLib at `966a4cc10`, in that order:
+How the first four changes of section 5 would look in QuantLib at `966a4cc10`, in that order:
 the local-volatility time slice of 3.3, the fused Euler step of 3.1, the exact step table of 3.2,
-and then what a caller sees. Every listing is a sketch, uncompiled, against the file it names,
-and the prose around it says what to notice. All three touch existing files only, so nothing is
-registered in CMake, Autotools or the Visual Studio solution. The sketches follow sections 3.3,
-3.1, 3.2 and 4; where one forces a decision those sections leave open, the prose says so.
+the Euler table that puts 3.3's rate pair and 3.4 on the hook, and then what a caller sees. Every
+listing is a sketch, uncompiled, against the file it names, and the prose around it says what to
+notice. All four touch existing files only, so nothing is registered in CMake, Autotools or the
+Visual Studio solution. The sketches follow sections 3.3, 3.1, 3.2, 3.4 and 4; where one forces a
+decision those sections leave open, the prose says so.
 
 ### A. 3.3: The Local-Volatility Time Slice
 
@@ -836,7 +838,7 @@ What to notice:
 - The slice is a snapshot: a `Quote`'s value and six discounts. The surface registers with the
   Black surface and both curves, and with the quote when built on a `Handle<Quote>`; the one the
   process builds takes the spot by value, and the process itself observes the quote, so either
-  way a change notifies the process and the generator drops its table (D). The slice refers to
+  way a change notifies the process and the generator drops its table (E). The slice refers to
   its term structure by pointer; the table that holds
   the slice is held by the generator, which holds the process, which holds the handle.
 - Per lookup it removes the six `discount()` calls and the forward, 3,168 to 1,670 Ir on the
@@ -844,9 +846,9 @@ What to notice:
   of 3.3. Per grid time it costs one allocation and those six calls.
 - Nothing in QuantLib calls it yet. `GeneralizedBlackScholesProcess::diffusion()` keeps calling
   `localVol(t, x, true)`, which is what B's fused step and C's forwarding table reach. QuantLib's
-  own engines take the slice when the Euler table of step 4 in section 5 holds one per grid time
-  next to the rate pair, behind C's gate, since it bypasses the virtual `diffusion()`. Until then
-  a cache outside QuantLib builds the slices itself, which is why the slice comes first.
+  own engines take the slice when the Euler table of D holds one per grid time next to the rate
+  pair, behind C's gate, since it bypasses the virtual `diffusion()`. Until then a cache outside
+  QuantLib builds the slices itself, which is why the slice comes first.
 - The surface slice of 3.3, unmeasured and not sketched, lands one level down: a slice on
   `BlackVolTermStructure` that `TimeSlice` would hold at `t`, `tpt` and `tmt`, and the five
   `blackVariance()` calls per lookup would take.
@@ -1122,7 +1124,7 @@ step that `MultiPathGenerator` moves to, and the table that returns it; the `Arr
     ext::shared_ptr<const StochasticProcess1D::StepTable>
     GeneralizedBlackScholesProcess::stepTable(const TimeGrid& grid) const {
         // Every subclass outside the gate steps through its own evolve(); one whose step is
-        // this class's overrides this method and returns exactStepTable() itself (D).
+        // this class's overrides this method and returns exactStepTable() itself (E).
         if (!isPlainBlackScholes(*this))
             return StochasticProcess1D::stepTable(grid);
         return exactStepTable(grid);
@@ -1231,14 +1233,181 @@ What to notice:
 - The gate is checked once per grid, in `stepTable()`, the branch in `exactStepTable()` through
   `usesExactStep()`. A subclass that overrides `variance()` or `apply()` lands on the forwarding
   table and on its own `evolve()`; one that leaves the step intact overrides `stepTable()` and
-  returns `exactStepTable(grid)` (D).
+  returns `exactStepTable(grid)` (E).
 - `usesExactStep()` is the condition `evolve()`, `expectation()`, `stdDeviation()` and
   `variance()` each spell out today after their own `localVolatility()` call; the four can call it
   instead. It is the one name the Black-Scholes process adds to the public interface.
 - `MultiPathGenerator` changes the same way with `StochasticProcess::StepTable`, an `Array` it
   owns in place of the per-step result (3.7), and the same `Observer` base.
 
-### D. What a Caller Sees
+### D. 3.3 and 3.4: The Euler Table
+
+Step 4 of section 5 puts the Euler branch on C's hook: a table that holds, per grid step, the
+rate pair of 3.3 and `√dt`, per grid time one slice of A, and, where σ depends on the time alone,
+the σ of 3.4 at every grid point. Its step is B's fused step with the slice in place of the
+virtual `diffusion()`. One file changes: `GeneralizedBlackScholesProcess` gets a second protected
+builder, and its `stepTable()` picks a builder by branch. `StochasticProcess1D`, the generators
+and the local volatilities stay as A and C left them.
+
+**The override.** `ql/processes/blackscholesprocess.hpp`, next to `exactStepTable()`:
+
+```cpp
+      protected:
+        ext::shared_ptr<const StepTable> exactStepTable(const TimeGrid& grid) const;
+        /*! the fused Euler step per grid step on the Euler branch under
+            EulerDiscretization, with the rate pair and the local volatility's
+            slice held per grid time; the forwarding table on the
+            strike-independent branch and under any other discretization. For
+            a subclass whose overrides leave the step intact and which
+            overrides stepTable() to say so.
+        */
+        ext::shared_ptr<const StepTable> eulerStepTable(const TimeGrid& grid) const;
+        ...
+```
+
+`ql/processes/blackscholesprocess.cpp`, next to `ExactStepTable`:
+
+```cpp
+    namespace {
+
+        class EulerStepTable : public StochasticProcess1D::StepTable {
+          public:
+            EulerStepTable(ext::shared_ptr<const LocalVolTermStructure> localVol,
+                           std::vector<ext::shared_ptr<const LocalVolTermStructure::Slice>> slice,
+                           std::vector<Rate> rateDrift,
+                           std::vector<Time> dt,
+                           std::vector<Real> sqrtDt,
+                           std::vector<Real> sigma)
+            : localVol_(std::move(localVol)), slice_(std::move(slice)),
+              rateDrift_(std::move(rateDrift)), dt_(std::move(dt)),
+              sqrtDt_(std::move(sqrtDt)), sigma_(std::move(sigma)) {}
+            Real evolve(Size i, Real x0, Real dw) const override {
+                // B's fused step, statement for statement: the slice in place of the virtual
+                // diffusion(), the rate pair in place of its two forward rates, apply()'s
+                // body in place of apply(). The gate has made sure the step is this class's.
+                Real sigma = localVol_->localVol(*slice_[i], x0, true);
+                Real mu = rateDrift_[i] - 0.5 * sigma * sigma;  // drift(t0, x0)
+                Real driftDt = mu * dt_[i];                      // EulerDiscretization::drift
+                Real stdDev = sigma * sqrtDt_[i];                // EulerDiscretization::diffusion
+                return x0 * std::exp(lognormalIncrement(stdDev, dw, driftDt));
+            }
+            Real diffusion(Size i) const override {
+                return sigma_.empty() ? Null<Real>() : sigma_[i];
+            }
+          private:
+            ext::shared_ptr<const LocalVolTermStructure> localVol_;
+            std::vector<ext::shared_ptr<const LocalVolTermStructure::Slice>> slice_;
+            std::vector<Rate> rateDrift_;
+            std::vector<Time> dt_;
+            std::vector<Real> sqrtDt_, sigma_;
+        };
+
+    }
+
+    ext::shared_ptr<const StochasticProcess1D::StepTable>
+    GeneralizedBlackScholesProcess::stepTable(const TimeGrid& grid) const {
+        // C's gate, then the branch; each builder forwards off its own branch.
+        if (!isPlainBlackScholes(*this))
+            return StochasticProcess1D::stepTable(grid);
+        return usesExactStep() ? exactStepTable(grid) : eulerStepTable(grid);
+    }
+
+    ext::shared_ptr<const StochasticProcess1D::StepTable>
+    GeneralizedBlackScholesProcess::eulerStepTable(const TimeGrid& grid) const {
+        // The exact branch, or a discretization with a step of its own: B's check, once per
+        // grid instead of once per process.
+        if (usesExactStep() || typeid(*discretization_) != typeid(EulerDiscretization))
+            return StochasticProcess1D::stepTable(grid);
+        // The link evolve() would evaluate: the LocalVolSurface localVolatility() built under
+        // a smile, the LocalConstantVol or LocalVolCurve under a forced discretization, or the
+        // external one. The table holds the link, not the handle.
+        ext::shared_ptr<const LocalVolTermStructure> localVol = localVolatility().currentLink();
+        const Size steps = grid.size() - 1;
+        std::vector<ext::shared_ptr<const LocalVolTermStructure::Slice>> slice;
+        std::vector<Rate> rateDrift;
+        std::vector<Time> dt;
+        std::vector<Real> sqrtDt, sigma;
+        slice.reserve(steps);
+        rateDrift.reserve(steps);
+        dt.reserve(steps);
+        sqrtDt.reserve(steps);
+        for (Size i = 0; i < steps; ++i) {
+            Time t0 = grid[i];
+            // drift()'s rate pair at the point B's fused step evaluates it; t0 + 0.0001 stays
+            // the literal sum, and r - q is one double because drift() subtracts left to right.
+            Time t1 = t0 + 0.0001;
+            rateDrift.push_back(continuousForwardRate(*riskFreeRate_, t0, t1)
+                              - continuousForwardRate(*dividendYield_, t0, t1));
+            dt.push_back(grid.dt(i));                       // what PathGenerator passes today
+            sqrtDt.push_back(std::sqrt(grid.dt(i)));
+            slice.push_back(localVol->slice(t0, true));     // A; the time only below a surface
+        }
+        if (isStrikeIndependent_) {
+            // A forced discretization on a constant or curve volatility: sigma depends on t
+            // alone, and the table holds it at every grid point for the pricers of 3.4.
+            sigma.reserve(steps + 1);
+            for (Size i = 0; i <= steps; ++i)
+                sigma.push_back(diffusion(grid[i], x0()));
+        }
+        return ext::make_shared<EulerStepTable>(std::move(localVol), std::move(slice),
+                                                std::move(rateDrift), std::move(dt),
+                                                std::move(sqrtDt), std::move(sigma));
+    }
+```
+
+And B's fused step ends in C's helper instead of the inline sum, the way the exact branch
+does:
+
+```cpp
+            return apply(x0, lognormalIncrement(stdDev, dw, driftDt));
+```
+
+**The test.** Beside B's step test: on the smile setup of section 1 and on a flat setup with
+`forceDiscretization`, `stepTable(grid)->evolve(i, x, dw)` against
+`evolve(grid[i], x, grid.dt(i), dw)` at fixed points on every step, within the relative 1e-13 of
+section 1, and bit for bit on a build that does not contract. `diffusion(i)` is `Null<Real>()`
+under the smile and `diffusion(grid[i], x0())` under the forced discretization. The NPVs of
+section 7's second item serve as the statistical check, and its first item is the measurement
+this table makes possible: the smile setup through QuantLib's own generator with one
+`localVolImpl` and cached rates.
+
+What to notice:
+
+- Per step the table makes one `localVol()` call on a slice, five `blackVariance()` calls
+  under a surface, and one `exp`; B's fused step makes the same `localVol()` through the time,
+  six `discount()` calls more, and the rate pair's four `discount()` and two `log` on top. The
+  prototype of 3.3 puts that at 1,670 Ir bilinear and 23,768 bicubic against 3,168 and 25,265
+  for the fused step with the rate pair cached, and the fused step alone lands near 4,600 and
+  26,700 (3.1, derived). Per grid time the table pays one slice allocation, six `discount()`
+  calls, four more and two `log` for the rate pair, and one `sqrt`.
+- The step is B's statement for statement, so what holds for B holds here: bit-identical where
+  nothing is contracted, within the 1e-13 of section 1 where GCC contracts across statements.
+  `lognormalIncrement(stdDev, dw, driftDt)` is `stdDev * dw + driftDt`, the sum of today's
+  `drift + stdDev * dw` with its operands swapped, which IEEE addition does not notice, and
+  the one product a contracting compiler fuses either way. The slice path and the time path of
+  `LocalVolSurface` share one body (A), so σ is the same double on both.
+- The branch is decided once per grid, through `usesExactStep()` and B's `typeid` comparison
+  on `discretization_`, and both builders forward off their branch, so neither can be made to
+  return a table for a step that is not this class's. `stepTable()` picks the builder behind
+  C's gate; a subclass picks it in its own override (E).
+- The table holds the local volatility's link and its slices, which refer to that term
+  structure by pointer, so the link outlives them. After a notification `localVolatility()`
+  links a fresh `LocalVolSurface`, since `update()` clears `updated_`; the old one lives on in
+  the table until the generator drops it, which it does on the same notification. A quote,
+  curve or surface change reaches the process through the handles it registers with, and an
+  external local volatility notifies the process as its `Observable`, so the table is a
+  snapshot only between two notifications, as C's.
+- `diffusion(i)` is filled only where σ depends on the time alone, a forced discretization on a
+  `BlackConstantVol` or `BlackVarianceCurve`, which is the one case the Euler branch shares
+  with 3.4's strike-independent finding. Under a smile it stays `Null<Real>()`: the σ the
+  barrier pricer wants there is the one the generator computed at `(t_i, path[i])`, which the
+  table would have to record per step in `evolve()`, mutable state that makes it a per-path
+  object rather than a per-grid one. That side channel and the two pricer changes of 3.4 are not
+  sketched.
+- `exactStepTable()` is unchanged; `eulerStepTable()` sits beside it rather than inside it, so a
+  subclass can opt into one branch's table without the other (E).
+
+### E. What a Caller Sees
 
 An engine user changes nothing. `MakeMCEuropeanEngine<PseudoRandom>(process)` with 252 steps on a
 `BlackScholesMertonProcess` under a `BlackConstantVol` runs as follows: `McSimulation::calculate`
@@ -1246,10 +1415,12 @@ builds the `MonteCarloModel` and with it the `PathGenerator`, which registers wi
 the first `next()` calls `stepTable(timeGrid_)`; the gate passes, `localVolatility()` links a
 `LocalConstantVol` and sets the branch flag, and `exactStepTable()` builds 252 triples through the
 same `variance()` and `forwardRate()` calls `evolve()` made per step. Every further path is 252
-lookups and `exp` calls. Under a `BlackVarianceSurface` the same engine gets the forwarding table
-and B's fused step, whose `diffusion()` call reaches the surface through `localVol(t, x, true)`,
-not through A's slice, until the Euler table of step 4 in section 5 holds one slice per grid
-time. A direct `PathGenerator` user, `test-suite/pathgenerator.cpp` or SWIG's
+lookups and `exp` calls. Under a `BlackVarianceSurface` the same engine gets D's Euler table:
+`usesExactStep()` is false, and `eulerStepTable()` builds 252 rate pairs through B's helper and
+252 slices through `LocalVolSurface::sliceImpl`, six `discount()` calls each. Every further path
+step is one `localVol()` on a slice, five `blackVariance()` calls, and one `exp`. B's fused step
+still serves a direct `evolve()` caller and every process outside the gate. A direct
+`PathGenerator` user, `test-suite/pathgenerator.cpp` or SWIG's
 `GaussianPathGenerator`, sees the same; a quote relinked between two `next()` calls notifies the
 generator, which drops the table and rebuilds it on the next path.
 
@@ -1258,9 +1429,10 @@ subclass starts on today's step, whether or not its overrides touch it; opting i
 one override:
 
 ```cpp
-    // Overrides drift(), which the fused step of B and the table of C both bypass. The gate
-    // sees a type outside the five: stepTable() returns the forwarding table, every step goes
-    // through this class's evolve(), which is today's, and its Euler branch calls this drift().
+    // Overrides drift(), which the fused step of B and the tables of C and D all bypass. The
+    // gate sees a type outside the five: stepTable() returns the forwarding table, every step
+    // goes through this class's evolve(), which is today's, and its Euler branch calls this
+    // drift().
     class ShiftedDriftProcess : public BlackScholesMertonProcess {
       public:
         using BlackScholesMertonProcess::BlackScholesMertonProcess;
@@ -1272,8 +1444,9 @@ one override:
     };
 
     // Overrides time() only, which is not on the step. The gate still refuses the exact type,
-    // so the class says itself that its step is the base class's: the protected builder
-    // applies usesExactStep() and returns the exact table or the forwarding one.
+    // so the class says itself that its step is the base class's on both branches: each
+    // protected builder applies usesExactStep() and the discretization check itself, and
+    // returns the forwarding table off its branch.
     class VolDayCountProcess : public BlackScholesMertonProcess {
       public:
         using BlackScholesMertonProcess::BlackScholesMertonProcess;
@@ -1282,20 +1455,26 @@ one override:
                 blackVolatility()->referenceDate(), d);
         }
         ext::shared_ptr<const StepTable> stepTable(const TimeGrid& grid) const override {
-            return exactStepTable(grid);
+            return usesExactStep() ? exactStepTable(grid) : eulerStepTable(grid);
         }
     };
 ```
 
 What to notice:
 
-- The first class needs no code and loses nothing; the second needs one override and gains the
-  table. Neither can get a table that ignores an override, which is the contract section 4 asks
-  the gate to keep.
+- The first class needs no code and loses nothing; the second needs one override and gains
+  both tables. Neither can get a table that ignores an override, which is the contract section 4
+  asks the gate to keep.
 - `exactStepTable()` applies `usesExactStep()` itself and falls back to the forwarding table on
-  the Euler branch, so the override stays one line and cannot pick the exact table on the wrong
-  branch. A subclass that wants to know the branch asks `usesExactStep()`, the question a cache
-  outside QuantLib had to answer by probing (section 1).
-- `ShiftedDriftProcess` under a smile pays today's two `diffusion()` calls per step, since A's
+  the Euler branch; `eulerStepTable()` does the same on the exact branch and under a
+  discretization that is not exactly `EulerDiscretization`. So the override stays one line and
+  cannot pick a table on the wrong branch. A subclass that wants to know the branch asks
+  `usesExactStep()`, the question a cache outside QuantLib had to answer by probing (section 1).
+- The two builders are separate so that a subclass can opt into one branch alone.
+  `ShiftedDriftProcess` overrides `drift()`, which only the Euler step runs through, so it may
+  return `exactStepTable(grid)` from an override of its own: the exact table on the
+  strike-independent branch, and on the Euler branch the forwarding table, which runs its
+  `evolve()` and so its `drift()`.
+- `ShiftedDriftProcess` under a smile pays today's two `diffusion()` calls per step, since B's
   fused step is behind the same gate. That is the price of the contract, and it is the price
   such a subclass pays today.
