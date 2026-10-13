@@ -6,6 +6,7 @@ add_executable(rke_testsuite
         CachedStepPathGenerator.cpp
         BonusClassicOption.cpp
         MarketData.cpp
+        BarrierOption.cpp
         TestSuiteFixture.hpp
 )
 
