@@ -22,6 +22,8 @@ Section 8 profiles a smile market, and section 9 lists the QuantLib changes it c
 The workload is `makeBonusClassicOptionSetup` in `src/rke/common/BonusClassicOptionSetup.cpp`:
 
 - **Option:** barrier 90, bonus level 120, maturity 22 Jun 2026, evaluation date 22 Jun 2025.
+  Every figure here was measured at barrier 90, before `e460acf` moved the shared setup to 70
+  on 2026-10-09; the executables no longer reproduce these NPVs as they stand.
 - **Market:** `BlackScholesMertonProcess`, spot 100. Rates and volatility are flat:
   `FlatForward` risk-free rate 1% and dividend yield 3%, continuously compounded;
   `BlackConstantVol` at 20%, `NullCalendar`. Day count `Actual360` throughout.
@@ -131,8 +133,9 @@ the same pricing.
   `QuantLib::PathGenerator`'s. The implementation reproduces:
   - the production setup: discrete `100.22671167047309` and continuous
     `99.883605619178169`;
-  - both locks in `src/rke/testsuite/BonusClassicOption.cpp`: discrete
-    `106.96041418042263` and continuous `105.88329042929441`.
+  - both locks in `src/rke/testsuite/BonusClassicOption.cpp` in force at the time: discrete
+    `106.96041418042263` and continuous `105.88329042929441`, since replaced by the barrier-70
+    lock `119.59926159811715`.
 
   In the smile branch, 4.5 caches `r − q` in QuantLib's evaluation order `(r − q) − ½σ²`,
   bit-identical without FMA contraction; 4.5 gives the differences with it.
