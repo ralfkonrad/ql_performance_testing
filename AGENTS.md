@@ -30,10 +30,12 @@ itself. QuantLib, google-benchmark and CLI11 are git submodules under `external/
   that submodule reads. Nothing of ours is declared at the
   top level beside them: warnings and `CMAKE_CXX_CLANG_TIDY` are set in
   `src/CMakeLists.txt`, one directory tree away, so neither depends on where
-  `add_subdirectory(external)` sits. The one exception is `cmake/Profiling.cmake`,
-  included before `external/` under `RKE_PROFILING`: its debug info and frame
-  pointers are useless unless QuantLib gets them too. Keep it to flags a profiler
-  needs, and off by default.
+  `add_subdirectory(external)` sits. The exceptions reach QuantLib on purpose. The
+  MSVC runtime in `CMakeLists.txt` must match on every target or the link fails, and
+  the debug-info format next to it is `/Z7` because ccache and sccache refuse `/Zi`.
+  `cmake/Profiling.cmake`, included before `external/` under `RKE_PROFILING`, adds
+  debug info and frame pointers that are useless unless QuantLib gets them too. Keep
+  it to flags a profiler needs, and off by default.
 - **Warnings are build failures, and `src/` is where that is declared.**
   `src/CMakeLists.txt` sets `CMAKE_COMPILE_WARNING_AS_ERROR` from
   `RKE_COMPILE_WARNING_AS_ERROR` (default `ON`), which initialises the property on

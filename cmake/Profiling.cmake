@@ -9,8 +9,9 @@ if (NOT RKE_PROFILING)
 endif ()
 
 if (MSVC)
-  # x64 unwinds from tables, so debug info is all a profiler needs.
-  add_compile_options(/Zi)
+  # x64 unwinds from tables, so debug info is all a profiler needs. Embedded (/Z7) for the
+  # same reason as at the top level: ccache and sccache refuse /Zi.
+  set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)
   add_link_options(/DEBUG)
 else ()
   add_compile_options(-g -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer)
