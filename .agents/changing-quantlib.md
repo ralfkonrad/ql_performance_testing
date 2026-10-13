@@ -22,8 +22,19 @@ the only task allowed to edit a submodule. Every other task treats
   solution.
 - Which change comes next, and the criterion that decides whether it stays, is
   [`docs/quantlib-mc-step-precomputation-upstream.md`](../docs/quantlib-mc-step-precomputation-upstream.md),
-  sections 5 and 7; the runs that measure it here are section 10 of
+  under "Sequence of Upstream Changes" and "Measurements That Decide the Ranking"; the
+  runs that measure it here are under "Next Step" in
   [`docs/profiling-bonusclassicoption-mc.md`](../docs/profiling-bonusclassicoption-mc.md).
+- `rke_profile_barrieroption` is the yardstick a reviewer can reproduce from QuantLib
+  alone: `MCBarrierEngine` on `PathGenerator` and QuantLib's barrier path pricers, its
+  `continuous` mode the one that reaches `BarrierPathPricer`. Count one repricing under
+  callgrind against the same build without the branch, as in
+  [`profiling.md`](profiling.md), and compare the 17-digit NPVs it prints on a build
+  that does not contract to FMAs, such as the `profile` preset here: they must be the
+  same double, which the test suite's barrier locks, carrying a platform tolerance,
+  cannot show. `rke_profile_bonusclassicoption --path-generation uncached` stays the
+  measurement of "One Local-Volatility Evaluation per Euler Step" and "The Exact
+  Black-Scholes Step per Grid", whose criteria the proposal states on the bonus option.
 
 ## 2. Formatting Changed Lines Only
 

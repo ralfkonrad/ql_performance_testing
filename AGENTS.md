@@ -67,7 +67,8 @@ itself. QuantLib, google-benchmark and CLI11 are git submodules under `external/
   curve and volatility helpers live in `src/rke/common/FlatTermStructures.hpp`;
   the markets and the reference date the tests, benchmarks and profiles share in
   `src/rke/common/MarketData.hpp` and `src/rke/common/StepCacheMarkets.hpp`, the
-  instrument in `src/rke/common/BonusClassicOptionSetup.hpp`.
+  instruments in `src/rke/common/BonusClassicOptionSetup.hpp` and
+  `src/rke/common/BarrierOptionSetup.hpp`.
 
 ## 2. Task Guides
 
