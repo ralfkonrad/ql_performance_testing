@@ -150,11 +150,14 @@ gates the cache on the exact type and such a subclass keeps `evolve()`.
 
 ## 3. Candidates
 
-3.1 comes first: a production market, with an interpolated curve and a smile, takes the Euler
-branch, and 3.1 needs no new API. 3.2 to 3.4 complete the Black-Scholes process in the order they
-build on each other; 3.5 to 3.7 follow by expected gain. Measured: 3.1 together with 3.3's rate
-pair, 3.2, and 3.3's local-vol time slice by prototype. The rest is unmeasured. "Bit-identical"
-means without FMA contraction; section 4 keeps it so under contraction.
+The candidates are numbered by where they live, not by the order of the branches: 3.1 to 3.3 in
+the Black-Scholes process and the term structures it reads, 3.4 in the pricers over it, 3.5 the
+Heston family, 3.6 Hull-White, 3.7 the multi-asset array. Section 5 orders the branches by what
+each needs of the API of section 4, which splits 3.3 in two and puts its slices and 3.1 first: a
+production market, with an interpolated curve and a smile, takes the Euler branch, and neither
+needs a new API. Measured: 3.1 together with 3.3's rate pair, 3.2, and 3.3's local-vol time slice
+by prototype. The rest is unmeasured. "Bit-identical" means without FMA contraction; section 4
+keeps it so under contraction.
 
 ### 3.1 One Local-Volatility Evaluation per Euler Step
 
