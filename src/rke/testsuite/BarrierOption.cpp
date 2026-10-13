@@ -163,17 +163,17 @@ namespace RKE::TestSuite {
         // flat market against QuantLib's closed form; the smiles have no independent check here,
         // their locks pin the engine on the markets the profile executable measures.
         //
-        // The values are clang's on x86-64, which does not contract to FMAs. gcc at
-        // -march=x86-64-v3, which does, as CI's gcc legs do, moves the flat locks by up to
-        // 5.9e-16 relative and the smile ones by up to 6.9e-6 on the bilinear surface and 2.1e-7
-        // on the bicubic one: LocalVolSurface turns a last-bit difference in the Black variance
-        // into a visible one in the local variance. The flat bound is the 1e-8 the other flat
-        // locks hold across the CI matrix; the smile bound leaves three times the largest smile
-        // move, rounded up to one digit. Neither is a bit-level criterion: a QuantLib change is
-        // held to the profile executable's 17-digit NPV, the same double before and after the
-        // change on one build.
+        // The values are clang's on x86-64, which does not contract to FMAs; CI's clang x86-64
+        // legs reproduce them to the bit. Across the rest of the CI matrix the flat locks move by
+        // up to 9.8e-16 relative, the smile ones by up to 1.2e-5 on the bilinear surface (macOS
+        // clang) and 2.1e-7 on the bicubic one (gcc): LocalVolSurface turns a last-bit difference
+        // in the Black variance into a visible one in the local variance. The flat bound is the
+        // 1e-8 the other flat locks hold across the CI matrix; the smile bound leaves three times
+        // the largest smile move, rounded up to one digit. Neither is a bit-level criterion: a
+        // QuantLib change is held to the profile executable's 17-digit NPV, the same double
+        // before and after the change on one build.
         constexpr Real flatTolerance = 1e-8;
-        constexpr Real smileTolerance = 3e-5;
+        constexpr Real smileTolerance = 4e-5;
         const std::vector<Lock> locks = {
             {Market::Flat, BarrierMonitoring::Discrete, 18.459122731997851},
             {Market::Flat, BarrierMonitoring::Continuous, 18.09121433559682},
