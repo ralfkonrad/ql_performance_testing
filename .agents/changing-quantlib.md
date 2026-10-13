@@ -20,6 +20,10 @@ the only task allowed to edit a submodule. Every other task treats
 - QuantLib's own rules apply in there. Read `external/QuantLib/AGENTS.md` before
   editing: a new file is registered in CMake, Autotools and the Visual Studio
   solution.
+- Which change comes next, and the criterion that decides whether it stays, is
+  [`docs/quantlib-mc-step-precomputation-upstream.md`](../docs/quantlib-mc-step-precomputation-upstream.md),
+  sections 5 and 7; the runs that measure it here are section 10 of
+  [`docs/profiling-bonusclassicoption-mc.md`](../docs/profiling-bonusclassicoption-mc.md).
 
 ## 2. Formatting Changed Lines Only
 
