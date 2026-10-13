@@ -8,9 +8,9 @@ SPDX-License-Identifier: MIT
 Which per-step computations of QuantLib's Monte Carlo path generation depend only on the time
 grid, what caching them once per grid saves, and how that cache fits QuantLib's process and
 path-generator API. Nothing here is implemented in QuantLib. Every claim about its code refers to
-commit `966a4cc10` (`v1.43-625`); every figure is a callgrind instruction count (Ir) from one of
-the two setups in section 1, measured on a step cache built beside QuantLib, and every figure not
-marked as measured is an estimate.
+commit `966a4cc10` (`v1.43-625`, or `v1.44-rc-1` by `git describe --tags`); every figure is a
+callgrind instruction count (Ir) from one of the two setups in section 1, measured on a step cache
+built beside QuantLib, and every figure not marked as measured is an estimate.
 
 ## Management Summary
 
@@ -44,8 +44,11 @@ Two setups, both the same instrument: a discretely monitored down-and-out bonus 
 90, bonus level 120, spot 100, one year from the evaluation date, priced by Monte Carlo on 255
 steps, from 252 steps per year over the `Actual360` year fraction, with 2^16 Sobol paths (Joe-Kuo
 D7 directions, seed 42) and a Brownian bridge. `Actual360` and `NullCalendar` throughout; every
-curve continuously compounded. Builds are `-O3`, QuantLib linked statically, targeting baseline
-x86-64 without FMA. One repricing is one callgrind run; wall clock is not quoted.
+curve continuously compounded. The repository's shared setup has since moved the barrier to 70,
+so its executables no longer reproduce the NPVs quoted here as they stand. Builds are `-O3`,
+targeting baseline x86-64 without FMA; the smile rows link QuantLib statically, the flat row was
+measured on the shared build, where the static uncached count is 33.02 G. One repricing is one
+callgrind run; wall clock is not quoted.
 
 - **Flat setup:** `BlackScholesMertonProcess` on `FlatForward` curves, risk-free rate 1% and
   dividend yield 3%, under a `BlackConstantVol` of 20%. `GeneralizedBlackScholesProcess::evolve`
@@ -115,26 +118,31 @@ gates the cache on the exact type and such a subclass keeps `evolve()`.
     forward and Asian Heston engines, `MCEuropeanGJRGARCHEngine`.
   - Rates: `MCHullWhiteCapFloorEngine` (`SingleVariate`), `MCHestonHullWhiteEngine`.
 - **Direct callers:** `HestonSLVMCModel::performCalculations` calls `evolve()` with steps outer and
-  calibration paths inner. `test-suite/pathgenerator.cpp` and `test-suite/brownianbridge.cpp`
-  drive `PathGenerator` without an engine, `Examples/DiscreteHedging` a `MonteCarloModel`, all
-  over a Black-Scholes process; the remaining direct `MultiPathGenerator` users in the test suite
-  step other processes. QuantLib-SWIG wraps `PathGenerator` as `GaussianPathGenerator` in
-  `SWIG/montecarlo.i`, read at `dc84dd9f`, outside this document's pin.
+  calibration paths inner. `test-suite/pathgenerator.cpp` drives `PathGenerator` without an
+  engine over Black-Scholes, GBM, Ornstein-Uhlenbeck and square-root processes,
+  `test-suite/brownianbridge.cpp` over Black-Scholes, `test-suite/gsr.cpp` over `GsrProcess`,
+  `test-suite/normalclvmodel.cpp` over an `OrnsteinUhlenbeckProcess`, and
+  `Examples/DiscreteHedging` a `MonteCarloModel` over Black-Scholes; the direct
+  `MultiPathGenerator` users in the test suite step other processes. QuantLib-SWIG wraps
+  `PathGenerator` as `GaussianPathGenerator` in `SWIG/montecarlo.i`, read at `dc84dd9f`, outside
+  this document's pin.
 - **Precedents in QuantLib:** `LogNormalFwdRatePc` precomputes `fixedDrifts_` and `calculators_`
   per step in its constructor; `TrinomialTree` caches the step variance in `v2Cache`;
   `BrownianBridge` its weights per grid; `LongstaffSchwartzPathPricer` and `MCBarrierEngine` their
   discounts. Two memoize instead: `GsrProcessCore` in `std::map`s keyed on the exact
-  `(t0, t0 + dt)`, its `y` on `t` alone, cleared only by an explicit `flushCache()`, since
-  `GsrProcess` registers with nothing; `JointStochasticProcess` keys its correlation on `(t0, dt)`
-  and clears it in `update()`.
+  `(t0, t0 + dt)`, its `G` on its own `(w, t)` and its `y` on `t` alone, cleared only by
+  `flushCache()`, which the constructor and `setForwardMeasureTime()` call and no parameter
+  setter does, since `GsrProcess` registers with nothing; `JointStochasticProcess` keys its
+  correlation on `(t0, dt)` and clears it in `update()`.
 - **Tests:** two sets pin `evolve()` tightly. `pathgenerator.cpp`'s `testPathGenerator` at 2e-8
   (2e-7 antithetic) and `testMultiPathGenerator` at 2e-7; `testCached` of Himalaya, Everest and
   Pagoda at 1e-8. All five run on `flatVol`, a `BlackConstantVol` on `Actual360`, and
   `testPathGenerator` pins `GeometricBrownianMotionProcess`, `OrnsteinUhlenbeckProcess` and
   `SquareRootProcess` the same way. Every other MC test compares within a tolerance orders of
   magnitude above a last-bit change, against its error estimate or a stored value. Every MC test
-  over `GeneralizedBlackScholesProcess` uses `BlackConstantVol`, except `testMCVarianceSwap` on a
-  `BlackVarianceCurve`; none forces the discretization or links an external local volatility, so
+  over `GeneralizedBlackScholesProcess` uses `BlackConstantVol`, except `testMCVarianceSwap` and
+  `testChoiAsianEngineVsMC` on a `BlackVarianceCurve`, both statistical; none forces the
+  discretization or links an external local volatility, so
   **no QuantLib MC test reaches the Euler branch**, and none pins the exact step on a
   `BlackVarianceCurve`. Nor can a path's terminal value lock it across platforms: `localVolImpl`
   divides by `dy²`, so a last bit that contracts differently moves single bilinear paths by up to
@@ -213,8 +221,9 @@ means without FMA contraction; section 4 keeps it so under contraction.
   overrides `evolve()` as well. 3.1 changes `evolve()` only; `stdDeviation()`, `variance()` and
   `expectation()` stay, which is what keeps that subclass unaffected, since its Euler and
   predictor-corrector cases call `stdDeviation()`. A subclass outside QuantLib that overrides
-  `drift()` alone would lose it silently, which QuantLib's deprecation rules forbid, so the fused
-  step runs behind the exact-type gate of section 4 and such a subclass keeps today's path.
+  `drift()` alone would lose it silently on the Euler branch, the only one that calls it today,
+  which QuantLib's deprecation rules forbid, so the fused step runs behind the exact-type gate of
+  section 4 and such a subclass keeps today's path.
 
 ### 3.2 The Exact Black-Scholes Step per Grid
 
@@ -244,9 +253,10 @@ means without FMA contraction; section 4 keeps it so under contraction.
   barrier tests, the most for `MCLookbackEngine` and `MCDoubleBarrierEngine`, tested at 2,000 and
   5,000 steps.
 
-- **Lock impact:** bit-identical by construction: the cached step is `evolve`'s double on every
-  build measured except gcc with `-D_GLIBCXX_ASSERTIONS`, where path points differ by up to
-  5.4e-16 relative. QuantLib pins it through `testPathGenerator` and, via
+- **Lock impact:** bit-identical by construction without FMA contraction: the cached step is
+  `evolve`'s double on every build measured except gcc at `-march=x86-64-v3` with
+  `-D_GLIBCXX_ASSERTIONS`, where contraction moves path points by up to 5.4e-16 relative; the
+  shared helper of section 4 removes that. QuantLib pins it through `testPathGenerator` and, via
   `StochasticProcessArray`, `testMultiPathGenerator` and the three `testCached`, all on
   `BlackConstantVol` (section 2). The `BlackVarianceCurve` branch has no bitwise pin, so the
   hook's test adds one.
@@ -282,8 +292,10 @@ means without FMA contraction; section 4 keeps it so under contraction.
 - **Evidence:** a prototype that copies `localVolImpl` and feeds it precomputed discounts, the
   computation the local-volatility slice would do, takes the step from 3,168 to 1,670 Ir on the
   bilinear surface and from 25,265 to 23,768 on the bicubic one, on the smile setup after 3.1.
-  The surface slice is unmeasured; its ceiling is the surface's share of that step, 33% bilinear
-  and 92% bicubic, against 35% and 4% for the six `discount` calls the first slice removes. On
+  The surface slice is unmeasured; its ceiling is the interpolation's share of that step,
+  `BilinearInterpolationImpl::value` at 33% and `BicubicSplineImpl::value` at 92%, below the
+  checks and clamps of `blackVariance`, against 35% and 4% for the six `discount` calls the first
+  slice removes. On
   the bicubic surface it replaces a spline construction of about 4,599 Ir per lookup by a
   one-dimensional spline evaluation. The rate pair is 1,130 Ir per step on the smile curves.
 - **Lock impact:** bit-identical. `LocalVolSurface`'s own `localVolImpl` goes through the slice
@@ -334,20 +346,21 @@ means without FMA contraction; section 4 keeps it so under contraction.
   - Every Heston scheme computes the rate pair `forwardRate(t0, t0 + dt, Continuous)` per step,
     with the default `Annual` and `extrapolate = false`, unlike the Black-Scholes process. The
     table keeps those arguments, or the range check changes.
-  - QE and QEM, `HestonProcess`'s default, also compute `exp(−κ·dt)`, `k1`–`k4`, `A` and the
-    second summand of `s2` per step; QE its `k0` too. The first summand of `s2` starts from
+  - QE and QEM, the latter `HestonProcess`'s default, also compute `exp(−κ·dt)`, `k1`–`k4`, `A`
+    and the second summand of `s2` per step; QE its `k0` too. The first summand of `s2` starts from
     `x0[1]`, and QEM's `k0` is path-dependent, so neither caches. `BatesProcess` and
     `GJRGARCHProcess` default to `FullTruncation`; the engines take the scheme from the process.
   - The truncation and reflection schemes cache the rate pair, `√dt` and `√(1 − ρ²)`.
   - `GJRGARCHProcess::evolve` recomputes `CumulativeNormalDistribution()(lambda_)`, an `exp`, four
-    `sqrt` and some forty flops from parameters fixed at construction, on every step.
+    `sqrt` and some fifty to sixty flops from parameters fixed at construction, on every step.
   - `BatesProcess` runs `InverseCumulativePoisson(lambda_·dt)(p)` per step, summing Poisson terms
-    (`exp`, `pow`, a factorial each) from zero until the partial sum exceeds `p`, which can be as
-    high as `1 − QL_EPSILON`. A per-step table of the partial sums reproduces the loop exactly up
-    to a fixed length, with the loop as the fallback past it; `−lambda_·m_·dt` caches as one
-    double.
+    (an `exp`, a `pow` and a factorial table lookup each) from zero until the partial sum reaches
+    `p`, which can be as high as `1 − QL_EPSILON`. A per-step table of the partial sums
+    reproduces the loop exactly up to a fixed length, with the loop as the fallback past it;
+    `−lambda_·m_·dt` caches as one double.
   - `HestonSLVProcess` caches the rate pair, `exp(−κ·dt)`, `κ·θ·dt`, `√(1 − ρ²)` and the second
-    summand of `s2`, the QE terms; the leverage function `localVol(t0, x0[0])` stays per path.
+    summand of `s2`, the QE terms; the leverage function `localVol(t0, x0[0], true)` stays per
+    path.
     `HestonSLVMCModel` loops steps outer, so a per-step hoist there pays even without the hook.
 - **Branches:** all schemes except non-central chi-square and Broadie-Kaya, where a root solve per
   step dominates (section 6).
@@ -355,10 +368,12 @@ means without FMA contraction; section 4 keeps it so under contraction.
   one `sqrt`, an `erf` and a `log`, QEM adding a `log` to either branch, so the relative gain
   stays below the Black-Scholes 92%.
 - **Lock impact:** bit-identical when cached as listed. QuantLib's Heston-family MC tests, in
-  `hestonmodel`, `batesmodel`, `gjrgarchmodel`, `hestonslvmodel`, `hybridhestonhullwhiteprocess`,
-  `asianoptions`, `forwardoption` and `fdmlinearop`, are all statistical (`testMcVsCached` at
-  2.34 σ, GJR-GARCH at 0.15 against stored MC values) and would not notice a last-bit change, so
-  the change adds a path pin for one QEM and one full-truncation path.
+  `hestonmodel`, `batesmodel`, `gjrgarchmodel`, `hestonslvmodel`, `asianoptions` and
+  `forwardoption`, compare against an error estimate (`testMcVsCached` at 2.34 σ) or at a fixed
+  tolerance no tighter than 5e-4 relative (GJR-GARCH at 0.15 against stored MC values) and would
+  not notice a last-bit change; the `hybridhestonhullwhiteprocess` and `fdmlinearop` MC tests
+  step the hybrid's own `evolve()`, which never calls `HestonProcess::evolve`. So the change adds
+  a path pin for one QEM and one full-truncation path.
 - **Upstream:** medium to high; each process changes alone. GJR-GARCH's constants go in the table,
   not the constructor (section 4).
 
@@ -372,16 +387,19 @@ means without FMA contraction; section 4 keeps it so under contraction.
     where `alpha(t)` ends in `h_->forwardRate(t, t, Continuous, NoFrequency)`. Per step: two
     `forwardRate`, five `exp`, `exp(−a·dt)` among them twice, and a `sqrt`. The forward-measure
     version adds `M_T(t0, t0 + dt, T_)`, three more `exp`. Only `(x0 − level)·exp(−a·dt)` and
-    `stdDeviation(dt)·dw` depend on the path; the standard deviation
-    `σ·√((1 − exp(−2a·dt)) / (2a))` is the cached `sqrt`.
-  - The hybrid, in its `BSMHullWhite` discretization, computes about 10 `discount`, 5 `log` and 15
-    `exp` per step from `(t0, dt)` alone, and evaluates `alpha(t0)` and the OU variance twice each.
+    `stdDeviation(dt)·dw` depend on the path; the standard deviation, computed as
+    `√(0.5·σ²/a · (1 − exp(−2a·dt)))` and cached in that form, is the cached `sqrt`. Its small-`a`
+    limit switches at `√QL_EPSILON`, while `alpha`, `M_T` and `B` switch at `QL_EPSILON`.
+  - The hybrid, in its `BSMHullWhite` discretization, computes about 10 `discount`, 5 `log` and 14
+    of its 15 `exp` per step from `(t0, dt)` alone, the last, `exp(mu + vol)`, being
+    path-dependent, and evaluates `alpha(t0)` and the OU variance twice each.
   - Neither `HullWhiteProcess` nor the hybrid registers with anything, and the hybrid's `update()`
     notifies no one. A per-calculate table does not need them to (section 4).
-  - Only `HullWhiteForwardProcess` has an engine: `MCHullWhiteCapFloorEngine` builds one in
-    `pathGenerator()` on every `calculate()`, and the hybrid wraps one. `HullWhiteProcess` has the
-    same expectation without `M_T` and gets the same table, driven only by `PathGenerator`
-    directly.
+  - Only `HullWhiteForwardProcess` has an engine that steps it: `MCHullWhiteCapFloorEngine` builds
+    one in `pathGenerator()` on every `calculate()`, and the hybrid wraps one. `HullWhiteProcess`
+    has the same expectation without `M_T` and gets the same table; inside QuantLib nothing steps
+    it, `FdHestonHullWhiteVanillaEngine` takes one but reads only `a()` and `sigma()`, so only a
+    direct `PathGenerator` user reaches its table.
 - **Branches:** all; the hybrid's Euler discretization drops one variance.
 - **Evidence:** unmeasured. `forwardRate(t, t)` takes two `discount` 1e-4 apart and an
   `impliedRate`, the work of the Black-Scholes rate pair, plus one `checkRange` without
@@ -389,8 +407,9 @@ means without FMA contraction; section 4 keeps it so under contraction.
   `true`. Those copies are what callgrind undercounts: on the flat setup one repricing executes
   12 lock-prefixed instructions per step, 8 of them `DayCounter` copies on the `forwardRate`
   path and 4 in `maxTime`, each one Ir to callgrind and about 20 cycles on hardware.
-- **Lock impact:** bit-identical with `alpha(t0 + dt)`, `alpha(t0)·exp(−a·dt)` and `M_T` as three
-  separate doubles, since the OU term is leftmost and path-dependent. Inside `M_T`, `t − s` is
+- **Lock impact:** bit-identical without FMA contraction, with `alpha(t0 + dt)`,
+  `alpha(t0)·exp(−a·dt)` and `M_T` as three separate doubles, since the OU term is leftmost and
+  path-dependent. Inside `M_T`, `t − s` is
   `(t0 + dt) − t0`, not `dt`. The hybrid keeps `m4` and `m5` separate. `test-suite/gsr.cpp` pins
   `HullWhiteForwardProcess::expectation` and `variance` against `GsrProcess` at 1e-8, so a step
   helper that `expectation()` shares with the table keeps its arithmetic.
@@ -398,7 +417,9 @@ means without FMA contraction; section 4 keeps it so under contraction.
   statistical.
 - **Upstream:** medium. No QuantLib model reaches either process: `HullWhite::Dynamics`, and with
   it `TrinomialTree`, run on an `OrnsteinUhlenbeckProcess`, `Gaussian1dModel` on `GsrProcess` or
-  `MfStateProcess`, and `FdHestonHullWhiteVanillaEngine` reads `a()` and `sigma()` only.
+  `MfStateProcess`, and `FdHestonHullWhiteVanillaEngine` reads `a()` and `sigma()` only, though
+  its `FdmHestonHullWhiteSolver` registers with the `HullWhiteProcess`, so the registration of
+  section 4 starts notifying it on a curve move.
 
 ### 3.7 Allocation-Free Multi-Asset Steps
 
@@ -406,8 +427,9 @@ means without FMA contraction; section 4 keeps it so under contraction.
 - **Lives in:** `StochasticProcessArray::evolve`, `MultiPathGenerator::next`, and every
   multi-factor `evolve()` returning an `Array`.
 - **Finding:** `StochasticProcessArray::evolve` allocates `dz = sqrtCorrelation_ * dw` and the
-  result on every step, `MultiPathGenerator` move-assigns that result, and Heston, Bates and
-  GJR-GARCH allocate `retVal`. The correlation product depends on `dw` and cannot be cached. This is
+  result on every step, `MultiPathGenerator` move-assigns that result, and Heston and GJR-GARCH
+  allocate `retVal`, Bates through Heston's. The correlation product depends on `dw` and cannot
+  be cached. This is
   not precomputation: it is what remains around the arithmetic once 3.2 and 3.5 remove the curve
   calls. The multivariate step writes into a caller-owned `Array` instead.
 - **Branches:** the seven `StochasticProcessArray` engines and the Heston family.
@@ -452,10 +474,11 @@ today.
   the market between two `next()` calls sees the new market, as today, so no behaviour changes
   and nothing goes into `News.md` for it; the table is a snapshot only between notifications.
   `GeneralizedBlackScholesProcess`, `HestonProcess`, `GJRGARCHProcess` and
-  `StochasticProcessArray` already register with their inputs; `HullWhiteProcess`,
-  `HullWhiteForwardProcess` and the hybrid, whose `update()` recomputes `endDiscount_` and
-  notifies no one, register with their handles and forward `update()` when they get their hook,
-  as every price input of an `Observable` should. Building the table in the constructor would
+  `StochasticProcessArray` already register with their inputs; `HullWhiteProcess` and
+  `HullWhiteForwardProcess` register with their curve handle, and the hybrid, whose `update()`
+  recomputes `endDiscount_` and notifies no one, with its two component processes, each
+  forwarding `update()` when it gets its hook, as every price input of an `Observable` should.
+  Building the table in the constructor would
   make an empty handle that is linked later fail, for a process whose constructor registers
   without dereferencing, as `GeneralizedBlackScholesProcess` does; the Hull-White constructors
   already dereference the curve. Engines are unaffected, because they build a new generator per
@@ -482,14 +505,16 @@ today.
 
   The Monte Carlo standard error is about 8.4e-4 relative, and the uncached engine itself moves
   by 8.2e-6 between a contracting gcc build and a non-contracting one, bilinear discrete. The
-  x86-64 baseline and MSVC do not contract; every arm64 build and x86-64 with FMA enabled do. A
-  bitwise step test proves the shared helper on such a tree, or on QuantLib's macOS CI, whose
-  `macos-15` and `macos-26` runners are arm64.
+  x86-64 baseline and MSVC at its default `/fp:precise` since Visual Studio 2022 do not contract;
+  every arm64 build, x86-64 with FMA enabled and MSVC under `/fp:fast` do. A bitwise step test
+  proves the shared helper on such a tree, or on QuantLib's macOS CI, whose `macos-15` and
+  `macos-26` runners are arm64.
 
 - **Exact-type gate:** a subclass that overrides a virtual the step runs through, `evolve()`,
   `drift()`, `diffusion()`, `variance()`, `stdDeviation()` or `apply()`, would inherit a table that
   ignores the override, a silent change to a public contract, which the rules forbid; a documented
-  contract plus a probe under `QL_EXTRA_SAFETY_CHECKS`, which only the weekly workflows enable,
+  contract plus a probe under `QL_EXTRA_SAFETY_CHECKS`, which only the weekly and dispatch-only
+  workflows enable,
   does not prevent it. So `GeneralizedBlackScholesProcess` builds a table only when `typeid(*this)`
   is one of the five classes `ql/processes/blackscholesprocess.hpp` declares, the four thin
   subclasses adding constructors only. Every other subclass keeps `evolve()` until it overrides
@@ -518,26 +543,27 @@ Each step is one branch, measured on the setups of section 1 before the next one
 
 ## 6. Findings Dropped or Adjacent
 
-| Finding                                                                          | Why it is not a candidate                                                                                                                                                                          |
-| -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `OrnsteinUhlenbeckProcess`: two `exp` and a `sqrt` per step, all from `dt`       | Small; `HullWhiteProcess`, `HullWhiteForwardProcess` and `G2Process` wrap it, so 3.6 covers it; alone, only `testPathGenerator` and `testMultiPathGenerator` drive it                              |
-| `G2Process`: two `forwardRate`, 11 `exp`, 4 `sqrt`, 4 allocations per step       | No engine drives it through a path generator; one test does                                                                                                                                        |
-| `MfStateProcess`: the whole `stdDeviation` depends on `(t, dt)`                  | No Monte Carlo caller; Gaussian1d integration only                                                                                                                                                 |
-| `CoxIngersollRossProcess`, `GeometricBrownianMotionProcess`, `SquareRootProcess` | CIR caches `exp(−a·dt)` and the state-free summand of `s2`, as QE does; GBM and the square-root process `√dt` only; the rest depends on the state. `testPathGenerator` locks all three (section 2) |
-| `GsrProcess`                                                                     | Already memoizes in `GsrProcessCore`; a table would only replace four map lookups per step                                                                                                         |
-| `JointStochasticProcess`                                                         | Already memoizes its correlation; no concrete subclass in QuantLib                                                                                                                                 |
-| Heston non-central chi-square and Broadie-Kaya schemes                           | A root solve per step dominates whatever is cached                                                                                                                                                 |
-| `MCVarianceSwapEngine`'s per-node `diffusion()`                                  | Its nodes are `SegmentIntegral` sums, not grid times, so no table reproduces them                                                                                                                  |
-| Forward rate without `InterestRate`                                              | Kept as 3.1's companion; once the hook caches the rates it pays only outside path generation                                                                                                       |
-| `extrapolate = true` in `GeneralizedBlackScholesProcess::variance`               | 4.35 G Ir, 12.7% of a flat discrete repricing, bit-identical; but only the exact branch calls it, and 3.2 takes the call out of the path loop altogether                                           |
-| `TermStructure::maxTime` copying the `DayCounter`                                | 4 lock-prefixed instructions per step on the exact branch (3.6); leaves the per-path loop with 3.2; a term-structure change, not a step cache                                                      |
-| Sobol, `InverseCumulativeNormal`, `BrownianBridge`, least-squares regression     | Nothing grid-only is left to cache; folding the bridge's `1/√dt` into the step would move bits                                                                                                     |
-| Paths in log space                                                               | Moves every bitwise lock, and the local volatility needs the price level every step                                                                                                                |
+| Finding                                                                          | Why it is not a candidate                                                                                                                                                                                                                      |
+| -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OrnsteinUhlenbeckProcess`: two `exp` and a `sqrt` per step, all from `dt`       | Small; `HullWhiteProcess`, `HullWhiteForwardProcess`, `G2Process` and `G2ForwardProcess` wrap it, so 3.6 covers it; alone, only `testPathGenerator`, `testMultiPathGenerator` and `testMoustacheGraph` drive it                                |
+| `G2Process`: two `forwardRate`, 11 `exp`, 4 `sqrt`, 4 allocations per step       | No engine drives it through a path generator; one test does                                                                                                                                                                                    |
+| `MfStateProcess`: the whole `stdDeviation` depends on `(t, dt)`                  | No Monte Carlo caller; Gaussian1d integration only                                                                                                                                                                                             |
+| `CoxIngersollRossProcess`, `GeometricBrownianMotionProcess`, `SquareRootProcess` | CIR caches `exp(−a·dt)` and the state-free summand of `s2`, as QE does; GBM and the square-root process `√dt` only; the rest depends on the state. `testPathGenerator` locks GBM and the square-root process (section 2); CIR has no path lock |
+| `GsrProcess`                                                                     | Already memoizes in `GsrProcessCore`; a table would only replace four map lookups per step                                                                                                                                                     |
+| `JointStochasticProcess`                                                         | Already memoizes its correlation; no concrete subclass in QuantLib                                                                                                                                                                             |
+| Heston non-central chi-square and Broadie-Kaya schemes                           | A root solve per step dominates whatever is cached                                                                                                                                                                                             |
+| `MCVarianceSwapEngine`'s per-node `diffusion()`                                  | Its nodes are `SegmentIntegral` sums, not grid times, so no table reproduces them                                                                                                                                                              |
+| Forward rate without `InterestRate`                                              | Kept as 3.1's companion; once the hook caches the rates it pays only outside path generation                                                                                                                                                   |
+| `extrapolate = true` in `GeneralizedBlackScholesProcess::variance`               | 4.35 G Ir, 12.7% of a flat discrete repricing, bit-identical; but only the exact branch calls it, and 3.2 takes the call out of the path loop altogether                                                                                       |
+| `TermStructure::maxTime` copying the `DayCounter`                                | 4 lock-prefixed instructions per step on the exact branch (3.6); leaves the per-path loop with 3.2; a term-structure change, not a step cache                                                                                                  |
+| Sobol, `InverseCumulativeNormal`, `BrownianBridge`, least-squares regression     | Nothing grid-only is left to cache; folding the bridge's `1/√dt` into the step would move bits                                                                                                                                                 |
+| Paths in log space                                                               | Moves every bitwise lock, and the local volatility needs the price level every step                                                                                                                                                            |
 
 ## 7. Measurements That Decide the Ranking
 
 Each is a callgrind count of one repricing at 2^16 paths on the setups of section 1, `-O3`,
-QuantLib static, no FMA, against the same build without the change. Wall clock is secondary.
+no FMA, QuantLib static except where section 1 says shared, against the same build without the
+change. Wall clock is secondary.
 
 1. **3.3's time slices:** the smile setup, bilinear and bicubic, through the Euler step with one
    `localVolImpl` and cached rates, against 52.69 G and 422.01 G discrete.
@@ -545,8 +571,9 @@ QuantLib static, no FMA, against the same build without the change. Wall clock i
    uncached. The criterion: the NPVs stay bit-identical on a non-contracting build, bilinear
    discrete `100.23201398081022` and continuous `99.886405693076455`, bicubic discrete
    `100.27835252928404` and continuous `99.932975609578065`.
-3. **3.2:** the flat setup through QuantLib's own `evolve()`, 34.18 G discrete, against the hook
-   branch. The criterion: plain `SingleVariate` lands within 1% of 2.68 G, with the NPV unchanged,
+3. **3.2:** the flat setup through QuantLib's own `evolve()`, 34.18 G discrete on the shared
+   build and 33.02 G static, against the hook branch. The criterion: plain `SingleVariate` lands
+   within 1% of 2.68 G, with the NPV unchanged,
    discrete `100.22671167047309` and continuous `99.883605619178169`. Choosing a generator type
    explicitly instead of through the traits costs 0.6% on its own, from one register spill across
    `exp`.
@@ -777,8 +804,9 @@ path today, or a slice would throw where the time returns the overwrite:
 ```
 
 **The test.** `test-suite/europeanoption.cpp`, beside `testLocalVolatility`, which already builds
-a `BlackVarianceSurface` and a `GeneralizedBlackScholesProcess` whose `localVolatility()` links a
-`LocalVolSurface` on it: on a grid of times from zero and levels around the forward,
+a `BlackVarianceSurface` and a `BlackScholesMertonProcess` on it, though nothing there calls
+`localVolatility()` yet, which would link a `LocalVolSurface`: on a grid of times from zero and
+levels around the forward,
 `localVol(*slice(t, true), x, true)` equals `localVol(t, x, true)` to the bit, and a slice handed
 to a second surface throws. The two entry points share one body and one slice type, so the
 equality holds by construction; the test guards a later edit that lets them drift, and the zero
@@ -802,9 +830,11 @@ What to notice:
   by one pointer compare, that this term structure built the slice, which is what makes the
   `static_cast` in `LocalVolSurface` safe. Per lookup the slice path drops today's `checkRange(t)`
   as well.
-- The slice is a snapshot: the value of an observed `Quote` and six discounts. The surface
-  registers with the quote and both curves, so a change notifies the process and the generator
-  drops its table (D). The slice refers to its term structure by pointer; the table that holds
+- The slice is a snapshot: a `Quote`'s value and six discounts. The surface registers with the
+  Black surface and both curves, and with the quote when built on a `Handle<Quote>`; the one the
+  process builds takes the spot by value, and the process itself observes the quote, so either
+  way a change notifies the process and the generator drops its table (D). The slice refers to
+  its term structure by pointer; the table that holds
   the slice is held by the generator, which holds the process, which holds the handle.
 - Per lookup it removes the six `discount()` calls and the forward, 3,168 to 1,670 Ir on the
   bilinear surface and 25,265 to 23,768 on the bicubic one after 3.1, measured by the prototype
@@ -1227,7 +1257,7 @@ one override:
 ```cpp
     // Overrides drift(), which the fused step of B and the table of C both bypass. The gate
     // sees a type outside the five: stepTable() returns the forwarding table, every step goes
-    // through this class's evolve(), which is today's, and today's evolve() calls this drift().
+    // through this class's evolve(), which is today's, and its Euler branch calls this drift().
     class ShiftedDriftProcess : public BlackScholesMertonProcess {
       public:
         using BlackScholesMertonProcess::BlackScholesMertonProcess;
