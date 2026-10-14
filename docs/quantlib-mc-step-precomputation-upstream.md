@@ -7,10 +7,11 @@ SPDX-License-Identifier: MIT
 
 Which per-step computations of QuantLib's Monte Carlo path generation depend only on the time
 grid, what caching them once per grid saves, and how that cache fits QuantLib's process and
-path-generator API. Nothing here is implemented in QuantLib. Every claim about its code refers to
-commit `966a4cc10` (`v1.43-625`, or `v1.44-rc-1` by `git describe --tags`); every figure is a
-callgrind instruction count (Ir) from one of the two setups in section 1, measured on a step cache
-built beside QuantLib, and every figure not marked as measured is an estimate.
+path-generator API. Nothing here is in QuantLib; step 1 of section 5 is implemented on a branch and
+measured in section 8. Every claim about its code refers to commit `966a4cc10` (`v1.43-625`, or
+`v1.44-rc-1` by `git describe --tags`); every figure is a callgrind instruction count (Ir) from one
+of the two setups in section 1, measured on a step cache built beside QuantLib, or in section 8 on
+that branch, and every figure not marked as measured is an estimate.
 
 ## Management Summary
 
@@ -36,7 +37,9 @@ path-generation cost and changes no price.
   the path generators become observers of their process (section 4).
 - **Next steps.** Seven branches, each measured before the next starts, in proof-of-concept
   order: first the hook with the exact Black-Scholes step, the whole flat-volatility gain in one
-  change, then the local-volatility changes (section 5).
+  change, then the local-volatility changes (section 5). The first is implemented. Inside
+  QuantLib it saves 91.9% of a flat discrete repricing, or 91.8% in wall clock, with every NPV
+  bit-identical (section 8).
 
 ## 1. What Was Measured
 
@@ -591,7 +594,7 @@ change. Wall clock is secondary.
    within 1% of 2.68 G, with the NPV unchanged,
    discrete `100.22671167047309` and continuous `99.883605619178169`. Choosing a generator type
    explicitly instead of through the traits costs 0.6% on its own, from one register spill across
-   `exp`.
+   `exp`. Met: section 8.
 2. **3.1:** the smile setup through QuantLib's own `evolve()`, against 127.22 G and 865.79 G
    uncached. The criterion: the NPVs stay bit-identical on a non-contracting build, bilinear
    discrete `100.23201398081022` and continuous `99.886405693076455`, bicubic discrete
@@ -607,6 +610,70 @@ change. Wall clock is secondary.
 7. **3.6:** a Hull-White cap/floor priced by `MCHullWhiteCapFloorEngine`, which reaches
    `HullWhiteForwardProcess` only, and `HullWhiteProcess` through `PathGenerator` directly; the
    same conventions.
+
+## 8. Step 1 Measured
+
+Step 1 of section 5 is implemented on QuantLib `v1.44-15-gfbec07c67` with appendix A's design:
+`stepTable1D()` with its forwarding default, `evolvePath()`, the exact table behind the gate,
+`lognormalDrift` and `lognormalIncrement` shared with `evolve()`, and `PathGenerator` observing
+its process. As section 5 plans, the inspector, the σ column and the multivariate table are left
+out. None of the five files it touches changed between `966a4cc10` and that commit.
+
+The setups are those of section 1 with the barrier at 70, so the NPVs differ from section 7's. Two
+workloads run on them: the bonus option through its Monte Carlo engine on plain `SingleVariate`,
+and its down-and-out put leg through `MCBarrierEngine`. The put's discrete monitoring goes through
+`BiasedBarrierPathPricer` and its continuous monitoring through `BarrierPathPricer`.
+
+The build is clang 23.1.3, `-O3 -DNDEBUG`, baseline x86-64 without FMA contraction, with debug info
+and frame pointers on every target and QuantLib linked statically. Each count is one repricing
+under callgrind (valgrind 3.27.1) at 2^16 paths, against the same build at `fbec07c67`:
+
+| Workload, flat setup |  Before |    After |  Saved | NPV, before and after |
+| -------------------- | ------: | -------: | -----: | --------------------- |
+| bonus, discrete      | 33.07 G |  2.676 G | 91.91% | 115.4999787787627     |
+| bonus, continuous    | 44.75 G | 14.355 G | 67.92% | 115.1799377705109     |
+| put, discrete        | 33.16 G |  2.763 G | 91.67% | 18.49732387605334     |
+| put, continuous      | 40.39 G | 10.004 G | 75.23% | 18.174165037327128    |
+
+- **The criterion of section 7 is met.** Plain `SingleVariate` lands at 2,676,482,445 Ir. The
+  step cache of section 1 lands at 2,675,790,419 on the same build, so the table is 0.03% above
+  it. Every NPV is the same double before and after.
+- **Per step:** `evolve()` took 1,870 Ir. `evolvePath()` takes 73 Ir, 57 of them in `exp`; the
+  cache's step takes 68. Building the table costs 0.46 M Ir, about one `evolve()` per grid
+  point. What remains of the discrete repricing is Sobol with `InverseCumulativeNormal` at
+  0.92 G, `BrownianBridge::transform` at 0.42 G and the step at 1.22 G.
+- **The path-level call and the local copy, measured:**
+  - With one virtual `evolve(i, x0, dw)` per step instead of `evolvePath()`, the discrete
+    repricing lands at 2,975,064,339 Ir, 11.2% above the cache.
+  - The copy of the table that `next()` holds for each path costs 786,441 Ir, 12 Ir per path.
+- **Continuous monitoring keeps its pricers' cost.** For the put, `BarrierPathPricer` takes
+  7.43 G of the 10.00 G. Of that, 2.87 G is the per-step `diffusion()` call that 3.4's σ column
+  caches; the rest is the crossing probability and its uniform draws. The bonus option's own
+  continuous pricer takes 11.78 G of the 14.35 G.
+- **The Euler branch is unchanged.** It runs on the forwarding table, with one virtual call per
+  step to the process as before. Both workloads on the bilinear smile at 256 paths move by less
+  than 0.1% with identical NPVs: 501.3 M to 500.8 M Ir discrete and 682.9 M to 682.4 M continuous
+  for the bonus option, 501.7 M to 501.2 M and 716.9 M to 716.4 M for the put.
+- **FMA contraction:** built with clang 23.1.3 and with gcc 15.2.0, both at
+  `-march=x86-64-v3 -D_GLIBCXX_ASSERTIONS`, `evolve()`, the table builder and the table's step
+  all contain `vfmadd`. The step tests still pin the table to `evolve()` bitwise there, and
+  `testPathGenerator`, `testMultiPathGenerator`, `BrownianBridgeTests` and the three `testCached`
+  pass. The whole QuantLib test suite passes on the non-contracting build.
+
+Wall clock is secondary. It comes from google-benchmark on the same build without debug info,
+as the median of 5 repetitions of 10 repricings each, every coefficient of variation at or below
+2.7%. The machine is an Intel i9-13950HX laptop under WSL2, which has no hardware counters:
+
+| Workload, flat setup |  Before |  After | Saved |
+| -------------------- | ------: | -----: | ----: |
+| bonus, discrete      | 1901 ms | 156 ms | 91.8% |
+| bonus, continuous    | 2497 ms | 747 ms | 70.1% |
+| put, discrete        | 1910 ms | 159 ms | 91.7% |
+| put, continuous      | 2257 ms | 492 ms | 78.2% |
+
+The step cache of section 1 runs both bonus workloads at 154.5 and 294.3 ms after the change, and
+at 156.1 and 297.7 ms before it. Nothing it runs changed, so that difference is the spread of a
+WSL2 laptop.
 
 ## Appendix: Sketches of 3.2, 3.1, 3.3 and the Euler Table
 
