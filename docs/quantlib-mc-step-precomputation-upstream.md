@@ -31,7 +31,7 @@ path-generation cost and changes no price.
 - **No behaviour change.** Each cached term is the same double `evolve()` computes today, so no
   existing test moves; a subclass that overrides part of the step keeps its own `evolve()` behind
   an exact-type gate (section 4). Nothing public is deprecated.
-- **What it costs.** Two virtuals on the process base classes, one public table type and one
+- **What it costs.** Two virtuals on the process base classes, a public table type for each and one
   inspector on the Black-Scholes process, kept under QuantLib's five-release deprecation rule;
   the path generators become observers of their process (section 4).
 - **Next steps.** Seven branches, each measured before the next starts, in proof-of-concept
@@ -459,16 +459,18 @@ deprecated with its replacement in place, and a feature deprecated in release N 
 it adds, which stays supportable for years, and what it may change, which is nothing a caller sees
 today.
 
-- **Shape:** `StochasticProcess1D` gains a virtual that takes a `TimeGrid` and returns a step
-  table with `evolve(i, x0, dw)` and, for 3.4, each grid point's σ where a pricer can reuse it. The
-  default forwards to `evolve(grid[i], x0, grid.dt(i), dw)`, so every process and subclass that
-  does not override it behaves exactly as today. `StochasticProcess` gains the multivariate
-  counterpart, writing in place (3.7); the `Array`-returning `evolve()` stays the public step,
-  undeprecated, the in-place overload defaults to it, and `MultiPathGenerator` moves to the
-  overload, as the checklist asks of internal callers. `ql/experimental/` is no home for any of
-  it: a virtual on `StochasticProcess1D` cannot live there, and `ql/processes/` cannot depend on
-  it. The public surface therefore stays at what the generators need, two virtuals and one table
-  type, plus one inspector on `GeneralizedBlackScholesProcess` for the branch its step takes,
+- **Shape:** `StochasticProcess1D` gains a virtual, `stepTable1D()`, that takes a `TimeGrid` and
+  returns a step table with `evolve(i, x0, dw)`, `evolvePath()` for a whole path in one call and,
+  for 3.4, each grid point's σ where a pricer can reuse it; the suffix keeps it apart from the
+  multivariate hook (appendix A). The default forwards to `evolve(grid[i], x0, grid.dt(i), dw)`,
+  so every process and subclass that does not override it behaves exactly as today.
+  `StochasticProcess` gains the multivariate counterpart, writing in place (3.7); the
+  `Array`-returning `evolve()` stays the public step, undeprecated, the in-place overload defaults
+  to it, and `MultiPathGenerator` moves to the overload, as the checklist asks of internal
+  callers. `ql/experimental/` is no home for any of it: a virtual on `StochasticProcess1D` cannot
+  live there, and `ql/processes/` cannot depend on it. The public surface therefore stays at what
+  the generators need, two virtuals and two table types, plus one inspector on
+  `GeneralizedBlackScholesProcess` for the branch its step takes,
   which its builder and a subclass read instead of the private flags (appendix A); anything more,
   once shipped, is kept five releases after its deprecation. `News.md` lists
   the change as a performance improvement, not among the deprecations.
@@ -477,6 +479,9 @@ today.
   register with the process, an `Observable` through `StochasticProcess`. A direct user who moves
   the market between two `next()` calls sees the new market, as today, so no behaviour changes
   and nothing goes into `News.md` for it; the table is a snapshot only between notifications.
+  The one exception is notifications dropped by `ObservableSettings::disableUpdates(false)`,
+  after which the generator needs an explicit `update()`, as a `LazyObject` does; its class
+  documentation says so.
   `GeneralizedBlackScholesProcess`, `HestonProcess`, `GJRGARCHProcess` and
   `StochasticProcessArray` already register with their inputs; `HullWhiteProcess` and
   `HullWhiteForwardProcess` register with their curve handle, and the hybrid, whose `update()`
@@ -538,7 +543,7 @@ Each step is one branch, measured on the setups of section 1 before the next one
 order is a proof of concept: first the change with the largest measured gain in the fewest
 files, then the Euler-branch changes, none of which the first step needs.
 
-1. The hook with 3.2, one-dimensional only: `StochasticProcess1D::stepTable()` with its
+1. The hook with 3.2, one-dimensional only: `StochasticProcess1D::stepTable1D()` with its
    forwarding default, the override in `GeneralizedBlackScholesProcess` behind the exact-type
    gate, and `PathGenerator` building the table on its first path and dropping it when the
    process notifies. The observation stays in: it is what keeps a direct `PathGenerator` user
@@ -633,11 +638,17 @@ the table.
             notifies. evolve(i, x0, dw) returns the double that
             evolve(grid[i], x0, grid.dt(i), dw) returns.
         */
-        class StepTable {
+        class StepTable1D {
           public:
-            virtual ~StepTable() = default;
+            virtual ~StepTable1D() = default;
             //! the process's evolve() over step i of the grid
             virtual Real evolve(Size i, Real x0, Real dw) const = 0;
+            /*! writes x0 into path[0] and evolve(i, path[i], dw[i]) into path[i+1]
+                for each grid step i, with -dw[i] if antithetic is set; the default
+                calls evolve() per step, an override saves that call.
+            */
+            virtual void evolvePath(Real x0, const std::vector<Real>& dw,
+                                    bool antithetic, Real* path) const;
             /*! \f$ \sigma(t_i, x) \f$ at grid point i where it depends on
                 \f$ t_i \f$ alone, Null<Real>() otherwise; for a pricer that
                 evaluates the diffusion at grid points (3.4).
@@ -649,7 +660,7 @@ the table.
             as today. An override returns its own table only when the step is
             known to be this class's (the exact-type gate of section 4).
         */
-        virtual ext::shared_ptr<const StepTable> stepTable(const TimeGrid& grid) const;
+        virtual ext::shared_ptr<const StepTable1D> stepTable1D(const TimeGrid& grid) const;
         ...
     };
 ```
@@ -657,14 +668,29 @@ the table.
 Its default, `ql/stochasticprocess.cpp`:
 
 ```cpp
+    void StochasticProcess1D::StepTable1D::evolvePath(Real x0, const std::vector<Real>& dw,
+                                                      bool antithetic, Real* path) const {
+        path[0] = x0;
+        for (Size i = 0; i < dw.size(); ++i)
+            path[i + 1] = evolve(i, path[i], antithetic ? -dw[i] : dw[i]);
+    }
+
     namespace {
 
-        class ForwardingStepTable : public StochasticProcess1D::StepTable {
+        class ForwardingStepTable : public StochasticProcess1D::StepTable1D {
           public:
             ForwardingStepTable(const StochasticProcess1D& process, TimeGrid grid)
             : process_(process), grid_(std::move(grid)) {}
             Real evolve(Size i, Real x0, Real dw) const override {
                 return process_.evolve(grid_[i], x0, grid_.dt(i), dw);
+            }
+            // one virtual call per step, to the process, as before step tables
+            void evolvePath(Real x0, const std::vector<Real>& dw,
+                            bool antithetic, Real* path) const override {
+                path[0] = x0;
+                for (Size i = 0; i < dw.size(); ++i)
+                    path[i + 1] = process_.evolve(grid_[i], path[i], grid_.dt(i),
+                                                  antithetic ? -dw[i] : dw[i]);
             }
           private:
             const StochasticProcess1D& process_;
@@ -673,8 +699,8 @@ Its default, `ql/stochasticprocess.cpp`:
 
     }
 
-    ext::shared_ptr<const StochasticProcess1D::StepTable>
-    StochasticProcess1D::stepTable(const TimeGrid& grid) const {
+    ext::shared_ptr<const StochasticProcess1D::StepTable1D>
+    StochasticProcess1D::stepTable1D(const TimeGrid& grid) const {
         return ext::make_shared<ForwardingStepTable>(*this, grid);
     }
 ```
@@ -685,9 +711,11 @@ process's `shared_ptr` too, so the reference outlives it.
 **The multivariate counterpart, signature only (3.7).** `StochasticProcess` gets the in-place
 step that `MultiPathGenerator` moves to, and the table that returns it; the `Array`-returning
 `evolve()` stays the public step. Step 1 of section 5 leaves `StochasticProcess` untouched and
-step 5 adds this; it is sketched here because the one-dimensional table's name is chosen against
-it: `StochasticProcess1D::StepTable` hides this one the way `StochasticProcess1D::discretization`
-hides `StochasticProcess::discretization` today:
+step 5 adds this; it is sketched here because the one-dimensional names are chosen against it. A
+`stepTable()` on `StochasticProcess1D` with this signature would override the virtual below
+rather than hide it, and a `shared_ptr` return type cannot be covariant, so the declaration would
+not compile. The one-dimensional hook is therefore `stepTable1D()`, returning a `StepTable1D`, and
+a one-dimensional process inherits this pair unchanged:
 
 ```cpp
     class StochasticProcess : public Observer, public Observable {
@@ -720,7 +748,7 @@ hides `StochasticProcess::discretization` today:
             branch, the default table elsewhere and for every subclass but the
             four declared below
         */
-        ext::shared_ptr<const StepTable> stepTable(const TimeGrid& grid) const override;
+        ext::shared_ptr<const StepTable1D> stepTable1D(const TimeGrid& grid) const override;
         //@}
         //! \name Inspectors
         //@{
@@ -735,9 +763,9 @@ hides `StochasticProcess::discretization` today:
       protected:
         /*! the exact table on the strike-independent branch, the forwarding
             table otherwise; for a subclass whose overrides leave the step
-            intact and which overrides stepTable() to say so
+            intact and which overrides stepTable1D() to say so
         */
-        ext::shared_ptr<const StepTable> exactStepTable(const TimeGrid& grid) const;
+        ext::shared_ptr<const StepTable1D> exactStepTable(const TimeGrid& grid) const;
         ...
     };
 ```
@@ -760,36 +788,48 @@ hides `StochasticProcess::discretization` today:
                 || t == typeid(GarmanKohlagenProcess);
         }
 
-        // The exponent of the exact lognormal step: the one expression evolve() and the
-        // table share, so that a compiler that contracts to FMAs fuses both the same way.
+        // The drift and the exponent of the exact lognormal step: the expressions evolve()
+        // and the table share, so that a compiler that contracts to FMAs fuses both the
+        // same way.
+        inline Real lognormalDrift(Rate r, Rate q, Time dt, Real var) {
+            return (r - q) * dt - 0.5 * var;
+        }
+
         inline Real lognormalIncrement(Real stdDev, Real dw, Real drift) {
             return stdDev * dw + drift;
         }
 
-        class ExactStepTable : public StochasticProcess1D::StepTable {
+        class ExactStepTable : public StochasticProcess1D::StepTable1D {
           public:
             ExactStepTable(std::vector<Real> stdDeviation,
                            std::vector<Real> drift,
                            std::vector<Real> sigma)
             : stdDeviation_(std::move(stdDeviation)), drift_(std::move(drift)),
               sigma_(std::move(sigma)) {}
-            Real evolve(Size i, Real x0, Real dw) const override {
-                // apply()'s body; the gate has made sure it is this class's.
-                return x0 * std::exp(lognormalIncrement(stdDeviation_[i], dw, drift_[i]));
+            Real evolve(Size i, Real x0, Real dw) const override { return step(i, x0, dw); }
+            void evolvePath(Real x0, const std::vector<Real>& dw,
+                            bool antithetic, Real* path) const override {
+                path[0] = x0;
+                for (Size i = 0; i < drift_.size(); ++i)
+                    path[i + 1] = step(i, path[i], antithetic ? -dw[i] : dw[i]);
             }
             Real diffusion(Size i) const override { return sigma_[i]; }
           private:
+            Real step(Size i, Real x0, Real dw) const {
+                // apply()'s body; the gate has made sure it is this class's.
+                return x0 * std::exp(lognormalIncrement(stdDeviation_[i], dw, drift_[i]));
+            }
             std::vector<Real> stdDeviation_, drift_, sigma_;
         };
 
     }
 
-    ext::shared_ptr<const StochasticProcess1D::StepTable>
-    GeneralizedBlackScholesProcess::stepTable(const TimeGrid& grid) const {
+    ext::shared_ptr<const StochasticProcess1D::StepTable1D>
+    GeneralizedBlackScholesProcess::stepTable1D(const TimeGrid& grid) const {
         // Every subclass outside the gate steps through its own evolve(); one whose step is
         // this class's overrides this method and returns exactStepTable() itself (E).
         if (!isPlainBlackScholes(*this))
-            return StochasticProcess1D::stepTable(grid);
+            return StochasticProcess1D::stepTable1D(grid);
         return exactStepTable(grid);
     }
 
@@ -798,10 +838,10 @@ hides `StochasticProcess::discretization` today:
         return isStrikeIndependent_ && !forceDiscretization_;
     }
 
-    ext::shared_ptr<const StochasticProcess1D::StepTable>
+    ext::shared_ptr<const StochasticProcess1D::StepTable1D>
     GeneralizedBlackScholesProcess::exactStepTable(const TimeGrid& grid) const {
         if (!usesExactStep())
-            return StochasticProcess1D::stepTable(grid);   // the Euler branch: B's fused step
+            return StochasticProcess1D::stepTable1D(grid);   // the Euler branch: B's fused step
         const Size steps = grid.size() - 1;
         std::vector<Real> stdDeviation, drift, sigma;
         stdDeviation.reserve(steps);
@@ -812,14 +852,10 @@ hides `StochasticProcess::discretization` today:
             // The strike-independent branch of evolve(), call for call. t0 + dt stays the
             // literal sum: grid[i + 1] need not be the same double.
             Real var = variance(t0, x0(), dt);              // x0 is unused on this branch
-            Real mu = (riskFreeRate_->forwardRate(t0, t0 + dt, Continuous,
-                                                  NoFrequency, true).rate() -
-                       dividendYield_->forwardRate(t0, t0 + dt, Continuous,
-                                                   NoFrequency, true).rate()) *
-                          dt -
-                      0.5 * var;
+            Rate r = riskFreeRate_->forwardRate(t0, t0 + dt, Continuous, NoFrequency, true).rate();
+            Rate q = dividendYield_->forwardRate(t0, t0 + dt, Continuous, NoFrequency, true).rate();
             stdDeviation.push_back(std::sqrt(var));
-            drift.push_back(mu);
+            drift.push_back(lognormalDrift(r, q, dt, var));
             sigma.push_back(diffusion(t0, x0()));           // t-only on this branch, for 3.4
         }
         sigma.push_back(diffusion(grid.back(), x0()));
@@ -828,9 +864,14 @@ hides `StochasticProcess::discretization` today:
     }
 ```
 
-And the exact branch of `evolve()` ends in the shared helper instead of the inline sum:
+And the exact branch of `evolve()` computes its drift and exponent through the shared helpers
+instead of inline:
 
 ```cpp
+            Real var = variance(t0, x0, dt);
+            Rate r = riskFreeRate_->forwardRate(t0, t0 + dt, Continuous, NoFrequency, true).rate();
+            Rate q = dividendYield_->forwardRate(t0, t0 + dt, Continuous, NoFrequency, true).rate();
+            Real drift = lognormalDrift(r, q, dt, var);
             return apply(x0, lognormalIncrement(std::sqrt(var), dw, drift));
 ```
 
@@ -852,7 +893,7 @@ And the exact branch of `evolve()` ends in the shared helper instead of the inli
         Size dimension_;
         TimeGrid timeGrid_;
         ext::shared_ptr<StochasticProcess1D> process_;
-        mutable ext::shared_ptr<const StochasticProcess1D::StepTable> table_;
+        mutable ext::shared_ptr<const StochasticProcess1D::StepTable1D> table_;
         mutable sample_type next_;
         mutable std::vector<Real> temp_;
         BrownianBridge bb_;
@@ -867,16 +908,10 @@ And the exact branch of `evolve()` ends in the shared helper instead of the inli
         // the sequence and the Brownian bridge, unchanged
         ...
         if (!table_)
-            table_ = process_->stepTable(timeGrid_);
+            table_ = process_->stepTable1D(timeGrid_);
 
         Path& path = next_.value;
-        path.front() = process_->x0();
-
-        for (auto i=1U; i<path.length(); i++) {
-            path[i] = table_->evolve(i-1, path[i-1],
-                                     antithetic ? -increments[i-1] :
-                                                   increments[i-1]);
-        }
+        table_->evolvePath(process_->x0(), increments, antithetic, &path.front());
 
         return next_;
     }
@@ -889,13 +924,20 @@ What to notice:
   an empty handle fails on the first `next()`, as today.
 - `update()` drops the table and nothing else; the next `next()` rebuilds it. An engine never
   triggers that within one `calculate()`, so it pays one table per generator.
-- The antithetic path is unchanged: the table receives the negated increment.
-- `ExactStepTable::evolve` inlines `apply()`'s body, `x0 · exp(dx)`, and `lognormalIncrement` is
-  the sum `evolve()` computes, `√var · dw + drift`, with `√var` stored once. Both expressions have
-  the shape they have today, so the four bitwise pins of section 2 hold by construction.
-- The gate is checked once per grid, in `stepTable()`, the branch in `exactStepTable()` through
+- The antithetic path is unchanged: `evolvePath` negates the increment, as `next()` does today.
+- The generator calls the table once per path, not once per step. A virtual call per step costs
+  about 18 Ir a step in the call and in the member reloads it forces, which leaves the flat
+  discrete repricing 11% above a step inlined into the loop, measured; `ExactStepTable`'s own
+  `evolvePath` closes that gap. A table that overrides only `evolve(i, x0, dw)` keeps the default
+  loop, and `ForwardingStepTable` overrides it to call the process directly, as `next()` does
+  today.
+- `ExactStepTable::evolve` inlines `apply()`'s body, `x0 · exp(dx)`; `lognormalDrift` is the drift
+  `evolve()` computes, `(r − q) · dt − 0.5 · var`, and `lognormalIncrement` its exponent,
+  `√var · dw + drift`, with `√var` stored once. Every expression has the shape it has today, so
+  the four bitwise pins of section 2 hold by construction.
+- The gate is checked once per grid, in `stepTable1D()`, the branch in `exactStepTable()` through
   `usesExactStep()`. A subclass that overrides `variance()` or `apply()` lands on the forwarding
-  table and on its own `evolve()`; one that leaves the step intact overrides `stepTable()` and
+  table and on its own `evolve()`; one that leaves the step intact overrides `stepTable1D()` and
   returns `exactStepTable(grid)` (E). `<typeinfo>` is a C++98 header, and RTTI is already
   required (section 4).
 - `usesExactStep()` is the condition `evolve()`, `expectation()`, `stdDeviation()` and
@@ -1269,22 +1311,22 @@ Step 4 of section 5 puts the Euler branch on A's hook: a table that holds, per g
 rate pair of 3.3 and `√dt`, per grid time one slice of C, and, where σ depends on the time alone,
 the σ of 3.4 at every grid point. Its step is B's fused step with the slice in place of the
 virtual `diffusion()`. One file changes: `GeneralizedBlackScholesProcess` gets a second protected
-builder, and its `stepTable()` picks a builder by branch. `StochasticProcess1D`, the generators
+builder, and its `stepTable1D()` picks a builder by branch. `StochasticProcess1D`, the generators
 and the local volatilities stay as A and C left them.
 
 **The override.** `ql/processes/blackscholesprocess.hpp`, next to `exactStepTable()`:
 
 ```cpp
       protected:
-        ext::shared_ptr<const StepTable> exactStepTable(const TimeGrid& grid) const;
+        ext::shared_ptr<const StepTable1D> exactStepTable(const TimeGrid& grid) const;
         /*! the fused Euler step per grid step on the Euler branch under
             EulerDiscretization, with the rate pair and the local volatility's
             slice held per grid time; the forwarding table on the
             strike-independent branch and under any other discretization. For
             a subclass whose overrides leave the step intact and which
-            overrides stepTable() to say so.
+            overrides stepTable1D() to say so.
         */
-        ext::shared_ptr<const StepTable> eulerStepTable(const TimeGrid& grid) const;
+        ext::shared_ptr<const StepTable1D> eulerStepTable(const TimeGrid& grid) const;
         ...
 ```
 
@@ -1293,7 +1335,7 @@ and the local volatilities stay as A and C left them.
 ```cpp
     namespace {
 
-        class EulerStepTable : public StochasticProcess1D::StepTable {
+        class EulerStepTable : public StochasticProcess1D::StepTable1D {
           public:
             EulerStepTable(ext::shared_ptr<const LocalVolTermStructure> localVol,
                            std::vector<ext::shared_ptr<const LocalVolTermStructure::Slice>> slice,
@@ -1327,20 +1369,20 @@ and the local volatilities stay as A and C left them.
 
     }
 
-    ext::shared_ptr<const StochasticProcess1D::StepTable>
-    GeneralizedBlackScholesProcess::stepTable(const TimeGrid& grid) const {
+    ext::shared_ptr<const StochasticProcess1D::StepTable1D>
+    GeneralizedBlackScholesProcess::stepTable1D(const TimeGrid& grid) const {
         // A's gate, then the branch; each builder forwards off its own branch.
         if (!isPlainBlackScholes(*this))
-            return StochasticProcess1D::stepTable(grid);
+            return StochasticProcess1D::stepTable1D(grid);
         return usesExactStep() ? exactStepTable(grid) : eulerStepTable(grid);
     }
 
-    ext::shared_ptr<const StochasticProcess1D::StepTable>
+    ext::shared_ptr<const StochasticProcess1D::StepTable1D>
     GeneralizedBlackScholesProcess::eulerStepTable(const TimeGrid& grid) const {
         // The exact branch, or a discretization with a step of its own: B's check, once per
         // grid instead of once per process.
         if (usesExactStep() || typeid(*discretization_) != typeid(EulerDiscretization))
-            return StochasticProcess1D::stepTable(grid);
+            return StochasticProcess1D::stepTable1D(grid);
         // The link evolve() would evaluate: the LocalVolSurface localVolatility() built under
         // a smile, the LocalConstantVol or LocalVolCurve under a forced discretization, or the
         // external one. The table holds the link, not the handle.
@@ -1386,7 +1428,7 @@ does:
 ```
 
 **The test.** Beside B's step test: on the smile setup of section 1 and on a flat setup with
-`forceDiscretization`, `stepTable(grid)->evolve(i, x, dw)` against
+`forceDiscretization`, `stepTable1D(grid)->evolve(i, x, dw)` against
 `evolve(grid[i], x, grid.dt(i), dw)` at fixed points on every step, within the relative 1e-13 of
 section 1, and bit for bit on a build that does not contract. `diffusion(i)` is `Null<Real>()`
 under the smile and `diffusion(grid[i], x0())` under the forced discretization. The NPVs of
@@ -1411,7 +1453,7 @@ What to notice:
   `LocalVolSurface` share one body (C), so σ is the same double on both.
 - The branch is decided once per grid, through `usesExactStep()` and B's `typeid` comparison
   on `discretization_`, and both builders forward off their branch, so neither can be made to
-  return a table for a step that is not this class's. `stepTable()` picks the builder behind
+  return a table for a step that is not this class's. `stepTable1D()` picks the builder behind
   A's gate; a subclass picks it in its own override (E).
 - The table holds the local volatility's link and its slices, which refer to that term
   structure by pointer, so the link outlives them. After a notification `localVolatility()`
@@ -1435,7 +1477,7 @@ What to notice:
 An engine user changes nothing. `MakeMCEuropeanEngine<PseudoRandom>(process)` with 252 steps on a
 `BlackScholesMertonProcess` under a `BlackConstantVol` runs as follows: `McSimulation::calculate`
 builds the `MonteCarloModel` and with it the `PathGenerator`, which registers with the process;
-the first `next()` calls `stepTable(timeGrid_)`; the gate passes, `localVolatility()` links a
+the first `next()` calls `stepTable1D(timeGrid_)`; the gate passes, `localVolatility()` links a
 `LocalConstantVol` and sets the branch flag, and `exactStepTable()` builds 252 triples through the
 same `variance()` and `forwardRate()` calls `evolve()` made per step. Every further path is 252
 lookups and `exp` calls. Under a `BlackVarianceSurface` the same engine gets D's Euler table:
@@ -1453,7 +1495,7 @@ one override:
 
 ```cpp
     // Overrides drift(), which the fused step of B and the tables of A and D all bypass. The
-    // gate sees a type outside the five: stepTable() returns the forwarding table, every step
+    // gate sees a type outside the five: stepTable1D() returns the forwarding table, every step
     // goes through this class's evolve(), which is today's, and its Euler branch calls this
     // drift().
     class ShiftedDriftProcess : public BlackScholesMertonProcess {
@@ -1469,7 +1511,8 @@ one override:
     // Overrides time() only, which is not on the step. The gate still refuses the exact type,
     // so the class says itself that its step is the base class's on both branches: each
     // protected builder applies usesExactStep() and the discretization check itself, and
-    // returns the forwarding table off its branch.
+    // returns the forwarding table off its branch. Its own subclasses get the forwarding
+    // table, since they might override part of the step.
     class VolDayCountProcess : public BlackScholesMertonProcess {
       public:
         using BlackScholesMertonProcess::BlackScholesMertonProcess;
@@ -1477,7 +1520,9 @@ one override:
             return blackVolatility()->dayCounter().yearFraction(
                 blackVolatility()->referenceDate(), d);
         }
-        ext::shared_ptr<const StepTable> stepTable(const TimeGrid& grid) const override {
+        ext::shared_ptr<const StepTable1D> stepTable1D(const TimeGrid& grid) const override {
+            if (typeid(*this) != typeid(VolDayCountProcess))
+                return StochasticProcess1D::stepTable1D(grid);
             return usesExactStep() ? exactStepTable(grid) : eulerStepTable(grid);
         }
     };
@@ -1487,11 +1532,12 @@ What to notice:
 
 - The first class needs no code and loses nothing; the second needs one override and gains
   both tables. Neither can get a table that ignores an override, which is the contract section 4
-  asks the gate to keep.
+  asks the gate to keep. The second repeats the gate for its own type, because its override is
+  inherited by every class below it.
 - `exactStepTable()` applies `usesExactStep()` itself and falls back to the forwarding table on
   the Euler branch; `eulerStepTable()` does the same on the exact branch and under a
-  discretization that is not exactly `EulerDiscretization`. So the override stays one line and
-  cannot pick a table on the wrong branch. A subclass that wants to know the branch asks
+  discretization that is not exactly `EulerDiscretization`. So the override cannot pick a table
+  on the wrong branch. A subclass that wants to know the branch asks
   `usesExactStep()`, the question a cache outside QuantLib had to answer by probing (section 1).
 - The two builders are separate so that a subclass can opt into one branch alone.
   `ShiftedDriftProcess` overrides `drift()`, which only the Euler step runs through, so it may
