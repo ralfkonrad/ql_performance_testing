@@ -273,7 +273,7 @@ runs:
         echo "prefix=$base-std" >> $GITHUB_OUTPUT
 
     - name: Setup CCache
-      uses: hendrikmuhs/ccache-action@dbeefd73e8e2ffc1bbc412570072735eb4db3607 # v1.2.25
+      uses: hendrikmuhs/ccache-action@e91f31892a1d1b8c44424b1a94c0b7f52d337168 # v1.2.26
       with:
         key: ${{ steps.cache-key.outputs.key }}
         # ccache-action appends a timestamp on save, so the literal key never matches on restore:
